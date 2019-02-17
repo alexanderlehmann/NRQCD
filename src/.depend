@@ -1,0 +1,12 @@
+FOBJ=lattice.o main.o mathconstants.o mpiinterface.o random.o ranlxd_generator.o tolerances.o 
+
+run.exe: $(FOBJ)
+	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
+
+lattice.o : lattice.f90 mpiinterface.o 
+main.o : main.f90 random.o lattice.o mpiinterface.o 
+mathconstants.o : mathconstants.f90 
+mpiinterface.o : mpiinterface.f90 
+random.o : random.f90 mpiinterface.o mathconstants.o ranlxd_generator.o 
+ranlxd_generator.o : ranlxd_generator.f90 
+tolerances.o : tolerances.f90 

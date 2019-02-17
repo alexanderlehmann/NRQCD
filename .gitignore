@@ -1,0 +1,51 @@
+# Backup-files from text-editors
+*~
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Ignore data-files
+*.txt
+
+# Ignore documentation
+src/doc/html/*
+src/doxygen_objdb_*.tmp
+
+# Intel link
+src/intel
+
+# Start-script
+src/start.sh
+
+# Ignore temporaries
+src/\#*#
