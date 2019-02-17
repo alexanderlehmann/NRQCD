@@ -1,13 +1,8 @@
-!> @brief
-!! Providing numerical tolerances
-!! @author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!> @brief Providing numerical tolerances
+!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 17.01.2019
-!! @version
-!! 1.0
+!! @date 17.01.2019
+!! @version 1.0
 module tolerances
   use, intrinsic :: iso_fortran_env
   implicit none

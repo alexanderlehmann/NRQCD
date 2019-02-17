@@ -3,20 +3,15 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: random
-!> @brief
-!! Pseudo-random number generation for unitarily and normal distributed random numbers using Ranlux
-!! @author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!> @brief Pseudo-random number generation interface using Ranlux
+!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 14.01.2019
-!! @version
-!! 1.0
+!! @date 14.01.2019
+!! @version 1.0
 ! REVISION HISTORY:
 ! 14 01 2019
 module random
-  USE,INTRINSIC :: ISO_FORTRAN_ENV ! defines kinds
+  use, intrinsic :: iso_fortran_env
   use ranlxd_generator
   implicit none
 
@@ -28,86 +23,54 @@ module random
        GetRandomUniformCmplx,&
        GetRandomNormalCmplx,&
        GetRandomNormalCmplx_specificProcess
-
-  !> Default seed
-  integer(int64), parameter, private :: DefaultSeed=1
-
-  !> @brief
-  !! Initialisation of pseudo-random number generator
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 03.09.2018
-  !! @version
-  !! 1.0
-  interface InitModule
-     module procedure InitModule_NoSeed
-     module procedure InitModule_WithSeed
-  end interface InitModule
   
-  !> @brief
-  !! Getting an uniformly distributed real pseudo-random number
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Getting an uniformly distributed real pseudo-random number
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 03.09.2018
-  !! @version
-  !! 1.0
+  !! @date 03.09.2018
+  !! @version 1.0
   interface GetRandomUniformReal
      module procedure GetRandomUniformRealScalar
      module procedure GetRandomUniformRealArray
   end interface GetRandomUniformReal
 
-  !> @brief
-  !! Getting an uniformly distributed complex pseudo-random number
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Getting an uniformly distributed complex pseudo-random number
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 03.09.2018
-  !! @version
-  !! 1.0
+  !! @date 03.09.2018
+  !! @version 1.0
   interface GetRandomUniformCmplx
      module procedure GetRandomUniformCmplxScalar
      module procedure GetRandomUniformCmplxArray
   end interface GetRandomUniformCmplx
 
-  !> @brief
-  !! Getting a normal distributed complex pseudo-random number
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Getting a normal distributed complex pseudo-random number
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 03.09.2018
-  !! @version
-  !! 1.0
+  !! @date 03.09.2018
+  !! @version 1.0
   interface GetRandomNormalCmplx
      module procedure GetRandomNormalCmplxScalar
      module procedure GetRandomNormalCmplxArray
   end interface GetRandomNormalCmplx
 
+  !> @brief Getting a normal distributed complex pseudo-random number from specific process
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 03.09.2018
+  !! @version 1.0
   interface GetRandomNormalCmplx_specificProcess
      module procedure GetRandomNormalCmplxScalar_specificProcess
      module procedure GetRandomNormalCmplxArray_specificProcess
   end interface GetRandomNormalCmplx_specificProcess
 contains
   
-  !> @brief
-  !! Current state of pseudo-random number generator
+  !> @brief Current state of pseudo-random number generator
   !! @details
   !! The current state is necessary for, e.g., continuing a sequence of pseudo-random numbers (Ranlux)
   !! after closing the program
-  !! @returns
-  !! Current state of pseudo-random number generator (Ranlux)
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @returns Current state of pseudo-random number generator (Ranlux)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -115,18 +78,14 @@ contains
     implicit none
     !> State of pseudo-random number generator
     integer(int64), dimension(25) :: state
-
     call ranlxd_get(state)
   end function GetState
 
-  !> @brief
-  !! Sets the random number generator (Ranlux) to given state
+  !> @brief Sets the random number generator (Ranlux) to given state
   !! @details
   !! The current state is necessary for, e.g., continuing a sequence of pseudo-random numbers (Ranlux)
   !! after closing the program
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -134,44 +93,29 @@ contains
     implicit none
     !> To-be set state of pseudo-random number generator
     integer(int64), dimension(25) :: state
-
     call ranlxd_reset(state)
   end subroutine ResetState
   
-  !> @brief
-  !! Initialises pseudo-random number generator (Ranlux) with default seed
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Initialises pseudo-random number generator (Ranlux)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
-  impure subroutine InitModule_NoSeed
+  !! @date 17.02.2019
+  !! @version 1.1
+  impure subroutine InitModule(CustomSeed)
     implicit none
-    call ranlxd_init(2,DefaultSeed)
-  end subroutine InitModule_NoSeed
+    !> seed for random number generator
+    integer(int64), intent(in), optional :: CustomSeed
+    integer(int64), parameter :: DefaultSeed=1_int64
+
+    if(present(CustomSeed)) then
+       call ranlxd_init(2,CustomSeed)
+    else
+       call ranlxd_init(2,DefaultSeed)
+    end if
+  end subroutine InitModule
   
-  !> @brief
-  !! Initialises pseudo-random number generator (Ranlux) with given seed
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
-  impure subroutine InitModule_WithSeed(seed)
-    implicit none
-    !> Seed
-    integer(int64), intent(in) :: seed
-    
-    call ranlxd_init(2,Seed)
-  end subroutine InitModule_WithSeed
-  
-  !> @brief
-  !! Draws a real pseudo-random number (Ranlux) from uniform distribution in [0,1[
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Draws a real pseudo-random number (Ranlux) from uniform distribution in [0,1[
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -179,18 +123,13 @@ contains
     implicit none
     !> Pseudo-random number
     real(real64) :: res
-    
     real(real64) :: r(1)
-
     call ranlxd(r)
     res = r(1)
   end function GetRandomUniformRealScalar
   
-  !> @brief
-  !! Draws real pseudo-random numbers (Ranlux) from uniform distribution in [0,1[
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Draws real pseudo-random numbers (Ranlux) from uniform distribution in [0,1[
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -200,15 +139,11 @@ contains
     integer(int64), intent(in) :: n
     !> Pseudo-random numbers
     real(real64)               :: res(n)
-
     call ranlxd(res)
   end function GetRandomUniformRealArray
   
-  !> @brief
-  !! Draws a complex pseudo-random number (Ranlux) from uniform distribution in [0,1[
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Draws a complex pseudo-random number (Ranlux) from uniform distribution in [0,1[
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -216,20 +151,15 @@ contains
     implicit none
     !> Pseudo-random number
     complex(real64) :: res
-    
     real(real64)    :: r(2)
     call ranlxd(r)
-
     res = cmplx(r(1),r(2),real64)
   end function GetRandomUniformCmplxScalar
   
-  !> @brief
-  !! Draws complex pseudo-random numbers (Ranlux) from uniform distribution in ]0,1]
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Draws complex pseudo-random numbers (Ranlux) from uniform distribution in ]0,1]
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
+  !! @date 17.02.2019
   !! @version 1.0
   impure function GetRandomUniformCmplxArray(n) result(res)
     implicit none
@@ -243,20 +173,17 @@ contains
     integer(int64) :: i
 
     call ranlxd(r)
-
-    do i=1,n
+    do concurrent(i=1:n)
        res(i) = cmplx(r(2*i-1),r(2*i),real64)
     end do
   end function GetRandomUniformCmplxArray
     
-  !> @brief
-  !! Draws complex pseudo-random number (Ranlux) from normal distribution
+  !> @brief Draws complex pseudo-random number (Ranlux) from normal distribution
   !! @details
-  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux) \f$r_{\text{u}}\in]0,1]^2\f$:
+  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
+  !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -265,27 +192,21 @@ contains
     implicit none
     !> Pseudo-random number
     complex(real64) :: res
-    
     real(real64)    :: r(2)
-
     real(real64), parameter :: twopi = 2*pi
-
     call ranlxd(r)
-
     res = sqrt(-2._real64 * log(r(1)))&
          * cmplx(&
          cos(twopi*r(2)),&
          sin(twopi*r(2)),real64)
   end function GetRandomNormalCmplxScalar
   
-  !> @brief
-  !! Draws n complex pseudo-random numbers (Ranlux) from normal distribution
+  !> @brief Draws n complex pseudo-random numbers (Ranlux) from normal distribution
   !! @details
-  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux) \f$r_{\text{u}}\in]0,1]^2\f$:
+  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
+  !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 03.09.2018
   !! @version 1.0
@@ -296,15 +217,11 @@ contains
     integer(int64), intent(in) :: n
     !> Pseudo-random numbers
     complex(real64) :: res(n)
-    
     real(real64)    :: r(2*n)
-
     integer(int64) :: i
-    
     real(real64), parameter :: twopi = 2*pi
-    
     call ranlxd(r)
-    do i=1,n
+    do concurrent(i=1:n)
        res(i) = sqrt(-2._real64 * log(r(2*i-1)))&
             * cmplx(&
             cos(twopi*r(2*i)),&
@@ -316,14 +233,13 @@ contains
   !! Draws n complex pseudo-random numbers (Ranlux) from normal distribution on one specific process\n
   !! and sends it to another recieving one
   !! @details
-  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux) \f$r_{\text{u}}\in]0,1]^2\f$:
+  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
+  !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 16.02.2019
-  !! @version 1.1
+  !! @version 1.0
   impure function GetRandomNormalCmplxScalar_specificProcess(send_proc,recv_proc) result(res)
     use mpiinterface, only: ThisProc
     use mpi
@@ -341,7 +257,6 @@ contains
     integer :: dest, source
     integer :: tag
     integer :: mpierr
-    
     
     if(send_proc==recv_proc) then
        if(ThisProc()==send_proc) res = GetRandomNormalCmplxScalar()
@@ -367,11 +282,10 @@ contains
   !! Draws n complex pseudo-random numbers (Ranlux) from normal distribution on one specific process\n
   !! and sends it to another recieving one
   !! @details
-  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux) \f$r_{\text{u}}\in]0,1]^2\f$:
+  !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
+  !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @authorAlexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 16.02.2019
   !! @version 1.1

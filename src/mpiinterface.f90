@@ -3,16 +3,11 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: mpiInterface
-!> @brief
-!! Convenience-interface to most needed MPI-routines
-!! @author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!> @brief Convenience-interface to most needed MPI-routines
+!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 17.02.2019
-!! @version
-!! 1.0
+!! @date 17.02.2019
+!! @version 1.0
 ! REVISION HISTORY:
 ! 15 02 2019 - Initial version
 module mpiInterface
@@ -36,19 +31,13 @@ module mpiInterface
 
 contains
 
-  !>@brief
-  !! Initialization of module
-  !! @details
-  !! Initialises MPI (call to MPI_INIT), getting of process' number
+  !>@brief Initialization of module
+  !! @details Initialises MPI (call to MPI_INIT), getting of process' number
   !! as well as total number of processes
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   impure subroutine InitModule
     implicit none
     integer :: mpierr
@@ -73,18 +62,12 @@ contains
        
   end subroutine InitModule
 
-  !>@brief
-  !! Finalization of module
-  !! @details
-  !! Finalises MPI (call to MPI_FINALIZE)
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !>@brief Finalization of module
+  !! @details Finalises MPI (call to MPI_FINALIZE)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   impure subroutine FinalizeModule
     implicit none
     integer :: mpierr
@@ -93,16 +76,11 @@ contains
 
   end subroutine FinalizeModule
 
-  !>@brief
-  !! Safe MPI stop
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !>@brief MPI stop with optional message and code
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   impure subroutine MPIstop(errormessage,errorcode)
     implicit none
     character(len=*), intent(in), optional :: errormessage
@@ -124,35 +102,23 @@ contains
   end subroutine MPIstop
 
 
-  !>@brief
-  !! Getting total number of processes
-  !! @returns
-  !! Total number of processes
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting total number of processes
+  !! @returns Total number of processes
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer function NumProcs()
     implicit none
     NumProcs = num_procs
   end function NumProcs
 
-  !>@brief
-  !! Getting ID of this process
-  !! @returns
-  !! ID of this process
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting ID of this process
+  !! @returns ID of this process
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer function ThisProc()
     implicit none
     ThisProc = this_proc

@@ -4,7 +4,7 @@ run.exe: $(FOBJ)
 	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
 
 arrayoperations.o : arrayoperations.f90 
-lattice.o : lattice.f90 arrayoperations.o mpiinterface.o 
+lattice.o : lattice.f90 mathconstants.o arrayoperations.o mpiinterface.o 
 main.o : main.f90 random.o lattice.o mpiinterface.o 
 mathconstants.o : mathconstants.f90 
 mpiinterface.o : mpiinterface.f90 

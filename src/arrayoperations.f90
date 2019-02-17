@@ -1,13 +1,8 @@
-!> @brief
-!! Contains various array operations, like sorting and removing duplicates
-!! @author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!> @brief Contains various array operations, like sorting and removing duplicates
+!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 17.02.2019
-!! @version
-!! 1.0
+!! @date 17.02.2019
+!! @version 1.0
 module arrayoperations
   use, intrinsic :: iso_fortran_env
   implicit none
@@ -15,18 +10,14 @@ module arrayoperations
   PRIVATE
 
   public :: &
-       RemoveDuplicates
+       RemoveDuplicates,&
+       Sort
 
-  !> @brief
-  !! Removes duplicates from 1-dimensional array containing integers, real or complex numbers
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Removes duplicates from 1-dimensional array containing integers, real or complex numbers
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   interface RemoveDuplicates
      module procedure RemoveDuplicates_int8
      module procedure RemoveDuplicates_int16
@@ -42,16 +33,11 @@ module arrayoperations
      module procedure RemoveDuplicates_complex128
   end interface RemoveDuplicates
 
-  !> @brief
-  !! Sorts 1-dimensional integer or real array
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !> @brief Sorts 1-dimensional integer or real array
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   interface Sort
      module procedure sort_int8
      module procedure sort_int16
@@ -440,13 +426,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_int8
@@ -466,13 +450,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_int16
@@ -492,13 +474,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_int32
@@ -518,13 +498,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_int64
@@ -544,13 +522,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_real32
@@ -570,13 +546,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_real64
@@ -596,13 +570,11 @@ contains
        a=array(j)
        do i=j-1_int64,1_int64,-1_int64
           if (array(i)<=a) then
-             goto 1
+             exit
           else
              array(i+1_int64) = array(i)
           end if
        end do
-       i=0_int64
-1      continue
        array(i+1_int64) =a
     end do
   end subroutine sort_real128
