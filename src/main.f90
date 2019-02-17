@@ -47,6 +47,7 @@ contains
     
     use mpiinterface,       only: InitModule_MPIinterface       => InitModule, thisProc
     use lattice,            only: InitModule_Lattice            => InitModule, ndim
+    use halocomm,           only: InitModule_HaloComm           => InitModule
     use random,             only: InitModule_Random             => InitModule
     implicit none
 
@@ -55,8 +56,6 @@ contains
     integer(int8) :: i
 
     integer(int32) :: mpierr
-
-    call InitModule_MPIinterface
     
     !..--** Reading simulation parameters **--..
     arg_count = 0
@@ -84,13 +83,12 @@ contains
     ! Seed for random number generator
     arg_count = arg_count +1; call get_command_argument(arg_count,arg);
     read(arg,'(I4)') RandomNumberSeed
-    RandomNumberSeed = RandomNumberSeed + ThisProc()
     
     !..--** Module initialisations **--..
-    call InitModule_Random(RandomNumberSeed)
-    do i=1,1
-       call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
-    end do
+    call InitModule_MPIinterface
+    call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+    call InitModule_HaloComm
+    call InitModule_Random(RandomNumberSeed + ThisProc())
 
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
   end subroutine InitSimulation

@@ -6,10 +6,12 @@
 !> @brief Pseudo-random number generation interface using Ranlux
 !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 14.01.2019
+!! @date 17.02.2019
 !! @version 1.0
 ! REVISION HISTORY:
-! 14 01 2019
+! 03 09 2018 - Initial version
+! 14 01 2019 - Added random number drawing from specific process
+! 17 02 2019 - Added initialisation status
 module random
   use, intrinsic :: iso_fortran_env
   use ranlxd_generator
@@ -17,12 +19,16 @@ module random
 
   private
   public :: InitModule,&
+       IsModuleInitialised,&
        GetState,&
        ResetState,&
        GetRandomUniformReal,&
        GetRandomUniformCmplx,&
        GetRandomNormalCmplx,&
        GetRandomNormalCmplx_specificProcess
+  
+  !> Contains information, if module is initialised
+  logical :: IsInitialised = .false.
   
   !> @brief Getting an uniformly distributed real pseudo-random number
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -65,6 +71,17 @@ module random
   end interface GetRandomNormalCmplx_specificProcess
 contains
   
+  !>@brief Returns, if module is initialised
+  !! @returns module's initialisation status
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 17.02.2019
+  !! @version 1.0
+  pure logical function IsModuleInitialised()
+    implicit none
+    IsModuleInitialised = IsInitialised
+  end function IsModuleInitialised
+  
   !> @brief Current state of pseudo-random number generator
   !! @details
   !! The current state is necessary for, e.g., continuing a sequence of pseudo-random numbers (Ranlux)
@@ -87,7 +104,7 @@ contains
   !! after closing the program
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
+  !! @date 17.02.2019
   !! @version 1.0
   impure subroutine ResetState(state)
     implicit none
@@ -112,6 +129,9 @@ contains
     else
        call ranlxd_init(2,DefaultSeed)
     end if
+    
+    ! DONE
+    IsInitialised = .TRUE.
   end subroutine InitModule
   
   !> @brief Draws a real pseudo-random number (Ranlux) from uniform distribution in [0,1[

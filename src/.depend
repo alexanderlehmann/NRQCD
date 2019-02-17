@@ -1,11 +1,12 @@
-FOBJ=arrayoperations.o lattice.o main.o mathconstants.o mpiinterface.o random.o ranlxd_generator.o tolerances.o 
+FOBJ=arrayoperations.o halocomm.o lattice.o main.o mathconstants.o mpiinterface.o random.o ranlxd_generator.o tolerances.o 
 
 run.exe: $(FOBJ)
 	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
 
 arrayoperations.o : arrayoperations.f90 
+halocomm.o : halocomm.f90 
 lattice.o : lattice.f90 mathconstants.o arrayoperations.o mpiinterface.o 
-main.o : main.f90 random.o lattice.o mpiinterface.o 
+main.o : main.f90 random.o halocomm.o lattice.o mpiinterface.o 
 mathconstants.o : mathconstants.f90 
 mpiinterface.o : mpiinterface.f90 
 random.o : random.f90 mpiinterface.o mathconstants.o ranlxd_generator.o 

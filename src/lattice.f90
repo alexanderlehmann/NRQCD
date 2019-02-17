@@ -3,14 +3,11 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: lattice
-!> @brief
-!! Lattice index, extensions, momenta etc.
+!> @brief Lattice index, extensions, momenta etc.
 !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 17.02.2019
-!! @version
-!! 1.0
+!! @date 17.02.2019
+!! @version 1.0
 ! REVISION HISTORY:
 ! 17 02 2019 - Initial version
 !----------------------------------------------------------------------
@@ -22,6 +19,7 @@ module lattice
 
   public :: &
        InitModule, &
+       IsModuleInitialised,&
        GetLocalLatticeIndex, &
        GetLocalLatticeIndices,&
        GetLocalLatticeIndices_includingHalo,&
@@ -37,6 +35,9 @@ module lattice
        GetNorm2Momentum,&
        GetMaxNorm2Momentum
 
+  !> Contains information, if module is initialised
+  logical :: IsInitialised = .false.
+  
   !> number of dimensions
   integer(int8), parameter, public :: nDim = 3_int8
 
@@ -92,6 +93,17 @@ module lattice
   end interface GetMomentum
 
 contains
+  !>@brief Returns, if module is initialised
+  !! @returns module's initialisation status
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 17.02.2019
+  !! @version 1.0
+  pure logical function IsModuleInitialised()
+    implicit none
+    IsModuleInitialised = IsInitialised
+  end function IsModuleInitialised
+  
   !> @brief Initialises module
   !! @details
   !! Lattice-extensions, lattice-size, volume etc
@@ -103,9 +115,11 @@ contains
   !! 1.0
   impure subroutine InitModule(LatticeExtensions_,LatticeSpacings_)
     use mpi
-    use mpiinterface, only: ThisProc, NumProcs, MPISTOP
+    use mpiinterface, only: ThisProc, NumProcs, MPISTOP, &
+         IsModuleInitialised_MPIinterface => IsModuleInitialised
 
     use arrayoperations, only: RemoveDuplicates, Sort
+    use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice extensions
     integer(int64), intent(in) :: LatticeExtensions_(ndim)
@@ -117,6 +131,14 @@ contains
     integer(int64) :: latticeindex
 
     integer :: proc, mpierr
+
+    ! Previous necessary initialisations
+    if(.not.IsModuleInitialised_MPIinterface()) then
+       call flush(ERROR_UNIT)
+       write(ERROR_UNIT,*) 'MPI-interface module is not initialised'
+       call flush(ERROR_UNIT)
+       STOP
+    end if
 
     LatticeSpacings = LatticeSpacings_
     LatticeExtensions = LatticeExtensions_
@@ -137,7 +159,7 @@ contains
     if(2**numdivisions /= NumProcs()) then
        call MPIstop('Number of MPI-processes has to be a power of 2')
     end if
-    
+
     partitions = LatticeExtensions
     do idivision=1,numdivisions
        ! Find biggest extensions ...
@@ -147,7 +169,6 @@ contains
             BACK=.true.,&                    ! Prefering highest possible dimension
             MASK = modulo(partitions,2)==0&  ! Number of points divisible by 2
             )
-       
 
        ! ... and divide it by 2
        partitions(ipartition) = partitions(ipartition)/2
@@ -195,6 +216,9 @@ contains
     ! Find maximum momentum
     MaxNorm2Momentum = FindMaxNorm2Momentum()
 
+    ! DONE
+    IsInitialised = .TRUE.
+    
   end subroutine InitModule
 
   !> @brief Initialises local lattice boundaries
@@ -327,6 +351,7 @@ contains
   !! @version
   !! 1.0
   impure real(real64) function FindMaxNorm2Momentum
+    use, intrinsic :: iso_fortran_env
     use mpi
     use mpiinterface, only: NumProcs
     implicit none
@@ -734,6 +759,7 @@ contains
   !! @version
   !! 1.0
   pure function GetMomentum_BackwardDerivative(LatticeIndex)
+    use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
     !> Lattice index
@@ -766,6 +792,7 @@ contains
   !! @version
   !! 1.0
   pure function GetMomentum_ForwardDerivative(LatticeIndex)
+    use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
     !> Lattice index
@@ -797,6 +824,7 @@ contains
   !! @version
   !! 1.0
   pure function GetMomentum_CentralDerivative(LatticeIndex)
+    use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
     !> Lattice index
@@ -821,6 +849,7 @@ contains
   !! @version
   !! 1.0
   pure real(real64) function GetNorm2Momentum(LatticeIndex)
+    use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
@@ -842,6 +871,7 @@ contains
   !! @version
   !! 1.0
   pure real(real64) function GetMaxNorm2Momentum()
+    use, intrinsic :: iso_fortran_env
     implicit none
     GetMaxNorm2Momentum = MaxNorm2Momentum
   end function GetMaxNorm2Momentum
