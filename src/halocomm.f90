@@ -21,9 +21,11 @@ module halocomm
        InitModule,&
        IsModuleInitialised
 
+  !> Module name
+  character(len=8), parameter, public ::  modulename='halocomm'
+  
   !> Contains information, if module is initialised
   logical :: IsInitialised = .false.
-
 contains
   !> @brief Initialises module
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -32,9 +34,28 @@ contains
   !! @version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
+    use lattice, only: IsModuleInitialised_Lattice => IsModuleInitialised
+    use mpi
     implicit none
 
+    integer :: proc, mpierr
 
+    ! ..--** START: Previous necessary initialisations **--..
+    if(.not.IsModuleInitialised_Lattice()) then
+       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
+       if(proc==0) then
+          call flush(ERROR_UNIT)
+          write(ERROR_UNIT,*) 'Error in init of ',modulename&
+               ,': Lattice-module is not initialised.'
+          call flush(ERROR_UNIT)
+       end if
+       STOP
+    end if
+    ! ..--**  END : Previous necessary initialisations **--..
+
+
+
+    
     ! DONE
     IsInitialised = .TRUE.
   end subroutine InitModule

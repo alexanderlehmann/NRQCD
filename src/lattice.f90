@@ -35,6 +35,9 @@ module lattice
        GetNorm2Momentum,&
        GetMaxNorm2Momentum
 
+  !> Module name
+  character(len=7), parameter, public ::  modulename='lattice'
+  
   !> Contains information, if module is initialised
   logical :: IsInitialised = .false.
   
@@ -130,13 +133,18 @@ contains
 
     integer :: proc, mpierr
 
-    ! Previous necessary initialisations
+    ! ..--** START: Previous necessary initialisations **--..
     if(.not.IsModuleInitialised_MPIinterface()) then
-       call flush(ERROR_UNIT)
-       write(ERROR_UNIT,*) 'MPI-interface module is not initialised'
-       call flush(ERROR_UNIT)
+       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
+       if(proc==0) then
+          call flush(ERROR_UNIT)
+          write(ERROR_UNIT,*) 'Error in init of ',modulename&
+               ,': MPI-interface-module is not initialised.'
+          call flush(ERROR_UNIT)
+       end if
        STOP
     end if
+    ! ..--**  END : Previous necessary initialisations **--..
 
     LatticeSpacings = LatticeSpacings_
     LatticeExtensions = LatticeExtensions_
@@ -207,6 +215,7 @@ contains
     ! ... and sort the arrays
     call Sort(LocalLatticeIndices)
     call Sort(LocalLatticeIndices_includingHalo)
+    
     ! Setting local lattice size (including and without halo)
     LocalLatticeSize = size(LocalLatticeIndices)
     LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
