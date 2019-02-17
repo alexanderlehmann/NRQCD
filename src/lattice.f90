@@ -115,10 +115,7 @@ contains
   !! @date 17.02.2019
   !! @version 1.0
   impure subroutine InitModule(LatticeExtensions_,LatticeSpacings_)
-    use mpi
-    use mpiinterface, only: ThisProc, NumProcs, MPISTOP, &
-         IsModuleInitialised_MPIinterface => IsModuleInitialised
-
+    use mpiinterface, only: ThisProc, NumProcs, MPISTOP
     use arrayoperations, only: RemoveDuplicates, Sort
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -131,21 +128,10 @@ contains
     integer(int8) :: idivision, numdivisions, ipartition
     integer(int64) :: latticeindex
 
-    integer :: proc, mpierr
+    integer :: proc
 
-    ! ..--** START: Previous necessary initialisations **--..
-    if(.not.IsModuleInitialised_MPIinterface()) then
-       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
-       if(proc==0) then
-          call flush(ERROR_UNIT)
-          write(ERROR_UNIT,*) 'Error in init of ',modulename&
-               ,': MPI-interface-module is not initialised.'
-          call flush(ERROR_UNIT)
-       end if
-       STOP
-    end if
-    ! ..--**  END : Previous necessary initialisations **--..
-
+    call CheckDependencies
+    
     LatticeSpacings = LatticeSpacings_
     LatticeExtensions = LatticeExtensions_
 
@@ -225,8 +211,31 @@ contains
 
     ! DONE
     IsInitialised = .TRUE.
-    
   end subroutine InitModule
+  
+  !> @brief Checks previous necessary initialisations
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 17.02.2019
+  !! @version 1.0
+  impure subroutine CheckDependencies
+    use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: IsModuleInitialised_MPIinterface => IsModuleInitialised
+    use mpi
+    implicit none
+
+    integer :: proc, mpierr
+    if(.not.IsModuleInitialised_MPIinterface()) then
+       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
+       if(proc==0) then
+          call flush(ERROR_UNIT)
+          write(ERROR_UNIT,*) 'Error in init of ',modulename&
+               ,': MPI-interface-module is not initialised.'
+          call flush(ERROR_UNIT)
+       end if
+       STOP
+    end if
+  end subroutine CheckDependencies
 
   !> @brief Initialises local lattice boundaries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
