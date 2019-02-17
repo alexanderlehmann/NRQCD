@@ -109,10 +109,8 @@ contains
   !! Lattice-extensions, lattice-size, volume etc
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   impure subroutine InitModule(LatticeExtensions_,LatticeSpacings_)
     use mpi
     use mpiinterface, only: ThisProc, NumProcs, MPISTOP, &
@@ -224,10 +222,8 @@ contains
   !> @brief Initialises local lattice boundaries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure recursive subroutine InitLocalLatticeBoundaries(&
        LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,partitions,&
        proc,i,ipart,nHalo)
@@ -296,10 +292,8 @@ contains
   !> @brief Initialises local lattice indices
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure recursive subroutine InitLatticeIndices(LatticeIndices,&
        LowerBoundaries,UpperBoundaries,i,x,index)
     use, intrinsic :: iso_fortran_env
@@ -346,10 +340,8 @@ contains
   !! @returns maximum of \f$||\vec{p}||_2\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   impure real(real64) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -387,10 +379,8 @@ contains
   !! \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetLatticeIndex(Position)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -406,10 +396,8 @@ contains
   !! @details Periodic shift i'th direction
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetNeib(i,LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -428,10 +416,8 @@ contains
   !! @returns local lattice indices without halo
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure subroutine GetLocalLatticeIndices(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -444,10 +430,8 @@ contains
   !! @returns local lattice indices without halo with allocation
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure subroutine GetLocalLatticeIndices_Allocatable(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -461,10 +445,8 @@ contains
   !! @returns local lattice indices including halo
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure subroutine GetLocalLatticeIndices_includingHalo(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -477,10 +459,8 @@ contains
   !! @returns local lattice indices including halo
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure subroutine GetLocalLatticeIndices_includingHalo_Allocatable(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -494,10 +474,8 @@ contains
   !! @returns volume
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure real(real64) function GetVolume()
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -509,10 +487,8 @@ contains
   !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetLatticeSize()
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -524,10 +500,8 @@ contains
   !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetLocalLatticeSize()
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -539,10 +513,8 @@ contains
   !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetLocalLatticeSize_includingHalo()
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -553,10 +525,8 @@ contains
   !! @returns MPI-process-rank corresponding to lattice index
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure elemental integer function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: NumProcs
@@ -587,10 +557,8 @@ contains
   !! Then \f$index - v_i\f$ and that as input for \f$v_{i-1}\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure function GetLatticePosition(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -607,10 +575,8 @@ contains
   !! @returns local lattice index
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure elemental integer(int64) function GetLocalLatticeIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -629,10 +595,8 @@ contains
   !! @details Periodic shift i'th direction
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetNeib_FromIndex(i,index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -668,10 +632,8 @@ contains
   !! @details index is given by \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure integer(int64) function GetIndex_FromPosition(position,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -699,10 +661,8 @@ contains
   !! Then \f$index - v_i\f$ and that as input for \f$v_{i-1}\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure function GetPosition_FromIndex(index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -728,10 +688,8 @@ contains
   !! @returns periodically projected position
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure elemental integer(int64) function GetPeriodicPosition(index,extension)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -754,10 +712,8 @@ contains
   !! =\frac{2\sin\left(\frac{a_kp_{j,k}}{2}\right)}{a_k}e^{-\mathrm{i}\frac{a_kp_{j,k}}{2}}\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure function GetMomentum_BackwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -787,10 +743,8 @@ contains
   !! =\frac{2\sin\left(\frac{a_kp_{j,k}}{2}\right)}{a_k}e^{+\mathrm{i}\frac{a_kp_{j,k}}{2}}\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure function GetMomentum_ForwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -819,10 +773,8 @@ contains
   !! =\frac{\sin\left(a_kp_{j,k}\right)}{a_k}\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure function GetMomentum_CentralDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -844,10 +796,8 @@ contains
   !! @returns 2-Norm of lattice momentum
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure real(real64) function GetNorm2Momentum(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -866,10 +816,8 @@ contains
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
-  !! 17.02.2019
-  !! @version
-  !! 1.0
+  !! @date 17.02.2019
+  !! @version 1.0
   pure real(real64) function GetMaxNorm2Momentum()
     use, intrinsic :: iso_fortran_env
     implicit none

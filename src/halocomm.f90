@@ -25,7 +25,11 @@ module halocomm
   logical :: IsInitialised = .false.
 
 contains
-
+  !> @brief Initialises module
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 17.02.2019
+  !! @version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     implicit none
