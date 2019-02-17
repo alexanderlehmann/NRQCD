@@ -18,6 +18,7 @@ module random
   implicit none
 
   private
+  
   public :: InitModule,&
        IsModuleInitialised,&
        GetState,&

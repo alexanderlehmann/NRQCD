@@ -50,33 +50,46 @@ module arrayoperations
   end interface Sort
 contains
 
-  pure subroutine RemoveDuplicates_int8(array)
+  pure subroutine RemoveDuplicates_int8(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=int8
     integer(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     integer(kind), allocatable :: reduced_array(:)
 
     integer(kind), parameter :: empty=huge(1_kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -84,35 +97,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Int8
   
-  pure subroutine RemoveDuplicates_int16(array)
+  pure subroutine RemoveDuplicates_int16(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=int16
     integer(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     integer(kind), allocatable :: reduced_array(:)
 
     integer(kind), parameter :: empty=huge(1_kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -120,35 +151,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Int16
   
-  pure subroutine RemoveDuplicates_int32(array)
+  pure subroutine RemoveDuplicates_int32(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=int32
     integer(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     integer(kind), allocatable :: reduced_array(:)
 
     integer(kind), parameter :: empty=huge(1_kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -156,35 +205,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Int32
 
-  pure subroutine RemoveDuplicates_int64(array)
+  pure subroutine RemoveDuplicates_int64(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=int64
     integer(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     integer(kind), allocatable :: reduced_array(:)
 
     integer(kind), parameter :: empty=huge(1_kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -192,35 +259,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Int64
 
-  pure subroutine RemoveDuplicates_Real32(array)
+  pure subroutine RemoveDuplicates_Real32(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real32
     real(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     real(kind), allocatable :: reduced_array(:)
 
     real(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -228,35 +313,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Real32
   
-  pure subroutine RemoveDuplicates_Real64(array)
+  pure subroutine RemoveDuplicates_Real64(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real64
     real(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     real(kind), allocatable :: reduced_array(:)
 
     real(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -264,35 +367,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Real64
   
-  pure subroutine RemoveDuplicates_Real128(array)
+  pure subroutine RemoveDuplicates_Real128(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real128
     real(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     real(kind), allocatable :: reduced_array(:)
 
     real(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -300,36 +421,54 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Real128
 
 
-  pure subroutine RemoveDuplicates_Complex32(array)
+  pure subroutine RemoveDuplicates_Complex32(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real32
     complex(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     complex(kind), allocatable :: reduced_array(:)
 
     complex(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -337,35 +476,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Complex32
   
-  pure subroutine RemoveDuplicates_Complex64(array)
+  pure subroutine RemoveDuplicates_Complex64(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real64
     complex(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     complex(kind), allocatable :: reduced_array(:)
 
     complex(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -373,35 +530,53 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Complex64
   
-  pure subroutine RemoveDuplicates_Complex128(array)
+  pure subroutine RemoveDuplicates_Complex128(array,nduplicates)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), parameter :: kind=real128
     complex(kind), allocatable, intent(inout) :: array(:)
+    integer(int64),allocatable, intent(out), optional :: nduplicates(:)
 
     complex(kind), allocatable :: reduced_array(:)
 
-    complex(kind), parameter :: empty=huge(1._kind)!empty=ieee_value(ieee_quiet_nan)
+    complex(kind), parameter :: empty=huge(1._kind)
     
-    integer(int64) :: i, original_size, reduced_size 
-
+    integer(int64) :: i, original_size, reduced_size, j
+    integer(int64), allocatable :: countduplicates(:)
     
     original_size = size(array)
     allocate(reduced_array(original_size))
     reduced_array = empty
 
+    if(present(nduplicates)) then
+       allocate(countduplicates(original_size))
+       countduplicates = 0
+    end if
+    
     reduced_size=0
     do i=1,original_size
        ! if the entry already exists, check next entry
        if(any(reduced_array == array(i))) then
+          if(present(nduplicates)) then
+             j = FindLoc(reduced_array,DIM=1,VALUE=array(i))
+             countduplicates(j) = countduplicates(j) + 1_int64
+          end if
           cycle
        else
           ! no match found, therefore add it to the output
           reduced_size = reduced_size + 1_int64
 
           reduced_array(reduced_size) = array(i)
+          if(present(nduplicates)) then
+             countduplicates(reduced_size) = 1_int64
+          end if
        end if
     end do
 
@@ -409,6 +584,11 @@ contains
     deallocate(array)
     allocate(array(reduced_size))
     array = reduced_array(1:reduced_size)
+
+    if(present(nduplicates)) then
+       allocate(nduplicates(reduced_size))
+       nduplicates = countduplicates(1:reduced_size)
+    end if
   end subroutine RemoveDuplicates_Complex128
 
   pure subroutine sort_int8(array)

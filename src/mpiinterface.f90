@@ -25,7 +25,9 @@ module mpiInterface
        NumProcs,&
        MPIstop
 
-
+  !> Module name
+  character(len=12), parameter, public ::  modulename='mpiinterface'
+  
   !> Contains information, if module is initialised
   logical :: IsInitialised = .false.
   
