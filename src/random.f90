@@ -111,6 +111,7 @@ contains
     !> To-be set state of pseudo-random number generator
     integer(int64), dimension(25) :: state
     call ranlxd_reset(state)
+    IsInitialised = .TRUE.
   end subroutine ResetState
   
   !> @brief Initialises pseudo-random number generator (Ranlux)
