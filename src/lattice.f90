@@ -46,7 +46,7 @@ module lattice
   integer(int8), parameter, public :: nDim = 3_int8
 
   !> number of halo points
-  integer(int8), parameter, public :: nHalo= 1_int8
+  integer(int8), parameter, public :: nHalo= 2_int8
 
   !> lattice extensions
   integer(int64) :: LatticeExtensions(ndim) = -1
@@ -221,12 +221,12 @@ contains
   !! @version 1.0
   impure subroutine CheckDependencies
     use, intrinsic :: iso_fortran_env
-    use mpiinterface, only: IsModuleInitialised_MPIinterface => IsModuleInitialised
+    use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised
     use mpi
     implicit none
 
     integer :: proc, mpierr
-    if(.not.IsModuleInitialised_MPIinterface()) then
+    if(.not.IsMPIinterfaceInitialised()) then
        call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
        if(proc==0) then
           call flush(ERROR_UNIT)
