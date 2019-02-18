@@ -20,7 +20,8 @@ module lattice
   public :: &
        InitModule, &
        IsModuleInitialised,&
-       GetLocalLatticeIndex, &
+       GetGlobalLatticeIndex,&
+       GetLocalIndex, &
        GetLocalLatticeIndices,&
        GetLocalLatticeIndices_includingHalo,&
        GetLocalLatticeIndices_allocatable,&
@@ -595,17 +596,30 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure elemental integer(int64) function GetLocalLatticeIndex(LatticeIndex)
+  pure elemental integer(int64) function GetLocalIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int64), intent(in) :: LatticeIndex
 
-    GetLocalLatticeIndex = FindLoc(&
+    GetLocalIndex = FindLoc(&
                                 ! Where to look
          LocalLatticeIndices_includingHalo,dim=1,&
                                 ! What to look for
          value = LatticeIndex)
-  end function GetLocalLatticeIndex
+  end function GetLocalIndex
+  
+  !> @brief Returns lattice index based on local index
+  !! @returns lattice index
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 17.02.2019
+  !! @version 1.0
+  pure elemental integer(int64) function GetGlobalLatticeIndex(LocalIndex)
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    integer(int64), intent(in) :: LocalIndex
+    GetGlobalLatticeIndex = LocalLatticeIndices_IncludingHalo(LocalIndex)
+  end function GetGlobalLatticeIndex
 
   ! ..--** Generic Index Functions **--..
   !> @brief Returns  index of neighbouring point in i'th direction

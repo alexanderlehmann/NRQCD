@@ -123,7 +123,11 @@ contains
     call mpi_barrier(mpi_comm_world,mpierr)
     call MPI_Finalize(mpierr)
 
-    STOP
+    if(ThisProc()==0) then
+       STOP "Program aborted"
+    else
+       STOP
+    end if
   end subroutine MPIstop
 
 

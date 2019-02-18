@@ -6,8 +6,8 @@
 !> @brief Ranlux-module from Lüscher
 !! @details
 !! See the notes\n
-!! ``User's guide for ranlxs and ranlxd [F90 programs]" (December 1997'')\n
-!! ``Double precision implementation of the random number generator ranlux" (December 1997)''
+!! User's guide for ranlxs and ranlxd [F90 programs] (December 1997)\n
+!! Double precision implementation of the random number generator ranlux (December 1997)
 !! @author
 !! Martin Lüscher <luscher@mail.desy.de>\n
 !! Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -38,28 +38,29 @@ contains
   !! @date 15.12.1997 (03.09.2018)
   !! @version 2.1a
   impure subroutine error(no)
+    use iso_fortran_env
     !> Number of the error message
     integer(int64),intent(in) :: no
 
     select case(no)
     case(0)
-       print *, "Error in ranlxd_init"
-       print *, "Arithmetic on this machine is not suitable for ranlxd"
+       write(ERROR_UNIT,*) "Error in ranlxd_init"
+       write(ERROR_UNIT,*) "Arithmetic on this machine is not suitable for ranlxd"
     case(1)
-       print *, "Error in ranlxd_init"
-       print *, "Bad choice of luxury level (should be 1 or 2)"
+       write(ERROR_UNIT,*) "Error in ranlxd_init"
+       write(ERROR_UNIT,*) "Bad choice of luxury level (should be 1 or 2)"
     case(2)
-       print *, "Error in ranlxd_init"
-       print *, "Bad choice of seed (should be between 1 and 2^31-1)"
+       write(ERROR_UNIT,*) "Error in ranlxd_init"
+       write(ERROR_UNIT,*) "Bad choice of seed (should be between 1 and 2^31-1)"
     case(3)
-       print *, "Error in ranlxd_get"
-       print *, "Undefined state or improper argument"
+       write(ERROR_UNIT,*) "Error in ranlxd_get"
+       write(ERROR_UNIT,*) "Undefined state or improper argument"
     case(4)
-       print *, "Error in ranlxd_reset"
-       print *, "Arithmetic on this machine is not suitable for ranlxd"
+       write(ERROR_UNIT,*) "Error in ranlxd_reset"
+       write(ERROR_UNIT,*) "Arithmetic on this machine is not suitable for ranlxd"
     case(5)
-       print *, "Error in ranlxd_reset"
-       print *, "Unexpected input data"
+       write(ERROR_UNIT,*) "Error in ranlxd_reset"
+       write(ERROR_UNIT,*) "Unexpected input data"
     end select
     stop "Program aborted"
   end subroutine error
