@@ -26,6 +26,8 @@ module lattice
        GetLocalLatticeIndices_includingHalo,&
        GetLocalLatticeIndices_allocatable,&
        GetLocalLatticeIndices_includingHalo_allocatable,&
+       GetLatticePosition,&
+       GetLatticeIndex,&
        GetProc,&
        GetLatticeSize,&
        GetLocalLatticeSize,&

@@ -19,7 +19,8 @@ module halocomm
 
   public :: &
        InitModule,&
-       IsModuleInitialised
+       IsModuleInitialised,&
+       CommunicateBoundary
 
   !> Module name
   character(len=8), parameter, public ::  modulename='halocomm'
@@ -35,6 +36,20 @@ module halocomm
   integer(int64), allocatable :: SendList(:,:)
   !> List of points and to this process sending processes
   integer(int64), allocatable :: RecvList(:,:)
+  !> Number of neighbours
+  integer :: neibs
+
+  !> @brief Communication of boundary values
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 18.02.2019
+  !! @version 1.0
+  interface CommunicateBoundary
+     ! real(real64)
+     module procedure CommunicateBoundary_rank1_real64
+
+     ! complex(real64)
+  end interface CommunicateBoundary
 contains
   !> @brief Initialises module
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -48,7 +63,7 @@ contains
     call CheckDependencies
     
     ! Initialise list of lattice points which are to be recieved from which other process
-    call InitSendRecvLists(HaloProcs,NeibPoints,SendList,RecvList)
+    call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
 
     ! DONE
     IsInitialised = .TRUE.
@@ -97,13 +112,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine InitSendRecvLists(HaloProcs,NeibPoints,SendList,RecvList)
+  impure subroutine InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
     use, intrinsic :: iso_fortran_env
     use lattice, only: GetLocalLatticeIndices_includingHalo_Allocatable, GetProc
     use mpiinterface, only: NumProcs, ThisProc, MPISTOP
     use arrayoperations, only: RemoveDuplicates, Sort
     use mpi
     implicit none
+    !> Number of neighbours
+    integer,                     intent(out) :: Neibs
     !> List of MPI-ranks of neighbours
     integer,        allocatable, intent(out) :: HaloProcs(:)
     !> Neighbouring points for each neighbour
@@ -117,7 +134,7 @@ contains
     integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
     integer, allocatable :: HaloProcs_includingThisProc(:)
     integer, allocatable :: Procs(:)
-    integer(int64) :: neibs, LocalIndex, neibpoint
+    integer(int64) :: LocalIndex, neibpoint
     integer :: proc, neib
     integer(int64) :: MaxHaloPoints
 
@@ -141,22 +158,22 @@ contains
          PointsPerProc_includingThisProc,DIM=1,& !Where to look
          MASK=HaloProcs_includingThisProc/=ThisProc() ) !What to ignore
 
-    allocate(SendList(MaxHaloPoints,neibs))
-    SendList = huge(1)
+    allocate(RecvList(MaxHaloPoints,neibs))
+    RecvList = -1
     
     neib = 0
     do proc=1,size(HaloProcs_includingThisProc)
        if(HaloProcs_includingThisProc(proc) /= ThisProc()) then
           neib = neib + 1
-          HaloProcs(neib)   = HaloProcs_includingThisProc(proc)
+          HaloProcs(neib)  = HaloProcs_includingThisProc(proc)
           NeibPoints(neib) = PointsPerProc_includingThisProc(proc)
 
           ! Assign global lattice indices of halo to the process which sends them
           neibpoint=0
           do LocalIndex=1,size(LocalLatticeIndices)
              if(GetProc(LocalLatticeIndices(LocalIndex))==HaloProcs(neib)) then
-                neibpoint        = neibpoint + 1_int64
-                SendList(neibpoint,neib) = LocalLatticeIndices(LocalIndex)
+                neibpoint = neibpoint + 1_int64
+                RecvList(neibpoint,neib) = LocalLatticeIndices(LocalIndex)
              end if
           end do
        end if
@@ -165,7 +182,7 @@ contains
     ! 2. Get from all the neighbours the lists of points they wish to recieve
     !    using the symmetry isSender <=> isReciever
 
-    allocate(RecvList(MaxHaloPoints,neibs))
+    allocate(SendList(MaxHaloPoints,neibs))
     do neib=1,neibs
        dest = HaloProcs(neib)
        src  = dest
@@ -174,12 +191,12 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            SendList(&          ! What to send ...
+            RecvList(&          ! What to send ...
             1,neib),&           ! ... and it's first index
             NeibPoints(neib),&  ! How many points
             MPI_INT64_T,&       ! What type to send
             dest, sendtag,&     ! Destination and sendtag
-            RecvList(&          ! What to recieve ...
+            SendList(&          ! What to recieve ...
             1,neib),&           ! ... and it's first index
             NeibPoints(neib),&  ! How many points
             MPI_INT64_T,&       ! What type to recieve
@@ -194,16 +211,82 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_rank1_real64(array)
+  impure subroutine CommunicateBoundary_rank1_real64(data)
     use, intrinsic :: iso_fortran_env
+    use mpi
     use lattice, only: GetLocalIndex
+    use mpiinterface, only: ThisProc
     implicit none
     integer(int8), parameter :: kind = real64
-    real(kind), intent(inout) :: array(:)
+    real(kind), intent(inout) :: data(:)
 
-    real(kind), allocatable :: sendbuffer(:), recvbuffer(:)
+    integer(int8), parameter :: r=rank(data)
+    
+    ! MPI
+    real(kind), allocatable :: buffer(:)
+    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
+    integer :: neib, proc
+    integer :: ValuesPerPoint, MaxHaloPoints
+    integer :: BufferIndex
+    integer(int64) :: LocalIndex
+    integer(int64) :: LatticeIndex
 
+    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
+    
+    allocate(buffer(MaxHaloPoints))
+
+    ValuesPerPoint = size(data)/size(data,r)
+    
+    AllNeighbours: do neib=1,Neibs
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+
+       ! Prepare buffer with send-data
+       packing: do BufferIndex=1,NeibPoints(neib)
+          ! Get global lattice index
+          LatticeIndex = SendList(BufferIndex,neib)
+          
+          ! Get local index in data
+          LocalIndex = GetLocalIndex(LatticeIndex)
+
+          ! Assign data to buffer
+          buffer(BufferIndex) = data(LocalIndex)
+       end do packing
+
+       ! Send and recieve
+       dest = HaloProcs(neib)
+       src  = dest
+
+       sendtag = ThisProc()
+       recvtag = dest
+
+       call MPI_SendRecv(&
+            buffer(&            ! What to send ...
+            1),&                ! ... and it's first index
+            buffersize,&        ! How many points
+            MPI_DOUBLE,&        ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1),&                ! ... and it's first index
+            buffersize,&        ! How many points
+            MPI_DOUBLE,&        ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
+
+       ! Unpack recieved data from buffer
+       unpacking: do BufferIndex=1,NeibPoints(neib)
+          ! Get global lattice index
+          LatticeIndex = RecvList(BufferIndex,neib)
+          
+          ! Get local index in data
+          LocalIndex = GetLocalIndex(LatticeIndex)
+
+          ! Assign data to buffer
+          data(LocalIndex) = buffer(BufferIndex)
+       end do unpacking
+    end do AllNeighbours
+    deallocate(buffer)
   end subroutine CommunicateBoundary_rank1_real64
 end module halocomm
