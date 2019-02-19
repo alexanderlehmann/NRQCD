@@ -24,30 +24,11 @@ program simulation
   real(real64)   :: TimeRange
   !real(real64)  :: Wilsoncoeffs(nWilsonCoeffs)
 
-  complex(real64), allocatable :: testcomm(:)
-
 
   integer(int64) :: LocalIndex, LatticeIndex
   integer :: proc
   
   call InitSimulation
-
-  allocate(testcomm(GetLocalLatticeSize_IncludingHalo()))
-  testcomm = ThisProc()
-
-  call CommunicateBoundary(testcomm)
-
-  if(ThisProc()==0) then
-     !print*,GetLocalLatticeSize(),GetLocalLatticeSize_includingHalo()
-     
-     do LocalIndex=1,GetLocalLatticeSize_includingHalo()
-        LatticeIndex = GetGlobalLatticeIndex(LocalIndex)
-        proc = GetProc(LatticeIndex)
-        
-        if(proc/=ThisProc()) print*,proc,LatticeIndex,testcomm(LocalIndex)
-     end do
-     !print*,testcomm
-  end if
      
   
   call EndSimulation
