@@ -29,6 +29,7 @@ module lattice
        GetLatticePosition,&
        GetLatticeIndex,&
        GetProc,&
+       GetLatticeExtension,&
        GetLatticeSize,&
        GetLocalLatticeSize,&
        GetLocalLatticeSize_includingHalo,&
@@ -496,6 +497,19 @@ contains
     GetVolume = Volume
   end function GetVolume
 
+  !> @brief Returns i'th lattice extension
+  !! @returns i'th lattice extension
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 19.02.2019
+  !! @version 1.0
+  pure elemental integer(int64) function GetLatticeExtension(i)
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    integer(int8), intent(in) :: i
+    GetLatticeExtension = LatticeExtensions(i)
+  end function GetLatticeExtension
+  
   !> @brief Returns lattice size
   !! @returns Number of points on the whole lattice
   !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$

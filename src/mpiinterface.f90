@@ -92,11 +92,15 @@ contains
   impure subroutine FinalizeModule
     implicit none
     integer :: mpierr
-
-    call MPI_FINALIZE(mpierr)
+    character(len=70) :: errormessage
     
-    ! DONE
-    IsInitialised = .FALSE.
+    if(IsInitialised) then
+       call MPI_FINALIZE(mpierr)
+       IsInitialised = .FALSE.
+    else
+       errormessage = 'Error in finalization of '//modulename//': is not initialised.'
+       call MPISTOP(errormessage)
+    end if
   end subroutine FinalizeModule
 
   !>@brief MPI stop with optional message and code

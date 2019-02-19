@@ -52,16 +52,40 @@ contains
   !! @version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
+    use lattice, only: nDim, GetLatticeExtension
+    use mpiinterface, only: ThisProc, NumProcs
+    use mpi
     implicit none
+
+    ! MPI
+    integer :: mpierr
+    integer :: maxmklprocs
 
     call CheckObligatoryInitialisations
 
     ! Assigning a colour to each process
-    
+    maxmklprocs = GetLatticeExtension(nDim)
+    if( maxmklprocs < NumProcs() ) then
+       if(ThisProc() .le. maxmklprocs) then
+          mkl_color = 1
+       else
+          mkl_color = 0
+       end if
+    else
+       mkl_color = 1
+    end if
+    ! Split communicator
+    call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
 
     
     IsInitialised = .TRUE.
+    
   end subroutine InitModule
+
+  pure integer function GetColor()
+    implicit none
+    GetColor = mkl_color
+  end function GetColor
 
   !> @brief Checks previous necessary initialisations
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -87,10 +111,18 @@ contains
   !! @date 19.02.2019
   !! @version 1.0
   impure subroutine FinalizeModule
+    use mpiinterface, only: mpistop
     implicit none
+    character(len=70) :: errormessage
 
+    if(isInitialised) then
+       
 
-    IsInitialised = .FALSE.
+       IsInitialised = .FALSE.
+    else
+       errormessage = 'Error in finalization of '//modulename//': is not initialised.'
+       call MPISTOP(errormessage)
+    end if
   end subroutine FinalizeModule
   
   !>@brief Returns, if module is initialised

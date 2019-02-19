@@ -24,7 +24,7 @@ program simulation
   real(real64)   :: TimeRange
   !real(real64)  :: Wilsoncoeffs(nWilsonCoeffs)
 
-  !real(real64), allocatable :: testcomm(:)
+  !complex(real64), allocatable :: testcomm(:)
 
 
   integer(int64) :: LocalIndex, LatticeIndex
@@ -33,7 +33,8 @@ program simulation
   call InitSimulation
 
   !allocate(testcomm(GetLocalLatticeSize_IncludingHalo()))
-  !testcomm = ThisProc()
+  !testcomm = cmplx(ThisProc(),ThisProc(),kind(testcomm))/100
+  !cmplx(real(ThisProc(),kind(testcomm))/100,real(ThisProc(),kind(testcomm))/100)
   !
   !call CommunicateBoundary(testcomm)
   !
