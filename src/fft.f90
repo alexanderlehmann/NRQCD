@@ -32,6 +32,17 @@ module fft
   !> Contains information, if module is initialised
   logical :: IsInitialised = .false.
 
+  ! Variables  for (x<->p)-FFT
+  !> MKL communicator for (x<->p)-FFT
+  integer :: mkl_comm
+  !> Pointer to distributed array for (x<->p)-FFT
+  type(dfti_descriptor_dm), pointer :: xp_desc
+  !> @brief Colour of this process for (x<->p) -FFT.
+  !! @details
+  !! 0: This process does not participate in FFT\n
+  !! 1: This process does participate in FFT
+  integer :: mkl_color=-1
+  
 contains
 
   !> @brief Initialises module
@@ -45,6 +56,10 @@ contains
 
     call CheckObligatoryInitialisations
 
+    ! Assigning a colour to each process
+    
+
+    
     IsInitialised = .TRUE.
   end subroutine InitModule
 
@@ -55,6 +70,15 @@ contains
   !! @version 1.0
   impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
+    use lattice, only: IsLatticeInitialised => IsModuleInitialised, latticename => modulename
+    use mpiinterface, only: mpistop
+    implicit none
+    character(len=70) :: errormessage
+    
+    if(.not.IsLatticeInitialised()) then
+       errormessage = 'Error in init of '//modulename//': '//latticename//' is not initialised.'
+       call mpistop(errormessage)
+    end if
   end subroutine CheckObligatoryInitialisations
   
   !> @brief Finalizes module

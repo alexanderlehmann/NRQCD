@@ -117,7 +117,7 @@ contains
     call mpi_barrier(mpi_comm_world,mpierr)
     call mpi_comm_rank(MPI_COMM_WORLD, this_proc, mpierr)
     if(this_proc==0) then
-       if(present(errormessage)) write(ERROR_UNIT,*) errormessage
+       if(present(errormessage)) write(ERROR_UNIT,*) trim(errormessage)
        if(present(errorcode))    write(ERROR_UNIT,*)'Error code:',errorcode
     end if
     call flush(ERROR_UNIT)

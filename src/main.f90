@@ -129,6 +129,6 @@ contains
     call FinalizeModule_FFT
     call FinalizeModule_MPIinterface
 
-    STOP
+    STOP "Simulation completed"
   end subroutine EndSimulation
 end program simulation

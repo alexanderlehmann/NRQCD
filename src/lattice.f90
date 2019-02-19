@@ -218,16 +218,17 @@ contains
   !> @brief Checks previous necessary initialisations
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
+  !! @date 19.02.2019
   !! @version 1.0
   impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
-    use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised, mpistop
+    use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised, mpiname => modulename,&
+         mpistop
     implicit none
     character(len=70) :: errormessage
     
     if(.not.IsMPIinterfaceInitialised()) then
-       errormessage = 'Error in init of '//modulename//': MPI-interface-module is not initialised.'
+       errormessage = 'Error in init of '//modulename//': '//mpiname//' is not initialised.'
        call mpistop(errormessage)
     end if
   end subroutine CheckObligatoryInitialisations
