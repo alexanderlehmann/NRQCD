@@ -24,11 +24,30 @@ program simulation
   real(real64)   :: TimeRange
   !real(real64)  :: Wilsoncoeffs(nWilsonCoeffs)
 
+  !real(real64), allocatable :: testcomm(:)
+
 
   integer(int64) :: LocalIndex, LatticeIndex
   integer :: proc
   
   call InitSimulation
+
+  !allocate(testcomm(GetLocalLatticeSize_IncludingHalo()))
+  !testcomm = ThisProc()
+  !
+  !call CommunicateBoundary(testcomm)
+  !
+  !if(ThisProc()==0) then
+  !   !print*,GetLocalLatticeSize(),GetLocalLatticeSize_includingHalo()
+  !   
+  !   do LocalIndex=1,GetLocalLatticeSize_includingHalo()
+  !      LatticeIndex = GetGlobalLatticeIndex(LocalIndex)
+  !      proc = GetProc(LatticeIndex)
+  !      
+  !      if(proc/=ThisProc()) print*,proc,LatticeIndex,testcomm(LocalIndex)
+  !   end do
+  !   !print*,testcomm
+  !end if
      
   
   call EndSimulation
@@ -56,6 +75,7 @@ contains
     use lattice,            only: InitModule_Lattice            => InitModule, ndim
     use halocomm,           only: InitModule_HaloComm           => InitModule
     use random,             only: InitModule_Random             => InitModule
+    use fft,                only: InitModule_FFT                => InitModule
     implicit none
 
     integer(int64) :: arg_count
@@ -95,6 +115,7 @@ contains
     call InitModule_MPIinterface
     call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
     call InitModule_HaloComm
+    call InitModule_FFT
     call InitModule_Random(RandomNumberSeed + ThisProc())
 
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
@@ -102,10 +123,10 @@ contains
 
   subroutine EndSimulation
     use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
-    !use dft,          only: FinalizeModule_DFT          => FinalizeModule
+    use fft,          only: FinalizeModule_FFT          => FinalizeModule
     implicit none
 
-    !call FinalizeModule_DFT
+    call FinalizeModule_FFT
     call FinalizeModule_MPIinterface
 
     STOP

@@ -86,7 +86,7 @@ contains
     use, intrinsic :: iso_fortran_env
     implicit none
 
-    call CheckDependencies
+    call CheckObligatoryInitialisations
     
     ! Initialise list of lattice points which are to be recieved from which other process
     call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
@@ -101,24 +101,18 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  impure subroutine CheckDependencies
+  impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
     use lattice, only: IsLatticeInitialised => IsModuleInitialised
-    use mpi
+    use mpiinterface, only: mpistop
     implicit none
-
-    integer :: proc, mpierr
+    character(len=70) :: errormessage
+    
     if(.not.IsLatticeInitialised()) then
-       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
-       if(proc==0) then
-          call flush(ERROR_UNIT)
-          write(ERROR_UNIT,*) 'Error in init of ',modulename&
-               ,': Lattice-module is not initialised.'
-          call flush(ERROR_UNIT)
-       end if
-       STOP
+       errormessage = 'Error in init of '//modulename//': Lattice-module is not initialised.'
+       call mpistop(errormessage)
     end if
-  end subroutine CheckDependencies
+  end subroutine CheckObligatoryInitialisations
   
   !>@brief Returns, if module is initialised
   !! @returns module's initialisation status

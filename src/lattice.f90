@@ -111,8 +111,7 @@ contains
   end function IsModuleInitialised
   
   !> @brief Initialises module
-  !! @details
-  !! Lattice-extensions, lattice-size, volume etc
+  !! @details Lattice-extensions, lattice-size, volume etc
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
@@ -133,7 +132,7 @@ contains
 
     integer :: proc
 
-    call CheckDependencies
+    call CheckObligatoryInitialisations
     
     LatticeSpacings = LatticeSpacings_
     LatticeExtensions = LatticeExtensions_
@@ -221,24 +220,17 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  impure subroutine CheckDependencies
+  impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
-    use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised
-    use mpi
+    use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised, mpistop
     implicit none
-
-    integer :: proc, mpierr
+    character(len=70) :: errormessage
+    
     if(.not.IsMPIinterfaceInitialised()) then
-       call mpi_comm_rank(MPI_COMM_WORLD, proc, mpierr)
-       if(proc==0) then
-          call flush(ERROR_UNIT)
-          write(ERROR_UNIT,*) 'Error in init of ',modulename&
-               ,': MPI-interface-module is not initialised.'
-          call flush(ERROR_UNIT)
-       end if
-       STOP
+       errormessage = 'Error in init of '//modulename//': MPI-interface-module is not initialised.'
+       call mpistop(errormessage)
     end if
-  end subroutine CheckDependencies
+  end subroutine CheckObligatoryInitialisations
 
   !> @brief Initialises local lattice boundaries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)

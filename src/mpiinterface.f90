@@ -113,9 +113,10 @@ contains
 
     call flush(6)
     call flush(ERROR_UNIT)
+    if(.not.isInitialised) call InitModule
     call mpi_barrier(mpi_comm_world,mpierr)
-
-    if(ThisProc()==0) then
+    call mpi_comm_rank(MPI_COMM_WORLD, this_proc, mpierr)
+    if(this_proc==0) then
        if(present(errormessage)) write(ERROR_UNIT,*) errormessage
        if(present(errorcode))    write(ERROR_UNIT,*)'Error code:',errorcode
     end if
@@ -123,7 +124,7 @@ contains
     call mpi_barrier(mpi_comm_world,mpierr)
     call MPI_Finalize(mpierr)
 
-    if(ThisProc()==0) then
+    if(this_proc==0) then
        STOP "Program aborted"
     else
        STOP
