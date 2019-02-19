@@ -24,7 +24,7 @@ program simulation
   real(real64)   :: TimeRange
   !real(real64)  :: Wilsoncoeffs(nWilsonCoeffs)
 
-  real(real64), allocatable :: testcomm(:)
+  complex(real64), allocatable :: testcomm(:)
 
 
   integer(int64) :: LocalIndex, LatticeIndex
