@@ -15,6 +15,9 @@ MKLROOT=intel/mkl
 # Inter-file inlining optimization
 #FFLAGS += -ipo
 
+# int64-MKL-Cluster-FFT needs that all integers are set to int64
+#FFLAGS += -i8
+
 # Turning on preprocessor
 #FFLAGS += -fpp
 
@@ -89,5 +92,5 @@ clean:
 depend .depend:
 	makedepf90 -o $(PROGRAM) *.f90 > .depend
 
-install:
-	$(FC) $(FFLAGS) $(LIBS) "$(MKLROOT)/include/mkl_cdft.f90" -c -o mkl_cdft.o
+#install:
+#	$(FC) $(FFLAGS) $(LIBS) "$(MKLROOT)/include/mkl_cdft.f90" -c -o mkl_cdft.o

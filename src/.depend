@@ -1,4 +1,4 @@
-FOBJ=arrayoperations.o halocomm.o lattice.o main.o mathconstants.o mkl_cdft.o mpiinterface.o random.o ranlxd_generator.o tolerances.o xpfft.o 
+FOBJ=arrayoperations.o halocomm.o lattice.o main.o mathconstants.o mkl_cdft.o mkl_dfti.o mpiinterface.o random.o ranlxd_generator.o tolerances.o xpfft.o 
 
 run.exe: $(FOBJ)
 	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
@@ -8,7 +8,8 @@ halocomm.o : halocomm.f90 arrayoperations.o lattice.o mpiinterface.o
 lattice.o : lattice.f90 mathconstants.o arrayoperations.o mpiinterface.o 
 main.o : main.f90 xpfft.o random.o halocomm.o lattice.o mpiinterface.o 
 mathconstants.o : mathconstants.f90 
-mkl_cdft.o : mkl_cdft.f90 
+mkl_cdft.o : mkl_cdft.f90 mkl_dfti.o 
+mkl_dfti.o : mkl_dfti.f90 
 mpiinterface.o : mpiinterface.f90 
 random.o : random.f90 mpiinterface.o mathconstants.o ranlxd_generator.o 
 ranlxd_generator.o : ranlxd_generator.f90 

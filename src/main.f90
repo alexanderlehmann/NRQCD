@@ -5,7 +5,6 @@ program simulation
   use lattice, only: ndim
 
   use lattice, only: GetLocalLatticeSize_IncludingHalo
-  use lattice 
   use halocomm
   implicit none
 
@@ -83,7 +82,7 @@ contains
     character(len=80) :: arg
     integer(int8) :: i
 
-    integer(int32) :: mpierr
+    integer(intmpi) :: mpierr
     
     !..--** Reading simulation parameters **--..
     arg_count = 0

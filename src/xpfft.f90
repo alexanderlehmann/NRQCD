@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-! Fast Fourier Transform interfaces
+! Fast Fourier Transforms between real and momentum space
 !------------------------------------------------------------------------------
 !
 ! MODULE: fft
@@ -46,7 +46,7 @@ module xpfft
   !> In-place (x<->p)-FFT field
   complex(real64), allocatable :: data(:)
   !> Number of dimensions
-  integer(intmpi), parameter :: ranks = int(nDim,intmpi)
+  integer(int64), parameter :: ranks = int(nDim,intmpi)
 
   !> List of lattice indices corresponding to the data in xp_data
   integer(int64), allocatable :: LocalLatticeIndices(:)
@@ -69,11 +69,11 @@ contains
     ! MPI
     integer(intmpi) :: mpierr
     integer(intmpi) :: maxmklprocs
+    
     ! MKL
-    integer(intmpi) :: lengths(ndim), status, local_extension, local_firstindex
+    integer(int64) :: lengths(ndim), status, local_extension, local_firstindex
     
     character(len=100) :: errormessage
-    
 
     if(isInitialised) then
        errormessage = 'Error in init of '//modulename//': already initialised.'
@@ -89,29 +89,20 @@ contains
           mkl_color = 0
        end if
        ! Split communicator
-      ! call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
-
+       call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
        
-       lengths = int(GetLatticeExtension([1_int8:ndim]))
-
-       print*,thisproc(),ranks,lengths
-       call flush(6)
-       call mpi_barrier(mpi_comm_world,mpierr)
-       status = DftiCreateDescriptorDM(MKL_COMM,desc,DFTI_DOUBLE,&
-         DFTI_COMPLEX,ranks,lengths)
-       
-
-
-       call mpistop
        ! 1. Partitioning (done by mkl and then communicated)
        if(mkl_color==1) then
           lengths = int(GetLatticeExtension([1_int8:ndim]))
+          
+          !call mpi_barrier(mkl_comm,mpierr)
 
-          print*,thisproc(),ranks,lengths
+          status = DftiCreateDescriptorDM(int(mkl_comm,int64),desc,&
+               DFTI_DOUBLE, DFTI_COMPLEX, ranks, lengths)
+
+          print*,thisproc(),mpierr
           call flush(6)
           call mpi_barrier(mkl_comm,mpierr)
-          status = DftiCreateDescriptorDM(mkl_comm,desc,DFTI_DOUBLE,&
-               DFTI_COMPLEX,ranks,lengths)
 
           status = DftiGetValueDM(desc,CDFT_LOCAL_NX,local_extension)
           status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,local_firstindex)
