@@ -1,6 +1,6 @@
 program simulation
   use, intrinsic :: iso_fortran_env
-
+  use precision
   use mpiinterface, only: ThisProc, NumProcs, MPIstop, intmpi
   use lattice, only: ndim
 
@@ -71,7 +71,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     
-    use mpiinterface,       only: InitModule_MPIinterface       => InitModule, thisProc
+    use mpiinterface,       only: InitModule_MPIinterface       => InitModule, thisProc, intmpi
     use lattice,            only: InitModule_Lattice            => InitModule, ndim
     use halocomm,           only: InitModule_HaloComm           => InitModule
     use random,             only: InitModule_Random             => InitModule

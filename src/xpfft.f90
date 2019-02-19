@@ -16,6 +16,7 @@
   !------------------------------------------------------------------------------
 module xpfft
   use, intrinsic :: iso_fortran_env
+  use precision, only: fp
   use mkl_cdft
   use lattice, only: ndim
   use mpiinterface, only: intmpi
@@ -44,7 +45,7 @@ module xpfft
   !> Pointer to distributed array for (x<->p)-FFT
   type(dfti_descriptor_dm), pointer :: desc
   !> In-place (x<->p)-FFT field
-  complex(real64), allocatable :: data(:)
+  complex(fp), allocatable :: data(:)
   !> Number of dimensions
   integer(int64), parameter :: ranks = int(nDim,intmpi)
 

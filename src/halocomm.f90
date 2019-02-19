@@ -13,6 +13,7 @@
 !----------------------------------------------------------------------
 module halocomm
   use, intrinsic :: iso_fortran_env
+  use precision, only: fp
   use mpiinterface, only: intmpi
   implicit none
 
@@ -38,8 +39,12 @@ module halocomm
   !> List of points and to this process sending processes
   integer(int64), allocatable :: RecvList(:,:)
   !> Number of neighbours
-  integer(intmpi) :: neibs
-
+  integer(intmpi) :: neibs=-1
+  !> Type for sending of real variables
+  integer(intmpi) :: sendtype_real=-1
+  !> Type for sending of complex variables
+  integer(intmpi) :: sendtype_complex=-1
+  
   !> @brief Communication of boundary values
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -47,35 +52,16 @@ module halocomm
   !! @version 1.0
   interface CommunicateBoundary
      ! ..--** REAL **--..
-     ! real(real32) aka single precision
-     module procedure CommunicateBoundary_real_single_rank1
-     module procedure CommunicateBoundary_real_single_rank2
-     module procedure CommunicateBoundary_real_single_rank3
-     ! real(real64) aka double precision
-     module procedure CommunicateBoundary_real_double_rank1
-     module procedure CommunicateBoundary_real_double_rank2
-     module procedure CommunicateBoundary_real_double_rank3
-     ! real(real128) aka quad precision
-     module procedure CommunicateBoundary_real_quad_rank1
-     module procedure CommunicateBoundary_real_quad_rank2
-     module procedure CommunicateBoundary_real_quad_rank3
+     module procedure CommunicateBoundary_real_rank1
+     module procedure CommunicateBoundary_real_rank2
+     module procedure CommunicateBoundary_real_rank3
+     module procedure CommunicateBoundary_real_rank4
 
      ! ..--** COMPLEX **--..
-     ! complex(real32) aka complex single precision
-     module procedure CommunicateBoundary_complex_single_rank1
-     module procedure CommunicateBoundary_complex_single_rank2
-     module procedure CommunicateBoundary_complex_single_rank3
-     module procedure CommunicateBoundary_complex_single_rank4
-     ! complex(real64) aka complex double precision
-     module procedure CommunicateBoundary_complex_double_rank1
-     module procedure CommunicateBoundary_complex_double_rank2
-     module procedure CommunicateBoundary_complex_double_rank3
-     module procedure CommunicateBoundary_complex_double_rank4
-     ! complex(real128) aka complex quad precision
-     module procedure CommunicateBoundary_complex_quad_rank1
-     module procedure CommunicateBoundary_complex_quad_rank2
-     module procedure CommunicateBoundary_complex_quad_rank3
-     module procedure CommunicateBoundary_complex_quad_rank4
+     module procedure CommunicateBoundary_complex_rank1
+     module procedure CommunicateBoundary_complex_rank2
+     module procedure CommunicateBoundary_complex_rank3
+     module procedure CommunicateBoundary_complex_rank4
   end interface CommunicateBoundary
 contains
   !> @brief Initialises module
@@ -86,6 +72,9 @@ contains
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: mpistop
+    use mpi, only: &
+         MPI_REAL4,    MPI_REAL8,     MPI_REAL16,&
+         MPI_COMPLEX8, MPI_COMPLEX16, MPI_COMPLEX32
     implicit none
 
     character(len=100) :: errormessage
@@ -100,6 +89,22 @@ contains
        ! Initialise list of lattice points which are to be recieved from which other process
        call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
 
+       ! Select proper mpi send types for real and complex variables
+       select case(fp)
+       case(real32)
+          sendtype_real    = MPI_REAL4
+          sendtype_complex = MPI_COMPLEX8
+       case(real64)
+          sendtype_real    = MPI_REAL8
+          sendtype_complex = MPI_COMPLEX16
+       case(real128)
+          sendtype_real    = MPI_REAL16
+          sendtype_complex = MPI_COMPLEX32
+       case default
+          errormessage = 'Error in init of '//modulename//': unsupported floating point precision.'
+          call MPISTOP(errormessage)
+       end select
+       
        ! DONE
        IsInitialised = .TRUE.
     end if
@@ -235,33 +240,31 @@ contains
     end do
   end subroutine InitSendRecvLists
 
-  !>@brief Communication of 1D-array with real entries of single precision
+  !>@brief Communication of 1D-array with real entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_real_single_rank1(data)
+  impure subroutine CommunicateBoundary_real_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real32
-    real(kind), intent(inout) :: data(:)
+    real(fp), intent(inout) :: data(:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(kind), allocatable :: buffer(:)
+    real(fp), allocatable :: buffer(:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(MaxHaloPoints))
@@ -294,12 +297,12 @@ contains
             buffer(&            ! What to send ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to send
+            sendtype_real,&     ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to recieve
+            sendtype_real,&     ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -317,35 +320,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_real_single_rank1
+  end subroutine CommunicateBoundary_real_rank1
 
-  !>@brief Communication of 2D-array with real entries of single precision
+  !>@brief Communication of 2D-array with real entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_real_single_rank2(data)
+  impure subroutine CommunicateBoundary_real_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real32
-    real(kind), intent(inout) :: data(:,:)
+    real(fp), intent(inout) :: data(:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(kind), allocatable :: buffer(:,:)
+    real(fp), allocatable :: buffer(:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),MaxHaloPoints))
@@ -378,12 +379,12 @@ contains
             buffer(&            ! What to send ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to send
+            sendtype_real,&     ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to recieve
+            sendtype_real,&     ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -401,35 +402,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_real_single_rank2
+  end subroutine CommunicateBoundary_real_rank2
 
-  !>@brief Communication of 3D-array with real entries of single precision
+  !>@brief Communication of 3D-array with real entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_real_single_rank3(data)
+  impure subroutine CommunicateBoundary_real_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real32
-    real(kind), intent(inout) :: data(:,:,:)
+    real(fp), intent(inout) :: data(:,:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(kind), allocatable :: buffer(:,:,:)
+    real(fp), allocatable :: buffer(:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
@@ -462,12 +461,12 @@ contains
             buffer(&            ! What to send ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to send
+            sendtype_real,&     ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            MPI_REAL4,&         ! What type to recieve
+            sendtype_real,&     ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -485,798 +484,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_real_single_rank3
-  
-  !>@brief Communication of 1D-array with real entries of double precision
+  end subroutine CommunicateBoundary_real_rank3
+
+  !>@brief Communication of 4D-array with real entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_real_double_rank1(data)
+  impure subroutine CommunicateBoundary_real_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real64
-    real(kind), intent(inout) :: data(:)
+    real(fp), intent(inout) :: data(:,:,:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(kind), allocatable :: buffer(:)
+    real(fp), allocatable :: buffer(:,:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(LocalIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_double_rank1
-
-  !>@brief Communication of 2D-array with real entries of double precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_real_double_rank2(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real64
-    real(kind), intent(inout) :: data(:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    real(kind), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,LocalIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_double_rank2
-
-  !>@brief Communication of 3D-array with real entries of double precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_real_double_rank3(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real64
-    real(kind), intent(inout) :: data(:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    real(kind), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL8,&         ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_double_rank3
-
-  !>@brief Communication of 1D-array with real entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_real_quad_rank1(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    real(kind), intent(inout) :: data(:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    real(kind), allocatable :: buffer(:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(LocalIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_quad_rank1
-
-  !>@brief Communication of 2D-array with real entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_real_quad_rank2(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    real(kind), intent(inout) :: data(:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    real(kind), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,LocalIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_quad_rank2
-
-  !>@brief Communication of 3D-array with real entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_real_quad_rank3(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    real(kind), intent(inout) :: data(:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    real(kind), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            MPI_REAL16,&        ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_real_quad_rank3
-
-  
-
-
-
-
-  ! START COMPLEX
-
-  !>@brief Communication of 1D-array with complex entries of single precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_single_rank1(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real32
-    complex(kind), intent(inout) :: data(:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(LocalIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_single_rank1
-
-  !>@brief Communication of 2D-array with complex entries of single precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_single_rank2(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real32
-    complex(kind), intent(inout) :: data(:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,LocalIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_single_rank2
-
-  !>@brief Communication of 3D-array with complex entries of single precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_single_rank3(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real32
-    complex(kind), intent(inout) :: data(:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_single_rank3
-
-  !>@brief Communication of 4D-array with complex entries of single precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_single_rank4(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real32
-    complex(kind), intent(inout) :: data(:,:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints))
@@ -1306,18 +540,18 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX8,&   ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
+            buffer(&            ! What to send ...
+            1,1,1,1),&          ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_real,&     ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1,1,1,1),&          ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_real,&     ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
 
        ! Unpack recieved data from buffer
        unpacking: do BufferIndex=1,NeibPoints(neib)
@@ -1332,35 +566,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_single_rank4
-  
-  !>@brief Communication of 1D-array with complex entries of double precision
+  end subroutine CommunicateBoundary_real_rank4
+
+  !>@brief Communication of 1D-array with complex entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
+  !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_double_rank1(data)
+  impure subroutine CommunicateBoundary_complex_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real64
-    complex(kind), intent(inout) :: data(:)
+    complex(fp), intent(inout) :: data(:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(kind), allocatable :: buffer(:)
+    complex(fp), allocatable :: buffer(:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(MaxHaloPoints))
@@ -1390,18 +622,18 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
+            buffer(&            ! What to send ...
+            1),&                ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1),&                ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
 
        ! Unpack recieved data from buffer
        unpacking: do BufferIndex=1,NeibPoints(neib)
@@ -1416,35 +648,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_double_rank1
+  end subroutine CommunicateBoundary_complex_rank1
 
-  !>@brief Communication of 2D-array with complex entries of double precision
+  !>@brief Communication of 2D-array with complex entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_double_rank2(data)
+  impure subroutine CommunicateBoundary_complex_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real64
-    complex(kind), intent(inout) :: data(:,:)
+    complex(fp), intent(inout) :: data(:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(kind), allocatable :: buffer(:,:)
+    complex(fp), allocatable :: buffer(:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),MaxHaloPoints))
@@ -1474,18 +704,18 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
+            buffer(&            ! What to send ...
+            1,1),&              ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1,1),&              ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
 
        ! Unpack recieved data from buffer
        unpacking: do BufferIndex=1,NeibPoints(neib)
@@ -1500,35 +730,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_double_rank2
+  end subroutine CommunicateBoundary_complex_rank2
 
-  !>@brief Communication of 3D-array with complex entries of double precision
+  !>@brief Communication of 3D-array with complex entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_double_rank3(data)
+  impure subroutine CommunicateBoundary_complex_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real64
-    complex(kind), intent(inout) :: data(:,:,:)
+    complex(fp), intent(inout) :: data(:,:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(kind), allocatable :: buffer(:,:,:)
+    complex(fp), allocatable :: buffer(:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
@@ -1558,18 +786,18 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
+            buffer(&            ! What to send ...
+            1,1,1),&            ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1,1,1),&            ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
 
        ! Unpack recieved data from buffer
        unpacking: do BufferIndex=1,NeibPoints(neib)
@@ -1584,35 +812,33 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_double_rank3
+  end subroutine CommunicateBoundary_complex_rank3
 
-  !>@brief Communication of 4D-array with complex entries of double precision
+  !>@brief Communication of 4D-array with complex entries
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 18.02.2019
   !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_double_rank4(data)
+  impure subroutine CommunicateBoundary_complex_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
     use mpiinterface, only: ThisProc
     implicit none
-    integer(int8), parameter :: kind = real64
-    complex(kind), intent(inout) :: data(:,:,:,:)
+    complex(fp), intent(inout) :: data(:,:,:,:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(kind), allocatable :: buffer(:,:,:,:)
+    complex(fp), allocatable :: buffer(:,:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    
     integer(intmpi) :: neib, proc
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
-
+    
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
     allocate(buffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints))
@@ -1642,18 +868,18 @@ contains
        recvtag = dest
 
        call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
+            buffer(&            ! What to send ...
+            1,1,1,1),&          ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to send
+            dest, sendtag,&     ! Destination and sendtag
+            buffer(&            ! What to recieve ...
+            1,1,1,1),&          ! ... and it's first index
+            buffersize,&        ! How many points
+            sendtype_complex,&  ! What type to recieve
+            src,  recvtag,&     ! Source and recvtag
+            mpi_comm_world,&    ! Communicator
+            status, mpierr)     ! Status and error-code
 
        ! Unpack recieved data from buffer
        unpacking: do BufferIndex=1,NeibPoints(neib)
@@ -1668,341 +894,5 @@ contains
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_double_rank4
-
-  !>@brief Communication of 1D-array with complex entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_quad_rank1(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    complex(kind), intent(inout) :: data(:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1),&             ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(LocalIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_quad_rank1
-
-  !>@brief Communication of 2D-array with complex entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_quad_rank2(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    complex(kind), intent(inout) :: data(:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1),&           ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,LocalIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_quad_rank2
-
-  !>@brief Communication of 3D-array with complex entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_quad_rank3(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    complex(kind), intent(inout) :: data(:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1),&         ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_quad_rank3
-
-  !>@brief Communication of 4D-array with complex entries of quad precision
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
-  impure subroutine CommunicateBoundary_complex_quad_rank4(data)
-    use, intrinsic :: iso_fortran_env
-    use mpi
-    use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
-    implicit none
-    integer(int8), parameter :: kind = real128
-    complex(kind), intent(inout) :: data(:,:,:,:)
-
-    integer(int8), parameter :: r=rank(data)
-    
-    ! MPI
-    complex(kind), allocatable :: buffer(:,:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
-
-    
-    integer(intmpi) :: neib, proc
-    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
-    integer(int64) :: LatticeIndex
-
-    MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
-    
-    allocate(buffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints))
-
-    ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
-
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = SendList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          buffer(:,:,:,BufferIndex) = data(:,:,:,LocalIndex)
-       end do packing
-
-       ! Send and recieve
-       dest = HaloProcs(neib)
-       src  = dest
-
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&         ! What to send ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            buffer(&         ! What to recieve ...
-            1,1,1,1),&       ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX32,&  ! What type to recieve
-            src,  recvtag,&  ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            status, mpierr)  ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
-          ! Get global lattice index
-          LatticeIndex = RecvList(BufferIndex,neib)
-          
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(:,:,:,LocalIndex) = buffer(:,:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
-  end subroutine CommunicateBoundary_complex_quad_rank4
+  end subroutine CommunicateBoundary_complex_rank4
 end module halocomm

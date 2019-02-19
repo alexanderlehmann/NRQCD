@@ -11,11 +11,11 @@
 ! REVISION HISTORY:
 ! 03 09 2018
 module mathconstants
-  use, intrinsic :: iso_fortran_env
+  use precision
   implicit none
 
   PUBLIC
   
   !> \f$\pi\f$
-  real(real64), parameter :: pi=acos(-1._real64)
+  real(fp), parameter :: pi=acos(-1._fp)
 end module mathconstants

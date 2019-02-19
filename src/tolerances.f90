@@ -9,6 +9,7 @@ module tolerances
 
   PUBLIC
 
-  real(real64), parameter :: tol_zero_real64=1.E-12
+  real(real32), parameter :: tol_zero_real32=1.E-6
+  real(real64), parameter :: tol_zero_real64=1.E-14
 
 end module tolerances

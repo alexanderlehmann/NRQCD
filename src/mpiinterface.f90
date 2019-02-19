@@ -32,7 +32,8 @@ module mpiInterface
   logical :: IsInitialised = .false.
 
   !> Integer-kind of mpi-variables like MPI_COMM_WORLD, process ranks and so on
-  integer(int8), parameter, public:: intmpi = kind(MPI_COMM_WORLD)
+  integer(int8), parameter, public :: intmpi = kind(MPI_COMM_WORLD)
+  
   !> Number of processes
   integer(intmpi), private :: num_procs=-1
   !> Process number of this process
