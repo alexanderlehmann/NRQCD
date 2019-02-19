@@ -28,7 +28,7 @@ module random
        GetRandomNormalCmplx,&
        GetRandomNormalCmplx_specificProcess
   
-  !> Contains information, if module is initialised
+  !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
   
   !> @brief Getting an uniformly distributed real pseudo-random number

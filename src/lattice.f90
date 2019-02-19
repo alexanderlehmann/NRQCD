@@ -42,7 +42,7 @@ module lattice
   !> Module name
   character(len=7), parameter, public ::  modulename='lattice'
   
-  !> Contains information, if module is initialised
+  !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
   
   !> number of dimensions
@@ -118,7 +118,7 @@ contains
   !! @date 17.02.2019
   !! @version 1.0
   impure subroutine InitModule(LatticeExtensions_,LatticeSpacings_)
-    use mpiinterface, only: ThisProc, NumProcs, MPISTOP
+    use mpiinterface, only: ThisProc, NumProcs, MPISTOP, intmpi
     use arrayoperations, only: RemoveDuplicates, Sort
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -131,7 +131,7 @@ contains
     integer(int8) :: idivision, numdivisions, ipartition
     integer(int64) :: latticeindex
 
-    integer :: proc
+    integer(intmpi) :: proc
     
     character(len=100) :: errormessage
 
@@ -367,14 +367,14 @@ contains
   impure real(real64) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
-    use mpiinterface, only: NumProcs
+    use mpiinterface, only: NumProcs, intmpi
     implicit none
 
     integer(int64) :: LocalLatticeindex, LatticeIndex
     real(real64)   :: norm2momentum,currentMax
     real(real64), allocatable :: maxmomenta(:)
 
-    integer :: mpierr
+    integer(intmpi) :: mpierr
 
     currentMax = 0
     do LocalLatticeIndex=1,LocalLatticeSize
@@ -562,15 +562,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure elemental integer function GetProc(LatticeIndex)
+  pure elemental integer(intmpi) function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
-    use mpiinterface, only: NumProcs
+    use mpiinterface, only: NumProcs, intmpi
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
 
     integer(int64) :: LatticePosition(ndim)
-    integer :: proc
+    integer(intmpi) :: proc
 
     LatticePosition = GetLatticePosition(LatticeIndex)
 

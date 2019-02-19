@@ -10,18 +10,18 @@ MKLROOT=intel/mkl
 #### Compiler options
 
 #### Optimization
-FFLAGS = -O3
+#FFLAGS = -O3
 
 # Inter-file inlining optimization
-FFLAGS += -ipo
+#FFLAGS += -ipo
 
 # Turning on preprocessor
 #FFLAGS += -fpp
 
 # Include files
-FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
+#FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
 
-FFLAGS += -g -traceback
+#FFLAGS += -g -traceback
 
 #### Debugging options
 # Checking everything

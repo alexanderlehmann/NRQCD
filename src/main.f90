@@ -1,7 +1,7 @@
 program simulation
   use, intrinsic :: iso_fortran_env
 
-  use mpiinterface, only: ThisProc, NumProcs, MPIstop
+  use mpiinterface, only: ThisProc, NumProcs, MPIstop, intmpi
   use lattice, only: ndim
 
   use lattice, only: GetLocalLatticeSize_IncludingHalo
@@ -28,7 +28,7 @@ program simulation
 
 
   integer(int64) :: LocalIndex, LatticeIndex
-  integer :: proc
+  integer(intmpi) :: proc
   
   call InitSimulation
 
@@ -76,7 +76,7 @@ contains
     use lattice,            only: InitModule_Lattice            => InitModule, ndim
     use halocomm,           only: InitModule_HaloComm           => InitModule
     use random,             only: InitModule_Random             => InitModule
-    use fft,                only: InitModule_FFT                => InitModule
+    use xpfft,              only: InitModule_xpFFT              => InitModule
     implicit none
 
     integer(int64) :: arg_count
@@ -116,7 +116,7 @@ contains
     call InitModule_MPIinterface
     call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
     call InitModule_HaloComm
-    call InitModule_FFT
+    call InitModule_xpFFT
     call InitModule_Random(RandomNumberSeed + ThisProc())
 
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
@@ -124,10 +124,10 @@ contains
 
   subroutine EndSimulation
     use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
-    use fft,          only: FinalizeModule_FFT          => FinalizeModule
+    use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule
     implicit none
 
-    call FinalizeModule_FFT
+    call FinalizeModule_xpFFT
     call FinalizeModule_MPIinterface
 
     STOP "Simulation completed"

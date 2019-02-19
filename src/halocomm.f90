@@ -13,6 +13,7 @@
 !----------------------------------------------------------------------
 module halocomm
   use, intrinsic :: iso_fortran_env
+  use mpiinterface, only: intmpi
   implicit none
 
   PRIVATE
@@ -25,19 +26,19 @@ module halocomm
   !> Module name
   character(len=8), parameter, public ::  modulename='halocomm'
   
-  !> Contains information, if module is initialised
+  !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
 
   !> List of MPI-ranks of neighbours
-  integer,        allocatable :: HaloProcs(:)
-  !> Neighbouring points for each neighbour
-  integer,        allocatable :: NeibPoints(:)
+  integer(intmpi), allocatable :: HaloProcs(:)
+  !> Number of neighbouring points for each neighbour
+  integer(intmpi), allocatable :: NeibPoints(:)
   !> List of points and from this process recieving processes
   integer(int64), allocatable :: SendList(:,:)
   !> List of points and to this process sending processes
   integer(int64), allocatable :: RecvList(:,:)
   !> Number of neighbours
-  integer :: neibs
+  integer(intmpi) :: neibs
 
   !> @brief Communication of boundary values
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -148,26 +149,26 @@ contains
     use mpi
     implicit none
     !> Number of neighbours
-    integer,                     intent(out) :: Neibs
+    integer(intmpi),              intent(out) :: Neibs
     !> List of MPI-ranks of neighbours
-    integer,        allocatable, intent(out) :: HaloProcs(:)
+    integer(intmpi), allocatable, intent(out) :: HaloProcs(:)
     !> Neighbouring points for each neighbour
-    integer,        allocatable, intent(out) :: NeibPoints(:)
+    integer(intmpi), allocatable, intent(out) :: NeibPoints(:)
     !> List of points and from this process recieving processes
-    integer(int64), allocatable, intent(out) :: SendList(:,:)
+    integer(int64),    allocatable, intent(out) :: SendList(:,:)
     !> List of points and to this process sending processes
-    integer(int64), allocatable, intent(out) :: RecvList(:,:)
+    integer(int64),    allocatable, intent(out) :: RecvList(:,:)
 
     integer(int64), allocatable :: LocalLatticeIndices(:)
     integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
-    integer, allocatable :: HaloProcs_includingThisProc(:)
-    integer, allocatable :: Procs(:)
+    integer(intmpi), allocatable :: HaloProcs_includingThisProc(:)
+    integer(intmpi), allocatable :: Procs(:)
     integer(int64) :: LocalIndex, neibpoint
-    integer :: proc, neib
+    integer(intmpi) :: proc, neib
     integer(int64) :: MaxHaloPoints
 
     ! MPI
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
     
     ! 1. Compute halo points and the associated process numbers
     call GetLocalLatticeIndices_includingHalo_Allocatable(LocalLatticeIndices)
@@ -252,12 +253,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -336,12 +337,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -420,12 +421,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -504,12 +505,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -588,12 +589,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -672,12 +673,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -756,12 +757,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -840,12 +841,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -924,12 +925,12 @@ contains
     
     ! MPI
     real(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1015,12 +1016,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1099,12 +1100,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1183,12 +1184,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1267,12 +1268,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1351,12 +1352,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1435,12 +1436,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1519,12 +1520,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1603,12 +1604,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1687,12 +1688,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1771,12 +1772,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1855,12 +1856,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 
@@ -1939,12 +1940,12 @@ contains
     
     ! MPI
     complex(kind), allocatable :: buffer(:,:,:,:)
-    integer :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
     
-    integer :: neib, proc
-    integer :: ValuesPerPoint, MaxHaloPoints
-    integer :: BufferIndex
+    integer(intmpi) :: neib, proc
+    integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
+    integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
     integer(int64) :: LatticeIndex
 

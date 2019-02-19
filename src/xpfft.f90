@@ -4,20 +4,21 @@
 !
 ! MODULE: fft
 !> @brief
-!! Providing interfaces for fast fourier transforms
+!! Providing interfaces for fast fourier transforms between real and momentum space
 !! @author
 !! Alexander Lehmann,
 !! UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
 !! @date
-!! 10.01.2019
+!! 19.02.2019
 !! @version
 !! 1.0
   !------------------------------------------------------------------------------
-module fft
+module xpfft
   use, intrinsic :: iso_fortran_env
   use mkl_cdft
   use lattice, only: ndim
+  use mpiinterface, only: intmpi
 
   implicit none
 
@@ -27,22 +28,30 @@ module fft
        InitModule, FinalizeModule
        
   !> Module name
-  character(len=3), parameter, public ::  modulename='fft'
+  character(len=5), parameter, public ::  modulename='xpfft'
   
-  !> Contains information, if module is initialised
+  !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
 
   ! Variables  for (x<->p)-FFT
   !> MKL communicator for (x<->p)-FFT
-  integer :: mkl_comm
-  !> Pointer to distributed array for (x<->p)-FFT
-  type(dfti_descriptor_dm), pointer :: xp_desc
-  !> @brief Colour of this process for (x<->p) -FFT.
+  integer(intmpi) :: mkl_comm
+  !> @brief Colour of this process for (x<->p)-FFT.
   !! @details
   !! 0: This process does not participate in FFT\n
   !! 1: This process does participate in FFT
-  integer :: mkl_color=-1
-  
+  integer(intmpi) :: mkl_color=-1
+  !> Pointer to distributed array for (x<->p)-FFT
+  type(dfti_descriptor_dm), pointer :: desc
+  !> In-place (x<->p)-FFT field
+  complex(real64), allocatable :: data(:)
+  !> Number of dimensions
+  integer(intmpi), parameter :: ranks = int(nDim,intmpi)
+
+  !> List of lattice indices corresponding to the data in xp_data
+  integer(int64), allocatable :: LocalLatticeIndices(:)
+  !> List of MPI-ranks to communicate with in (x<->p)-FFT
+  integer(intmpi), allocatable :: CommProcs(:)
 contains
 
   !> @brief Initialises module
@@ -58,10 +67,13 @@ contains
     implicit none
 
     ! MPI
-    integer :: mpierr
-    integer :: maxmklprocs
+    integer(intmpi) :: mpierr
+    integer(intmpi) :: maxmklprocs
+    ! MKL
+    integer(intmpi) :: lengths(ndim), status, local_extension, local_firstindex
     
     character(len=100) :: errormessage
+    
 
     if(isInitialised) then
        errormessage = 'Error in init of '//modulename//': already initialised.'
@@ -71,23 +83,62 @@ contains
 
        ! Assigning a colour to each process
        maxmklprocs = GetLatticeExtension(nDim)
-       if( maxmklprocs < NumProcs() ) then
-          if(ThisProc() .le. maxmklprocs) then
-             mkl_color = 1
-          else
-             mkl_color = 0
-          end if
-       else
+       if(ThisProc() .le. maxmklprocs-1) then
           mkl_color = 1
+       else
+          mkl_color = 0
        end if
        ! Split communicator
-       call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
+      ! call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
+
+       
+       lengths = int(GetLatticeExtension([1_int8:ndim]))
+
+       print*,thisproc(),ranks,lengths
+       call flush(6)
+       call mpi_barrier(mpi_comm_world,mpierr)
+       status = DftiCreateDescriptorDM(MKL_COMM,desc,DFTI_DOUBLE,&
+         DFTI_COMPLEX,ranks,lengths)
+       
 
 
+       call mpistop
+       ! 1. Partitioning (done by mkl and then communicated)
+       if(mkl_color==1) then
+          lengths = int(GetLatticeExtension([1_int8:ndim]))
+
+          print*,thisproc(),ranks,lengths
+          call flush(6)
+          call mpi_barrier(mkl_comm,mpierr)
+          status = DftiCreateDescriptorDM(mkl_comm,desc,DFTI_DOUBLE,&
+               DFTI_COMPLEX,ranks,lengths)
+
+          status = DftiGetValueDM(desc,CDFT_LOCAL_NX,local_extension)
+          status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,local_firstindex)
+
+          !print*,ThisProc(),local_firstindex, status
+
+       else
+          !print*,ThisProc()
+
+       end if
+
+
+       
+       ! 2. Initialise list where the which lattice points have sent
+       ! 3. Initialise list from where lattice points are recieved
+       
+       
        IsInitialised = .TRUE.
     end if
   end subroutine InitModule
 
+  !> @brief Returns MPI-colour regarding MKL's distributed cluster FFT
+  !! @returns MPI-colour regarding MKL's distributed cluster FFT
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 19.02.2019
+  !! @version 1.0
   pure integer function GetColor()
     implicit none
     GetColor = mkl_color
@@ -141,4 +192,4 @@ contains
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
-end module fft
+end module xpfft

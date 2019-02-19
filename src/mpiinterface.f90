@@ -3,7 +3,7 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: mpiInterface
-!> @brief Convenience-interface to most needed MPI-routines
+!> @brief Interface to some of MPI's variables like the rank and number of processes
 !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
 !! @date 17.02.2019
@@ -28,13 +28,15 @@ module mpiInterface
   !> Module name
   character(len=12), parameter, public ::  modulename='mpiinterface'
   
-  !> Contains information, if module is initialised
+  !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
-  
+
+  !> Integer-kind of mpi-variables like MPI_COMM_WORLD, process ranks and so on
+  integer(int8), parameter, public:: intmpi = kind(MPI_COMM_WORLD)
   !> Number of processes
-  integer, private :: num_procs=-1
+  integer(intmpi), private :: num_procs=-1
   !> Process number of this process
-  integer, private :: this_proc=-1
+  integer(intmpi), private :: this_proc=-1
 
 contains
   
@@ -59,7 +61,7 @@ contains
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     implicit none
-    integer :: mpierr
+    integer(intmpi) :: mpierr
 
     character(len=100) :: errormessage
 
@@ -98,7 +100,7 @@ contains
   !! @version 1.0
   impure subroutine FinalizeModule
     implicit none
-    integer :: mpierr
+    integer(intmpi) :: mpierr
     character(len=70) :: errormessage
     
     if(IsInitialised) then
@@ -118,9 +120,9 @@ contains
   impure subroutine MPIstop(errormessage,errorcode)
     use, intrinsic :: iso_fortran_env
     implicit none
-    character(len=*), intent(in), optional :: errormessage
-    integer,          intent(in), optional :: errorcode
-    integer :: mpierr
+    character(len=*),  intent(in), optional :: errormessage
+    integer(intmpi), intent(in), optional :: errorcode
+    integer(intmpi) :: mpierr
 
     call flush(6)
     call flush(ERROR_UNIT)
@@ -149,7 +151,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure integer function NumProcs()
+  pure integer(intmpi) function NumProcs()
     implicit none
     NumProcs = num_procs
   end function NumProcs
@@ -160,7 +162,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure integer function ThisProc()
+  pure integer(intmpi) function ThisProc()
     implicit none
     ThisProc = this_proc
   end function ThisProc
