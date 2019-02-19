@@ -53,33 +53,39 @@ contains
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     use lattice, only: nDim, GetLatticeExtension
-    use mpiinterface, only: ThisProc, NumProcs
+    use mpiinterface, only: ThisProc, NumProcs, mpistop
     use mpi
     implicit none
 
     ! MPI
     integer :: mpierr
     integer :: maxmklprocs
+    
+    character(len=100) :: errormessage
 
-    call CheckObligatoryInitialisations
-
-    ! Assigning a colour to each process
-    maxmklprocs = GetLatticeExtension(nDim)
-    if( maxmklprocs < NumProcs() ) then
-       if(ThisProc() .le. maxmklprocs) then
-          mkl_color = 1
-       else
-          mkl_color = 0
-       end if
+    if(isInitialised) then
+       errormessage = 'Error in init of '//modulename//': already initialised.'
+       call MPISTOP(errormessage)
     else
-       mkl_color = 1
-    end if
-    ! Split communicator
-    call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
+       call CheckObligatoryInitialisations
 
-    
-    IsInitialised = .TRUE.
-    
+       ! Assigning a colour to each process
+       maxmklprocs = GetLatticeExtension(nDim)
+       if( maxmklprocs < NumProcs() ) then
+          if(ThisProc() .le. maxmklprocs) then
+             mkl_color = 1
+          else
+             mkl_color = 0
+          end if
+       else
+          mkl_color = 1
+       end if
+       ! Split communicator
+       call mpi_comm_split(MPI_COMM_WORLD,mkl_color,ThisProc(),mkl_comm,mpierr)
+
+
+       IsInitialised = .TRUE.
+    end if
   end subroutine InitModule
 
   pure integer function GetColor()

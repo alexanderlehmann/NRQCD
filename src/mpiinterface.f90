@@ -61,26 +61,33 @@ contains
     implicit none
     integer :: mpierr
 
-    call MPI_INIT(mpierr)
-    if(mpierr /= MPI_SUCCESS) then
-       write(ERROR_UNIT,*) 'Error while MPI-initialization. Error code:',mpierr
-       STOP
-    end if
+    character(len=100) :: errormessage
 
-    call mpi_comm_rank(MPI_COMM_WORLD, this_proc, mpierr)
-    if(mpierr /= MPI_SUCCESS) then
-       write(ERROR_UNIT,*) 'Error while getting MPI-rank. Error code:',mpierr
-       STOP
+    if(isInitialised) then
+       errormessage = 'Error in init of '//modulename//': already initialised.'
+       call MPISTOP(errormessage)
+    else
+       call MPI_INIT(mpierr)
+       if(mpierr /= MPI_SUCCESS) then
+          write(ERROR_UNIT,*) 'Error while MPI-initialization. Error code:',mpierr
+          STOP
+       end if
+
+       call mpi_comm_rank(MPI_COMM_WORLD, this_proc, mpierr)
+       if(mpierr /= MPI_SUCCESS) then
+          write(ERROR_UNIT,*) 'Error while getting MPI-rank. Error code:',mpierr
+          STOP
+       end if
+
+       call mpi_comm_size(MPI_COMM_WORLD, num_procs, mpierr)
+       if(mpierr /= MPI_SUCCESS) then
+          write(ERROR_UNIT,*) 'Error while getting number of MPI-processes. Error code:',mpierr
+          STOP
+       end if
+
+       ! DONE
+       IsInitialised = .TRUE.
     end if
-    
-    call mpi_comm_size(MPI_COMM_WORLD, num_procs, mpierr)
-    if(mpierr /= MPI_SUCCESS) then
-       write(ERROR_UNIT,*) 'Error while getting number of MPI-processes. Error code:',mpierr
-       STOP
-    end if
-       
-    ! DONE
-    IsInitialised = .TRUE.
   end subroutine InitModule
 
   !>@brief Finalization of module

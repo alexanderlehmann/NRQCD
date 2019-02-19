@@ -132,88 +132,95 @@ contains
     integer(int64) :: latticeindex
 
     integer :: proc
-
-    call CheckObligatoryInitialisations
     
-    LatticeSpacings = LatticeSpacings_
-    LatticeExtensions = LatticeExtensions_
+    character(len=100) :: errormessage
 
-    LatticeSize = product(LatticeExtensions)
-    Volume = product(LatticeExtensions*LatticeSpacings(1:ndim))
+    if(isInitialised) then
+       errormessage = 'Error in init of '//modulename//': already initialised.'
+       call MPISTOP(errormessage)
+    else
+       call CheckObligatoryInitialisations
 
-    ! ..--** START: Distributing lattice points over all the MPI-processes (partitioning) **--..
-    ! Dividing the lattice in sub-domains, distributed over all processes
-    ! Restrictions:
-    ! 1. Lattice size is integer-divisible by number of processes
-    ! 2. Number of processes is a power of 2
-    if(modulo(LatticeSize,NumProcs()) /= 0) then
-       call MPIstop('Total lattice size has to be integer-divisible by number of MPI-processes')
+       LatticeSpacings = LatticeSpacings_
+       LatticeExtensions = LatticeExtensions_
+
+       LatticeSize = product(LatticeExtensions)
+       Volume = product(LatticeExtensions*LatticeSpacings(1:ndim))
+
+       ! ..--** START: Distributing lattice points over all the MPI-processes (partitioning) **--..
+       ! Dividing the lattice in sub-domains, distributed over all processes
+       ! Restrictions:
+       ! 1. Lattice size is integer-divisible by number of processes
+       ! 2. Number of processes is a power of 2
+       if(modulo(LatticeSize,NumProcs()) /= 0) then
+          call MPIstop('Total lattice size has to be integer-divisible by number of MPI-processes')
+       end if
+
+       numdivisions = int(log(real(NumProcs(),real64))/log(2._real64),int8) !log2 of numprocs
+       if(2**numdivisions /= NumProcs()) then
+          call MPIstop('Number of MPI-processes has to be a power of 2')
+       end if
+
+       partitions = LatticeExtensions
+       do idivision=1,numdivisions
+          ! Find biggest extensions ...
+          ! Prefer highest possible dimension (fastest in memory access later on)
+          ! Number of points has to be divisible into 2 parts (...obviously)
+          ipartition = MaxLoc(partitions, DIM=1, &
+               BACK=.true.,&                    ! Prefering highest possible dimension
+               MASK = modulo(partitions,2)==0&  ! Number of points divisible by 2
+               )
+
+          ! ... and divide it by 2
+          partitions(ipartition) = partitions(ipartition)/2
+       end do
+
+       ! Check if lattice is too small for given number of processes and number of halo points
+       if(any(partitions < nHalo)) &
+            call MPISTOP('Lattice extensions after partitioning smaller than number of halo points')
+
+       ! Local lattice boundaries (including and without halo)
+       call InitLocalLatticeBoundaries(&
+            LocalLowerLatticeBoundaries,&
+            LocalUpperLatticeBoundaries,&
+            partitions,nHalo=0_int8)
+       call InitLocalLatticeBoundaries(&
+            LocalLowerLatticeBoundaries_includingHalo,&
+            LocalUpperLatticeBoundaries_includingHalo,&
+            partitions,nHalo=nHalo)
+
+       ! Local lattice points
+       call InitLatticeIndices(&
+            LocalLatticeIndices,                        &
+            LocalLowerLatticeBoundaries(:,ThisProc()+1),&
+            LocalUpperLatticeBoundaries(:,ThisProc()+1))
+       call InitLatticeIndices(&
+            LocalLatticeIndices_includingHalo,&
+            LocalLowerLatticeBoundaries_includingHalo(:,ThisProc()+1),&
+            LocalUpperLatticeBoundaries_includingHalo(:,ThisProc()+1))
+
+       LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
+
+       ! Deleting lattice points which are contained more than once ...
+       ! (important in case of small partitions)
+       call RemoveDuplicates(&
+            LocalLatticeIndices)
+       call RemoveDuplicates(&
+            LocalLatticeIndices_includingHalo)
+       ! ... and sort the arrays
+       call Sort(LocalLatticeIndices)
+       call Sort(LocalLatticeIndices_includingHalo)
+
+       ! Setting local lattice size (including and without halo)
+       LocalLatticeSize = size(LocalLatticeIndices)
+       LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
+
+       ! Find maximum momentum
+       MaxNorm2Momentum = FindMaxNorm2Momentum()
+
+       ! DONE
+       IsInitialised = .TRUE.
     end if
-
-    numdivisions = int(log(real(NumProcs(),real64))/log(2._real64),int8) !log2 of numprocs
-    if(2**numdivisions /= NumProcs()) then
-       call MPIstop('Number of MPI-processes has to be a power of 2')
-    end if
-
-    partitions = LatticeExtensions
-    do idivision=1,numdivisions
-       ! Find biggest extensions ...
-       ! Prefer highest possible dimension (fastest in memory access later on)
-       ! Number of points has to be divisible into 2 parts (...obviously)
-       ipartition = MaxLoc(partitions, DIM=1, &
-            BACK=.true.,&                    ! Prefering highest possible dimension
-            MASK = modulo(partitions,2)==0&  ! Number of points divisible by 2
-            )
-
-       ! ... and divide it by 2
-       partitions(ipartition) = partitions(ipartition)/2
-    end do
-
-    ! Check if lattice is too small for given number of processes and number of halo points
-    if(any(partitions < nHalo)) &
-         call MPISTOP('Lattice extensions after partitioning smaller than number of halo points')
-
-    ! Local lattice boundaries (including and without halo)
-    call InitLocalLatticeBoundaries(&
-         LocalLowerLatticeBoundaries,&
-         LocalUpperLatticeBoundaries,&
-         partitions,nHalo=0_int8)
-    call InitLocalLatticeBoundaries(&
-         LocalLowerLatticeBoundaries_includingHalo,&
-         LocalUpperLatticeBoundaries_includingHalo,&
-         partitions,nHalo=nHalo)
-
-    ! Local lattice points
-    call InitLatticeIndices(&
-         LocalLatticeIndices,                        &
-         LocalLowerLatticeBoundaries(:,ThisProc()+1),&
-         LocalUpperLatticeBoundaries(:,ThisProc()+1))
-    call InitLatticeIndices(&
-         LocalLatticeIndices_includingHalo,&
-         LocalLowerLatticeBoundaries_includingHalo(:,ThisProc()+1),&
-         LocalUpperLatticeBoundaries_includingHalo(:,ThisProc()+1))
-
-    LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
-
-    ! Deleting lattice points which are contained more than once ...
-    ! (important in case of small partitions)
-    call RemoveDuplicates(&
-         LocalLatticeIndices)
-    call RemoveDuplicates(&
-         LocalLatticeIndices_includingHalo)
-    ! ... and sort the arrays
-    call Sort(LocalLatticeIndices)
-    call Sort(LocalLatticeIndices_includingHalo)
-    
-    ! Setting local lattice size (including and without halo)
-    LocalLatticeSize = size(LocalLatticeIndices)
-    LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
-
-    ! Find maximum momentum
-    MaxNorm2Momentum = FindMaxNorm2Momentum()
-
-    ! DONE
-    IsInitialised = .TRUE.
   end subroutine InitModule
   
   !> @brief Checks previous necessary initialisations
