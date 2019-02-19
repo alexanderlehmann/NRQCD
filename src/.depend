@@ -4,8 +4,8 @@ run.exe: $(FOBJ)
 	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
 
 arrayoperations.o : arrayoperations.f90 
-fft.o : fft.f90 lattice.o mkl_cdft.o 
-halocomm.o : halocomm.f90 arrayoperations.o mpiinterface.o lattice.o 
+fft.o : fft.f90 mpiinterface.o lattice.o mkl_cdft.o 
+halocomm.o : halocomm.f90 arrayoperations.o lattice.o mpiinterface.o 
 lattice.o : lattice.f90 mathconstants.o arrayoperations.o mpiinterface.o 
 main.o : main.f90 fft.o random.o halocomm.o lattice.o mpiinterface.o 
 mathconstants.o : mathconstants.f90 

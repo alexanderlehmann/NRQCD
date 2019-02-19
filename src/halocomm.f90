@@ -84,16 +84,24 @@ contains
   !! @version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: mpistop
     implicit none
 
-    call CheckObligatoryInitialisations
-    
-    ! Initialise list of lattice points which are to be recieved from which other process
-    call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
+    character(len=100) :: errormessage
 
-    ! DONE
-    IsInitialised = .TRUE.
-    
+    if(isInitialised) then
+       errormessage = 'Error in init of '//modulename//': already initialised.'
+       call MPISTOP(errormessage)
+    else
+       
+       call CheckObligatoryInitialisations
+
+       ! Initialise list of lattice points which are to be recieved from which other process
+       call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
+
+       ! DONE
+       IsInitialised = .TRUE.
+    end if
   end subroutine InitModule
   
   !> @brief Checks previous necessary initialisations
