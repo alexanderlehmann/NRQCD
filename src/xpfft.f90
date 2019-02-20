@@ -53,6 +53,10 @@ module xpfft
   integer(int64), allocatable :: LocalLatticeIndices(:)
   !> List of MPI-ranks to communicate with in (x<->p)-FFT
   integer(intmpi), allocatable :: CommProcs(:)
+  !> Lower lattice boundaries
+  integer(int64), allocatable :: xp_LowerLatticeBoundaries(:,:)
+  !> Upper lattice boundaries
+  integer(int64), allocatable :: xp_UpperLatticeBoundaries(:,:)
 contains
 
   !> @brief Initialises module
@@ -68,13 +72,17 @@ contains
     implicit none
 
     ! MPI
-    integer(intmpi) :: mpierr
+    integer(intmpi) :: mpierr, buffersize
     integer(intmpi) :: maxmklprocs
     
     ! MKL
-    integer(int64) :: lengths(ndim), status, local_extension, local_firstindex
+    integer(int64) :: lengths(ndim), status, extension, firstindex
+
+    integer(intmpi) :: proc
     
     character(len=100) :: errormessage
+
+    integer(int64), allocatable :: firstindices(:), extensions(:)
 
     if(isInitialised) then
        errormessage = 'Error in init of '//modulename//': already initialised.'
@@ -83,7 +91,7 @@ contains
        call CheckObligatoryInitialisations
 
        ! Assigning a colour to each process
-       maxmklprocs = GetLatticeExtension(nDim)
+       maxmklprocs = minval([GetLatticeExtension(nDim),int(NumProcs(),int64)])
        if(ThisProc() .le. maxmklprocs-1) then
           mkl_color = 1
        else
@@ -95,26 +103,89 @@ contains
        ! 1. Partitioning (done by mkl and then communicated)
        if(mkl_color==1) then
           lengths = int(GetLatticeExtension([1_int8:ndim]))
-          
-          !call mpi_barrier(mkl_comm,mpierr)
 
           status = DftiCreateDescriptorDM(int(mkl_comm,int64),desc,&
                DFTI_DOUBLE, DFTI_COMPLEX, ranks, lengths)
 
-          print*,thisproc(),mpierr
-          call flush(6)
-          call mpi_barrier(mkl_comm,mpierr)
-
-          status = DftiGetValueDM(desc,CDFT_LOCAL_NX,local_extension)
-          status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,local_firstindex)
-
-          !print*,ThisProc(),local_firstindex, status
-
-       else
-          !print*,ThisProc()
-
+          status = DftiGetValueDM(desc,CDFT_LOCAL_NX,extension)
+          status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,firstindex)
        end if
 
+       ! Communication of lattice boundaries
+       if(allocated(xp_LowerLatticeBoundaries)) deallocate(xp_LowerLatticeBoundaries)
+       allocate(xp_LowerLatticeBoundaries(ndim,maxmklprocs))
+       if(allocated(xp_UpperLatticeBoundaries)) deallocate(xp_UpperLatticeBoundaries)
+       allocate(xp_UpperLatticeBoundaries(ndim,maxmklprocs))
+
+       ! 0th MKL-process collecting the boundaries from the other MKL-processes
+       if(mkl_color==1) then
+          if(ThisProc()==0) then
+             allocate(Extensions(maxmklprocs))  !buffer
+             allocate(Firstindices(maxmklprocs))!buffer
+          end if
+          
+          call mpi_gather(&
+            firstindex,&        ! What to send
+            1_intmpi,&          ! How many points
+            MPI_INT64_T,&       ! What type to send
+            firstindices(&      ! What to recieve ...
+            1),&                ! ... and it's first index
+            1_intmpi,&          ! How many points
+            MPI_INT64_T,&       ! What type to recieve
+            0_intmpi,&          ! Gathering process
+            mkl_comm,&          ! Communicator
+            mpierr)             ! Error-code
+
+          call mpi_gather(&
+            Extension,&         ! What to send
+            1_intmpi,&          ! How many points
+            MPI_INT64_T,&       ! What type to send
+            extensions(&        ! What to recieve ...
+            1),&                ! ... and it's first index
+            1_intmpi,&          ! How many points
+            MPI_INT64_T,&       ! What type to recieve
+            0_intmpi,&          ! Gathering process
+            mkl_comm,&          ! Communicator
+            mpierr)             ! Error-code
+
+          if(ThisProc()==0) then
+             forall(proc=1:maxmklprocs)
+                xp_LowerLatticeBoundaries(1:ndim-1,proc) = 1
+                xp_UpperLatticeBoundaries(1:ndim-1,proc) = GetLatticeExtension([1_int8:ndim-1_int8])
+                xp_LowerLatticeBoundaries(ndim,proc) = firstindices(proc)
+                xp_UpperLatticeBoundaries(ndim,proc) = firstindices(proc) + extensions(proc) -1
+             end forall
+             deallocate(firstindices,extensions) !buffers not needed anymore
+          end if
+       end if
+       ! Let 0th (MKL- as well as WORLD)-process brodcast the LatticeExtensions
+       buffersize = int(size(xp_LowerLatticeBoundaries),intmpi)
+       call mpi_bcast(&
+            xp_LowerLatticeBoundaries ,& ! What to send
+            buffersize                ,& ! Number of entries in buffer
+            MPI_INT64_T               ,& ! Data type of buffer
+            0_intmpi                  ,& ! Broadcasting process (root)
+            MPI_COMM_WORLD            ,& ! Communicator
+            mpierr)                      ! Error-code
+       
+       call mpi_bcast(&
+            xp_UpperLatticeBoundaries ,& ! What to send
+            buffersize                ,& ! Number of entries in buffer
+            MPI_INT64_T               ,& ! Data type of buffer
+            0_intmpi                  ,& ! Broadcasting process (root)
+            MPI_COMM_WORLD            ,& ! Communicator
+            mpierr)                      ! Error-code
+       
+       !do proc=0,NumProcs()-1
+       !  print*,'Process',proc
+       !   do status=1,maxmklprocs
+       !      print*,'MKL-process:',status-1
+       !      print*,xp_LowerLatticeBoundaries(:,status)
+       !      print*,xp_UpperLatticeBoundaries(:,status)
+       !   end do
+       !   call flush(6)
+       !   call mpi_barrier(mpi_comm_world,mpierr)
+       !end do
 
        
        ! 2. Initialise list where the which lattice points have sent

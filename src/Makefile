@@ -15,9 +15,6 @@ MKLROOT=intel/mkl
 # Inter-file inlining optimization
 #FFLAGS += -ipo
 
-# int64-MKL-Cluster-FFT needs that all integers are set to int64
-#FFLAGS += -i8
-
 # Turning on preprocessor
 #FFLAGS += -fpp
 

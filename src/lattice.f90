@@ -29,6 +29,7 @@ module lattice
        GetLatticePosition,&
        GetLatticeIndex,&
        GetProc,&
+       GetProc_fromGeneralIndex,&
        GetLatticeExtension,&
        GetLatticeSize,&
        GetLocalLatticeSize,&
@@ -564,23 +565,46 @@ contains
   !! @version 1.0
   pure elemental integer(intmpi) function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
-    use mpiinterface, only: NumProcs, intmpi
+    use mpiinterface, only: intmpi
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
+    GetProc = GetProc_fromGeneralIndex(LatticeIndex,&
+         LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,LatticeExtensions)
+  end function GetProc
 
-    integer(int64) :: LatticePosition(ndim)
+  !> @brief General function, returning MPI-process-rank corresponding to given index
+  !! @returns MPI-process-rank corresponding to index
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 19.02.2019
+  !! @version 1.0
+  pure integer(intmpi) function GetProc_fromGeneralIndex(&
+       Index,LowerBoundaries,UpperBoundaries,Extensions)
+    use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: intmpi
+    implicit none
+    !> index
+    integer(int64), intent(in) :: Index
+    !> Lower boundaries
+    integer(int64), intent(in) :: LowerBoundaries(:,:)
+    !> Upper boundaries
+    integer(int64), intent(in) :: UpperBoundaries(:,:)
+    !> Extensions
+    integer(int64), intent(in) :: Extensions(ndim)
+    
+    integer(int64) :: Position(ndim)
     integer(intmpi) :: proc
+    
+    Position = GetPosition_fromIndex(Index,Extensions)
 
-    LatticePosition = GetLatticePosition(LatticeIndex)
-
-    do concurrent (proc=1:numprocs())
-       if(all(LocalLowerLatticeBoundaries(:,proc)<=LatticePosition)&
-            .and.all(LocalUpperLatticeBoundaries(:,proc)>=LatticePosition))then
-          GetProc=proc-1
+    do concurrent(proc=1:size(LowerBoundaries,2))
+       if(all(LowerBoundaries(:,proc)<=Position)&
+            .and.all(UpperBoundaries(:,proc)>=Position))then
+          GetProc_fromGeneralIndex=proc-1
        end if
     end do
-  end function GetProc
+  end function GetProc_fromGeneralIndex
 
   !> @brief Deconstructs lattice index into position indices
   !! @returns position indices
