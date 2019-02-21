@@ -4,51 +4,68 @@ program simulation
   use mpiinterface, only: ThisProc, NumProcs, MPIstop, intmpi
   use lattice, only: ndim
 
-  use lattice, only: GetLocalLatticeSize_IncludingHalo
+  use lattice, only: GetLocalLatticeSize_IncludingHalo, GetLocalLatticeSize
+  use lattice
   use halocomm
+  use xpfft
   implicit none
 
   ! Simulation parameters
   integer(int64) :: LatticeExtensions(ndim)!(ndim)
-  real(real64)   :: LatticeSpacings(0:ndim)!(0:ndim)
+  real(fp)   :: LatticeSpacings(0:ndim)!(0:ndim)
   integer(int64) :: TimeSteps
   integer(int64) :: RandomNumberSeed
 
-  real(real64)   :: GluonSaturationScale !qs
-  real(real64)   :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-  real(real64)   :: GluonCoupling
+  real(fp)   :: GluonSaturationScale !qs
+  real(fp)   :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
+  real(fp)   :: GluonCoupling
   integer(int64) :: EnsembleSize
-  real(real64)   :: Quarkmass
-  real(real64)   :: CoMTime
-  real(real64)   :: TimeRange
-  !real(real64)  :: Wilsoncoeffs(nWilsonCoeffs)
+  real(fp)   :: Quarkmass
+  real(fp)   :: CoMTime
+  real(fp)   :: TimeRange
+  !real(fp)  :: Wilsoncoeffs(nWilsonCoeffs)
 
-  !complex(real64), allocatable :: testcomm(:)
+  !complex(fp), allocatable :: testcomm(:)
 
 
-  integer(int64) :: LocalIndex, LatticeIndex
+  integer(int64) :: LocalIndex, LatticeIndex, i
   integer(intmpi) :: proc
+  integer(int64), allocatable :: localindices(:)
+  complex(fp), allocatable :: data(:)
   
   call InitSimulation
 
   !allocate(testcomm(GetLocalLatticeSize_IncludingHalo()))
   !testcomm = cmplx(ThisProc(),ThisProc(),kind(testcomm))/100
   !cmplx(real(ThisProc(),kind(testcomm))/100,real(ThisProc(),kind(testcomm))/100)
-  !
+  
   !call CommunicateBoundary(testcomm)
-  !
+  
   !if(ThisProc()==0) then
-  !   !print*,GetLocalLatticeSize(),GetLocalLatticeSize_includingHalo()
-  !   
+     !print*,GetLocalLatticeSize(),GetLocalLatticeSize_includingHalo()
+     
   !   do LocalIndex=1,GetLocalLatticeSize_includingHalo()
   !      LatticeIndex = GetGlobalLatticeIndex(LocalIndex)
   !      proc = GetProc(LatticeIndex)
-  !      
-  !      if(proc/=ThisProc()) print*,proc,LatticeIndex,testcomm(LocalIndex)
+        
+  !      if(proc/=ThisProc()) print*,proc,LatticeIndex,real(testcomm(LocalIndex),real32)
   !   end do
-  !   !print*,testcomm
+     !print*,testcomm
   !end if
-     
+
+  allocate(data(GetLocalLatticeSize_includingHalo()))
+  data = 1
+  
+  call x2p(data)
+  call p2x(data)
+  
+  if(ThisProc()==0) then
+     call GetLocalLatticeIndices_allocatable(localindices)
+     do i=1,Size(LocalIndices)
+        localindex = GetLocalIndex(LocalIndices(i))
+        print*,LocalIndices(i),data(LocalIndex)
+     end do
+  end if
   
   call EndSimulation
 

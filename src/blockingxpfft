@@ -19,7 +19,6 @@ module xpfft
   use mkl_cdft
   use lattice, only: ndim
   use mpiinterface, only: intmpi
-  use mpi
 
   implicit none
 
@@ -400,202 +399,6 @@ contains
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
 
-  !> @brief Loads data from the original processes into the distributed FFT-array
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
-  impure subroutine LoadDataToFFT(data)
-    use precision, only: fp
-    use lattice
-    use mpi
-    use mpiinterface, only: ThisProc, intmpi
-    implicit none
-    !> Fourier-transform input
-    complex(fp), intent(in) :: data(:)
-
-    complex(real64), allocatable, asynchronous :: sendbuffer(:,:), recvbuffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, mpierr
-    integer(intmpi) :: recvstatus(MPI_STATUS_SIZE)
-    integer(intmpi), allocatable :: sendrequest(:),sendstatus(:,:)
-    integer(intmpi) :: proc
-    integer(intmpi) :: MaxPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex, LatticeIndex
-
-    MaxPoints = MaxVal(xp_MPIWorld_Commpoints,DIM=1)
-
-    allocate(sendbuffer(MaxPoints,size(xp_MPIWorld_Procs)))
-    allocate(sendrequest(size(xp_MPIWorld_Procs)))
-
-    Destinations: do proc=1,size(xp_MPIWorld_Procs)
-       buffersize = xp_MPIWorld_Commpoints(proc)
-
-       ! Prepare buffer with send-data for FFT-process
-       packing: do BufferIndex=1,xp_MPIWorld_Commpoints(proc)
-          ! Get global lattice index
-          LatticeIndex = xp_MPIWorld_SendRecvList(BufferIndex,proc)
-
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          sendbuffer(BufferIndex,proc) = data(LocalIndex)
-       end do packing
-
-       ! Sending the data to the FFT-process
-       dest    = xp_MPIWorld_Procs(proc)
-       sendtag = ThisProc() + size(xp_MPIWorld_Commpoints)*xp_MPIWorld_Procs(proc)
-       call MPI_ISend(&       
-            sendbuffer(&     ! What to send...
-            1,proc),&        ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to send
-            dest, sendtag,&  ! Destination and sendtag
-            mpi_comm_world,& ! Communicator
-            sendrequest(proc),& ! Request handle
-            mpierr)          ! Error-code
-    end do Destinations
-
-    if(GetMKLColor()==1) then
-       MaxPoints = MaxVal(xp_MKL_Commpoints,DIM=1)
-       allocate(recvbuffer(MaxPoints,size(xp_MKL_Procs)))
-       
-       Sources: do proc=1,size(xp_MKL_Procs)
-          buffersize = xp_MKL_Commpoints(proc)
-
-          ! Recieving the data
-          src     = xp_MKL_Procs(proc)
-          recvtag = xp_MKL_Procs(proc) + mklprocs*ThisProc()
-          call MPI_Recv(&       
-               recvbuffer(&     ! Where to recieve...
-               1,proc),&        ! ... and it's first index
-               buffersize,&     ! How many points
-               MPI_COMPLEX16,&  ! What type to recieve
-               src, recvtag,&   ! Source and recvtag
-               mpi_comm_world,& ! Communicator
-               recvstatus, mpierr)  ! Status and error-code
-
-          ! Unpacking buffer and saving into distributed FFT-array
-          unpacking: do BufferIndex=1,xp_MKL_Commpoints(proc)
-             ! Get global lattice index
-             LatticeIndex = xp_MKL_SendRecvList(BufferIndex,proc)
-
-             ! Get local index in data
-             LocalIndex = GetFFTIndex(LatticeIndex)
-
-             ! Assign buffer to data
-             xp_data(LocalIndex) = Recvbuffer(BufferIndex,proc)
-          end do unpacking
-       end do Sources
-
-       deallocate(RecvBuffer)
-    end if
-
-    ! Checking all status
-    allocate(sendstatus(MPI_STATUS_SIZE,size(sendrequest)))
-    call MPI_WAITALL(int(size(xp_MPIWorld_Procs),intmpi),sendrequest,sendstatus,mpierr)
-    
-    deallocate(sendrequest,sendstatus,SendBuffer)
-  end subroutine LoadDataToFFT
-
-  !> @brief Distributes data from distributed FFT-array back to the original processes
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
-  impure subroutine DistributeDataFromFFT(data)
-    use precision, only: fp
-    use lattice
-    use mpi
-    use mpiinterface, only: ThisProc
-    implicit none
-    !> Fourier-transform output
-    complex(fp), intent(out) :: data(:)
-
-    complex(real64), allocatable, asynchronous :: sendbuffer(:,:), recvbuffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, mpierr
-    integer(intmpi) :: recvstatus(MPI_STATUS_SIZE)
-    integer(intmpi), allocatable :: sendrequest(:),sendstatus(:,:)
-    integer(intmpi) :: proc
-    integer(intmpi) :: MaxPoints
-    integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex, LatticeIndex
-
-    if(GetMKLColor()==1) then
-       MaxPoints = MaxVal(xp_MKL_Commpoints,DIM=1)
-       allocate(sendbuffer(MaxPoints,size(xp_MKL_Procs)))
-       allocate(sendrequest(size(xp_MKL_Procs)))
-       
-       Destinations: do proc=1,size(xp_MKL_Procs)
-          buffersize = xp_MKL_Commpoints(proc)
-
-          ! Packing buffer
-          packing: do BufferIndex=1,xp_MKL_Commpoints(proc)
-             ! Get global lattice index
-             LatticeIndex = xp_MKL_SendRecvList(BufferIndex,proc)
-
-             ! Get local index in data
-             LocalIndex = GetFFTIndex(LatticeIndex)
-
-             ! Assign data to buffer
-             SendBuffer(BufferIndex,proc) = xp_data(LocalIndex)
-          end do packing
-          
-          ! Sending the data
-          dest    = xp_MKL_Procs(proc)
-          sendtag = xp_MKL_Procs(proc) + mklprocs*ThisProc()
-          call MPI_ISend(&       
-               sendbuffer(&     ! Where to recieve...
-               1,proc),&        ! ... and it's first index
-               buffersize,&     ! How many points
-               MPI_COMPLEX16,&  ! What type to send
-               dest, sendtag,&  ! Destination and sendtag
-               mpi_comm_world,& ! Communicator
-               sendrequest(proc), mpierr)  ! Status and error-code
-       end do Destinations
-    end if
-
-    MaxPoints = MaxVal(xp_MPIWorld_Commpoints,DIM=1)
-    allocate(RecvBuffer(MaxPoints,size(xp_MPIWorld_Procs)))
-    Sources: do proc=1,size(xp_MPIWorld_Procs)
-       buffersize = xp_MPIWorld_Commpoints(proc)
-
-       ! Sending the data to the FFT-process
-       src     = xp_MPIWorld_Procs(proc)
-       recvtag = ThisProc() + size(xp_MPIWorld_Commpoints)*xp_MPIWorld_Procs(proc)
-       call MPI_Recv(&       
-            recvbuffer(&     ! What to recieve...
-            1,proc),&        ! ... and it's first index
-            buffersize,&     ! How many points
-            MPI_COMPLEX16,&  ! What type to recieve
-            src, recvtag,&   ! Source and recvtag
-            mpi_comm_world,& ! Communicator
-            recvstatus,&     ! Status
-            mpierr)          ! Error-code
-
-       ! Unpack buffer into FFT-output
-       unpacking: do BufferIndex=1,xp_MPIWorld_Commpoints(proc)
-          ! Get global lattice index
-          LatticeIndex = xp_MPIWorld_SendRecvList(BufferIndex,proc)
-
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
-
-          ! Assign data to buffer
-          data(LocalIndex) = recvbuffer(BufferIndex,proc)
-       end do unpacking
-    end do Sources
-
-    ! Checking status
-    if(GetMKLColor()==1) then
-       allocate(sendstatus(MPI_STATUS_SIZE,size(sendrequest)))
-       call MPI_WAITALL(int(size(sendrequest),intmpi),sendrequest,sendstatus,mpierr)
-       deallocate(sendbuffer,sendstatus,sendrequest)
-    end if
-    deallocate(recvbuffer)
-  end subroutine DistributeDataFromFFT
-  
   !> @brief DFT for ndim-dimensional signal from real space to momentum space using MKL-CDFT
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -612,10 +415,118 @@ contains
     call LoadDataToFFT(data)
     
     ! Perform fourier transform
-    status = DftiComputeForwardDM(desc,xp_data)
+    !status = DftiComputeForwardDM(xp_desc,data_)
 
     call DistributeDataFromFFT(data)
   end subroutine x2p
+
+  !> @brief Loads data from the original processes into the distributed FFT-array
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 21.02.2019
+  !! @version 1.0
+  impure subroutine LoadDataToFFT(data)
+    use precision, only: fp
+    use lattice
+    use mpi
+    use mpiinterface, only: ThisProc, intmpi
+    implicit none
+    !> Fourier-transform input
+    complex(fp), intent(in) :: data(:)
+
+    complex(real64), allocatable :: buffer(:)
+    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(MPI_STATUS_SIZE), mpierr
+    integer(intmpi) :: proc
+    integer(intmpi) :: MaxPoints
+    integer(intmpi) :: BufferIndex
+    integer(int64) :: LocalIndex, LatticeIndex
+
+    MaxPoints = MaxVal(xp_MPIWorld_Commpoints,DIM=1)
+
+    allocate(buffer(MaxPoints))
+    
+    if(GetMKLColor()==0) then
+       Destinations: do proc=1,size(xp_MPIWorld_Procs)
+          buffersize = xp_MPIWorld_Commpoints(proc)
+
+          ! Prepare buffer with send-data for FFT-process
+          packing: do BufferIndex=1,xp_MPIWorld_Commpoints(proc)
+             ! Get global lattice index
+             LatticeIndex = xp_MPIWorld_SendRecvList(BufferIndex,proc)
+             
+             ! Get local index in data
+             LocalIndex = GetLocalIndex(LatticeIndex)
+             
+             ! Assign data to buffer
+             buffer(BufferIndex) = data(LocalIndex)
+          end do packing
+
+          ! Sending the data to the FFT-process
+          dest    = xp_MPIWorld_Procs(proc)
+          sendtag = ThisProc() + size(xp_MPIWorld_Commpoints)*xp_MPIWorld_Procs(proc)
+          call MPI_Send(&       
+               buffer,&         ! What to send
+               buffersize,&     ! How many points
+               MPI_COMPLEX16,&  ! What type to send
+               dest, sendtag,&  ! Destination and sendtag
+               mpi_comm_world,& ! Communicator
+               mpierr)          ! Error-code
+       end do Destinations
+    elseif(GetMKLColor()==1) then
+       NonMKLSources: do proc=1,size(xp_MKL_Procs)
+          if(GetMKLColor(xp_MKL_Procs(proc)) /= 1) then
+             buffersize = xp_MKL_Commpoints(proc)
+
+             ! Recieving the data from all non-FFT-processes
+             src     = xp_MKL_Procs(proc)
+             recvtag = xp_MKL_Procs(proc) + mklprocs*ThisProc()
+             call MPI_Recv(&       
+                  buffer,&         ! What to send
+                  buffersize,&     ! How many points
+                  MPI_COMPLEX16,&  ! What type to send
+                  src, recvtag,&   ! Destination and sendtag
+                  mpi_comm_world,& ! Communicator
+                  status, mpierr)  ! Status and error-code
+
+             
+             ! Unpacking buffer and saving into distributed FFT-array
+             unpacking: do BufferIndex=1,xp_MKL_Commpoints(proc)
+                ! Get global lattice index
+                LatticeIndex = xp_MKL_SendRecvList(BufferIndex,proc)
+
+                ! Get local index in data
+                LocalIndex = GetFFTIndex(LatticeIndex)
+
+                ! Assign data to buffer
+                xp_data(LocalIndex) = buffer(BufferIndex)
+             end do unpacking
+          end if
+       end do NonMKLSources
+
+       !MKLSources: do proc=1,size(xp_MPIWorld_Procs)
+       !   if(GetMKLColor(xp_MPIWorld_Procs(proc))==1) then
+       !      call MPI_Recv
+       !   end if
+       !end do MKLSources
+    end if
+  end subroutine LoadDataToFFT
+
+  !> @brief Distributes data from distributed FFT-array back to the original processes
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 21.02.2019
+  !! @version 1.0
+  impure subroutine DistributeDataFromFFT(data)
+    use precision, only: fp
+    use lattice
+    use mpi
+    use mpiinterface, only: ThisProc
+    implicit none
+    !> Fourier-transform output
+    complex(fp), intent(in) :: data(:)
+    
+  end subroutine DistributeDataFromFFT
+  
   
   !> @brief DFT for ndim-dimensional signal from momentum space to real space using MKL-CDFT
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -630,12 +541,7 @@ contains
 
     integer(int64) :: status
 
-    call LoadDataToFFT(data)
-    
-    ! Perform fourier transform
-    status = DftiComputeBackwardDM(desc,xp_data)
-
-    call DistributeDataFromFFT(data)
+    !status = DftiComputeBackwardDM(xp_desc,data_)
     
   end subroutine p2x
 

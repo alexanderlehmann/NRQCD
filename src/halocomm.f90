@@ -257,7 +257,7 @@ contains
     real(fp), allocatable :: buffer(:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -339,7 +339,7 @@ contains
     real(fp), allocatable :: buffer(:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -421,7 +421,7 @@ contains
     real(fp), allocatable :: buffer(:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -503,7 +503,7 @@ contains
     real(fp), allocatable :: buffer(:,:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -585,7 +585,7 @@ contains
     complex(fp), allocatable :: buffer(:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -667,7 +667,7 @@ contains
     complex(fp), allocatable :: buffer(:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -749,7 +749,7 @@ contains
     complex(fp), allocatable :: buffer(:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
@@ -831,7 +831,7 @@ contains
     complex(fp), allocatable :: buffer(:,:,:,:)
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
 
-    integer(intmpi) :: neib, proc
+    integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
     integer(int64) :: LocalIndex
