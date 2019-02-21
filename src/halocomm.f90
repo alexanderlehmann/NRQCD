@@ -167,7 +167,6 @@ contains
     integer(int64), allocatable :: LocalLatticeIndices(:)
     integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
     integer(intmpi), allocatable :: HaloProcs_includingThisProc(:)
-    integer(intmpi), allocatable :: Procs(:)
     integer(int64) :: LocalIndex, neibpoint
     integer(intmpi) :: proc, neib
     integer(int64) :: MaxHaloPoints
@@ -178,14 +177,13 @@ contains
     ! 1. Compute halo points and the associated process numbers
     call GetLocalLatticeIndices_includingHalo_Allocatable(LocalLatticeIndices)
 
-    allocate(Procs(NumProcs()))
-    allocate(HaloProcs_includingThisProc(NumProcs()))
-    Procs     = GetProc(LocalLatticeIndices)
-    HaloProcs_includingThisProc = Procs
+    allocate(HaloProcs_includingThisProc(size(LocalLatticeIndices)))
+    HaloProcs_includingThisProc = GetProc(LocalLatticeIndices)
     call RemoveDuplicates(HaloProcs_includingThisProc,PointsPerProc_includingThisProc)
     call Sort(HaloProcs_includingThisProc)
     
     neibs = size(HaloProcs_includingThisProc)-1
+    
     allocate(HaloProcs(neibs))
     allocate(NeibPoints(neibs))
     MaxHaloPoints = MaxVal(&
@@ -397,7 +395,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,LocalIndex) = buffer(:,BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -479,7 +477,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -528,7 +526,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           buffer(:,:,:,BufferIndex) = data(:,:,:,LocalIndex)
        end do packing
 
@@ -561,7 +559,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,:,:,LocalIndex) = buffer(:,:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -643,7 +641,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(LocalIndex) = buffer(BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -725,7 +723,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,LocalIndex) = buffer(:,BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -807,7 +805,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
@@ -889,7 +887,7 @@ contains
           ! Get local index in data
           LocalIndex = GetLocalIndex(LatticeIndex)
 
-          ! Assign data to buffer
+          ! Assign buffer to data
           data(:,:,:,LocalIndex) = buffer(:,:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours

@@ -13,6 +13,7 @@
 !----------------------------------------------------------------------
 module lattice
   use, intrinsic :: iso_fortran_env
+  use precision, only: fp
   implicit none
 
   PRIVATE
@@ -33,7 +34,9 @@ module lattice
        GetLatticeExtension,&
        GetLatticeSize,&
        GetLocalLatticeSize,&
+       InitLatticeIndices,&
        GetLocalLatticeSize_includingHalo,&
+       GetLatticeSpacing,&
        GetVolume,&
        GetNeib,&
        GetMomentum,&
@@ -57,16 +60,16 @@ module lattice
   !> lattice size
   integer(int64) :: LatticeSize = -1
   !> lattice spacings
-  real(real64)   :: LatticeSpacings(0:ndim) = -1._real64
+  real(fp)   :: LatticeSpacings(0:ndim) = -1._fp
   !> volume
-  real(real64)   :: Volume = -1._real64
+  real(fp)   :: Volume = -1._fp
   !> local lattice sizes
   integer(int64) :: LocalLatticeSize=-1
   !> local lattice sizes including halo
   integer(int64) :: LocalLatticeSize_includingHalo=-1
 
   !> maximum 2-norm of momentum
-  real(real64) :: MaxNorm2Momentum=-1._real64
+  real(fp) :: MaxNorm2Momentum=-1._fp
 
   !..--** MPI: process-dependend parameters**--..
   !> local lower lattice boundaries
@@ -126,7 +129,7 @@ contains
     !> lattice extensions
     integer(int64), intent(in) :: LatticeExtensions_(ndim)
     !> lattice spacings
-    real(real64),   intent(in) :: LatticeSpacings_(0:ndim)
+    real(fp),   intent(in) :: LatticeSpacings_(0:ndim)
 
     integer(int64) :: partitions(ndim)
     integer(int8) :: idivision, numdivisions, ipartition
@@ -157,7 +160,7 @@ contains
           call MPIstop('Total lattice size has to be integer-divisible by number of MPI-processes')
        end if
 
-       numdivisions = int(log(real(NumProcs(),real64))/log(2._real64),int8) !log2 of numprocs
+       numdivisions = int(log(real(NumProcs(),fp))/log(2._fp),int8) !log2 of numprocs
        if(2**numdivisions /= NumProcs()) then
           call MPIstop('Number of MPI-processes has to be a power of 2')
        end if
@@ -253,14 +256,22 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: NumProcs
     implicit none
+    !> Lower boundaries of local partition
     integer(int64), intent(inout), allocatable :: LocalLowerLatticeBoundaries(:,:)
+    !> Upper boundaries of local partition
     integer(int64), intent(inout), allocatable :: LocalUpperLatticeBoundaries(:,:)
+    !> Global sizes of each partition
     integer(int64), intent(in)    :: partitions(ndim)
+    !> Process number
     integer(int64), intent(inout), optional :: proc
+    !> Direction
     integer(int8),  intent(in),    optional :: i
+    !> Direction, used as index in partitions-array
     integer(int64), intent(in),    optional :: ipart(ndim)
+    !> Number of halo-points (boundary values)
     integer(int8),  intent(in),    optional :: nHalo
 
+    
     integer(int8)  :: i_next
     integer(int64) :: ipart_next(ndim)
 
@@ -321,11 +332,18 @@ contains
        LowerBoundaries,UpperBoundaries,i,x,index)
     use, intrinsic :: iso_fortran_env
     implicit none
+    !> To be filled array of lattice indices
     integer(int64), intent(inout), allocatable :: LatticeIndices(:)
-    integer(int64), intent(in)                 :: LowerBoundaries(ndim),UpperBoundaries(ndim)
-    integer(int8),  intent(in),    optional :: i
-    integer(int64), intent(in),    optional :: x(ndim)
-    integer(int64), intent(inout), optional :: index
+    !> Lower boundaries of local partition
+    integer(int64), intent(in)                 :: LowerBoundaries(ndim)
+    !> Upper boundaries of local partition
+    integer(int64), intent(in)                 :: UpperBoundaries(ndim)
+    !> Direction
+    integer(int8),  intent(in),    optional    :: i
+    !> Position vector
+    integer(int64), intent(in),    optional    :: x(ndim)
+    !> Local array index in LatticeIndices
+    integer(int64), intent(inout), optional    :: index
 
     integer(int64) :: v(ndim), n, index_init, latticesize
     integer(int8) :: j
@@ -365,15 +383,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  impure real(real64) function FindMaxNorm2Momentum
+  impure real(fp) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
     use mpiinterface, only: NumProcs, intmpi
     implicit none
 
     integer(int64) :: LocalLatticeindex, LatticeIndex
-    real(real64)   :: norm2momentum,currentMax
-    real(real64), allocatable :: maxmomenta(:)
+    real(fp)   :: norm2momentum,currentMax
+    real(fp), allocatable :: maxmomenta(:)
 
     integer(intmpi) :: mpierr
 
@@ -499,12 +517,26 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure real(real64) function GetVolume()
+  pure real(fp) function GetVolume()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetVolume = Volume
   end function GetVolume
-
+  
+!> @brief  Returns lattice spacing
+  !! @returns lattice spacing
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 21.02.2019
+  !! @version 1.0
+  pure elemental real(fp) function GetLatticeSpacing(i)
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    !> Direction \f$\in\{0,...,ndim\}\f$
+    integer(int8), intent(in) :: i
+    GetLatticeSpacing = LatticeSpacings(i)
+  end function GetLatticeSpacing
+  
   !> @brief Returns i'th lattice extension
   !! @returns i'th lattice extension
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -561,8 +593,8 @@ contains
   !! @returns MPI-process-rank corresponding to lattice index
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !! @date 19.02.2019
+  !! @version 1.1
   pure elemental integer(intmpi) function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: intmpi
@@ -793,7 +825,7 @@ contains
     !> Lattice index
     integer(int64), intent(in) :: LatticeIndex
     !> Momentum
-    complex(real64) :: GetMomentum_BackwardDerivative(ndim)
+    complex(fp) :: GetMomentum_BackwardDerivative(ndim)
 
     integer(int64) :: LatticePosition(ndim)
 
@@ -801,7 +833,7 @@ contains
 
     GetMomentum_BackwardDerivative = 2*sin(pi*(LatticePosition-1)/LatticeExtensions)&
          /LatticeSpacings(1:ndim)&
-         *Exp(cmplx(0,-pi*(LatticePosition-1)/LatticeExtensions,real64))
+         *Exp(cmplx(0,-pi*(LatticePosition-1)/LatticeExtensions,fp))
   end function GetMomentum_BackwardDerivative
 
   !> @brief Eigenvalue of momentum operator, defined via forward derivative
@@ -824,7 +856,7 @@ contains
     !> Lattice index
     integer(int64), intent(in) :: LatticeIndex
     !> Momentum
-    complex(real64) :: GetMomentum_ForwardDerivative(ndim)
+    complex(fp) :: GetMomentum_ForwardDerivative(ndim)
 
     integer(int64) :: LatticePosition(ndim)
 
@@ -832,7 +864,7 @@ contains
 
     GetMomentum_ForwardDerivative = 2*sin(pi*(LatticePosition-1)/LatticeExtensions)&
          /LatticeSpacings(1:ndim)&
-         *Exp(cmplx(0,+pi*(LatticePosition-1)/LatticeExtensions,real64))
+         *Exp(cmplx(0,+pi*(LatticePosition-1)/LatticeExtensions,fp))
   end function GetMomentum_ForwardDerivative
 
   !> @brief Eigenvalue of momentum operator, defined via central derivative
@@ -854,7 +886,7 @@ contains
     !> Lattice index
     integer(int64), intent(in) :: LatticeIndex
     !> Momentum
-    complex(real64) :: GetMomentum_CentralDerivative(ndim)
+    complex(fp) :: GetMomentum_CentralDerivative(ndim)
 
     integer(int64) :: LatticePosition(ndim)
 
@@ -870,12 +902,12 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure real(real64) function GetNorm2Momentum(LatticeIndex)
+  pure real(fp) function GetNorm2Momentum(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
-    complex(real64) :: Momentum(ndim)
+    complex(fp) :: Momentum(ndim)
     Momentum = GetMomentum(LatticeIndex)
     GetNorm2Momentum = norm2(abs(Momentum))
   end function GetNorm2Momentum
@@ -890,7 +922,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.02.2019
   !! @version 1.0
-  pure real(real64) function GetMaxNorm2Momentum()
+  pure real(fp) function GetMaxNorm2Momentum()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetMaxNorm2Momentum = MaxNorm2Momentum

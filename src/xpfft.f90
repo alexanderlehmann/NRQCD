@@ -26,7 +26,8 @@ module xpfft
   PRIVATE
 
   public :: &
-       InitModule, FinalizeModule
+       InitModule, FinalizeModule,&
+       x2p, p2x
        
   !> Module name
   character(len=5), parameter, public ::  modulename='xpfft'
@@ -49,10 +50,22 @@ module xpfft
   !> Number of dimensions
   integer(int64), parameter :: ranks = int(nDim,intmpi)
 
-  !> List of lattice indices corresponding to the data in xp_data
-  integer(int64), allocatable :: LocalLatticeIndices(:)
-  !> List of MPI-ranks to communicate with in (x<->p)-FFT
-  integer(intmpi), allocatable :: CommProcs(:)
+  !> Size of the local xp-lattice ✓
+  integer(int64) :: xp_datasize
+  !> List of lattice indices corresponding to the data in xp_data ✓
+  integer(int64), allocatable :: xp_MKL_Indices(:)
+  !> List of MPI-ranks, this MPI_COMM_WORLD process has to communicate with
+  integer(intmpi), allocatable :: xp_MPIWorld_Procs(:)
+  !> List of MPI-ranks, this MKL-process has to communicate with
+  integer(intmpi), allocatable :: xp_MKL_Procs(:)
+  !> Number of points, this MPI_COMM_WORLD process has to communicate
+  integer(intmpi), allocatable :: xp_MPIWorld_CommPoints(:)
+  !> Number of points, this MKL-process has to communicate
+  integer(intmpi), allocatable :: xp_MKL_CommPoints(:)
+  !> Lattice indices which are to be communicated to and from the MKL-processes
+  integer(int64), allocatable :: xp_MPIWorld_SendRecvList(:,:)
+  !> Lattice indices which are to be communicated this MKL-process has to send and recv
+  integer(int64), allocatable :: xp_MKL_SendRecvList(:,:)
   !> Lower lattice boundaries
   integer(int64), allocatable :: xp_LowerLatticeBoundaries(:,:)
   !> Upper lattice boundaries
@@ -62,13 +75,16 @@ contains
   !> @brief Initialises module
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
+  !! @date 21.02.2019
   !! @version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
-    use lattice, only: nDim, GetLatticeExtension
+    use lattice, only: nDim, GetLatticeExtension, GetLocalLatticeIndices_allocatable,&
+         GetProc,GetProc_fromGeneralIndex, InitLatticeIndices,&
+         GetLatticeSpacing, GetVolume
     use mpiinterface, only: ThisProc, NumProcs, mpistop
     use mpi
+    use arrayoperations, only: RemoveDuplicates, Sort
     implicit none
 
     ! MPI
@@ -78,12 +94,18 @@ contains
     ! MKL
     integer(int64) :: lengths(ndim), status, extension, firstindex
 
-    integer(intmpi) :: proc
+    integer(intmpi) :: proc,xp_MPIWORLD_ncomms,xp_MKL_ncomms
     
     character(len=100) :: errormessage
 
-    integer(int64), allocatable :: firstindices(:), extensions(:)
+    integer(int64),  allocatable :: firstindices(:), extensions(:)
+    integer(int64),  allocatable :: locallatticeindices(:)
+    integer(int64) :: LatticeExtensions(ndim), LocalIndex, commpoint
 
+    integer(int64), allocatable :: indices_includingThisProc(:)
+    integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
+    integer(int64) :: MaxCommPoints
+    
     if(isInitialised) then
        errormessage = 'Error in init of '//modulename//': already initialised.'
        call MPISTOP(errormessage)
@@ -91,7 +113,7 @@ contains
        call CheckObligatoryInitialisations
 
        ! Assigning a colour to each process
-       maxmklprocs = minval([GetLatticeExtension(nDim),int(NumProcs(),int64)])
+       maxmklprocs = minval([GetLatticeExtension([nDim-1_int8:nDim]),int(NumProcs(),int64)])
        if(ThisProc() .le. maxmklprocs-1) then
           mkl_color = 1
        else
@@ -109,6 +131,9 @@ contains
 
           status = DftiGetValueDM(desc,CDFT_LOCAL_NX,extension)
           status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,firstindex)
+          status = DftiSetValueDM(desc,DFTI_FORWARD_SCALE,product(GetLatticeSpacing([1_int8:ndim])))
+          status = DftiSetValueDM(desc,DFTI_BACKWARD_SCALE,1._real64/GetVolume())
+          status = DftiCommitDescriptorDM(desc)
        end if
 
        ! Communication of lattice boundaries
@@ -128,7 +153,7 @@ contains
             firstindex,&        ! What to send
             1_intmpi,&          ! How many points
             MPI_INT64_T,&       ! What type to send
-            firstindices(&      ! What to recieve ...
+            firstindices(&      ! Where to gather ...
             1),&                ! ... and it's first index
             1_intmpi,&          ! How many points
             MPI_INT64_T,&       ! What type to recieve
@@ -140,28 +165,29 @@ contains
             Extension,&         ! What to send
             1_intmpi,&          ! How many points
             MPI_INT64_T,&       ! What type to send
-            extensions(&        ! What to recieve ...
+            extensions(&        ! Where to gather ...
             1),&                ! ... and it's first index
             1_intmpi,&          ! How many points
             MPI_INT64_T,&       ! What type to recieve
             0_intmpi,&          ! Gathering process
             mkl_comm,&          ! Communicator
             mpierr)             ! Error-code
-
+          
           if(ThisProc()==0) then
-             forall(proc=1:maxmklprocs)
+             do proc=1,maxmklprocs
                 xp_LowerLatticeBoundaries(1:ndim-1,proc) = 1
                 xp_UpperLatticeBoundaries(1:ndim-1,proc) = GetLatticeExtension([1_int8:ndim-1_int8])
                 xp_LowerLatticeBoundaries(ndim,proc) = firstindices(proc)
                 xp_UpperLatticeBoundaries(ndim,proc) = firstindices(proc) + extensions(proc) -1
-             end forall
+             end do
              deallocate(firstindices,extensions) !buffers not needed anymore
           end if
        end if
-       ! Let 0th (MKL- as well as WORLD)-process brodcast the LatticeExtensions
+       
+       ! Let 0th (MKL- as well as WORLD)-process brodcast the MKL-lattice-partitions
        buffersize = int(size(xp_LowerLatticeBoundaries),intmpi)
        call mpi_bcast(&
-            xp_LowerLatticeBoundaries ,& ! What to send
+            xp_LowerLatticeBoundaries ,& ! What to broadcast
             buffersize                ,& ! Number of entries in buffer
             MPI_INT64_T               ,& ! Data type of buffer
             0_intmpi                  ,& ! Broadcasting process (root)
@@ -169,28 +195,105 @@ contains
             mpierr)                      ! Error-code
        
        call mpi_bcast(&
-            xp_UpperLatticeBoundaries ,& ! What to send
+            xp_UpperLatticeBoundaries ,& ! What to broadcast
             buffersize                ,& ! Number of entries in buffer
             MPI_INT64_T               ,& ! Data type of buffer
             0_intmpi                  ,& ! Broadcasting process (root)
             MPI_COMM_WORLD            ,& ! Communicator
             mpierr)                      ! Error-code
        
-       !do proc=0,NumProcs()-1
-       !  print*,'Process',proc
-       !   do status=1,maxmklprocs
-       !      print*,'MKL-process:',status-1
-       !      print*,xp_LowerLatticeBoundaries(:,status)
-       !      print*,xp_UpperLatticeBoundaries(:,status)
-       !   end do
-       !   call flush(6)
-       !   call mpi_barrier(mpi_comm_world,mpierr)
-       !end do
+       ! 2. Initialise communication lists
+       ! i.   Compute the indices of the local lattice indices
+       ! ii.  Compute where on which world (a) and on which mkl (b) process this index lies
+       call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+       if(allocated(xp_MPIWorld_Procs)) deallocate(xp_MPIWorld_Procs)
+       allocate(xp_MPIWorld_Procs(size(LocalLatticeIndices)))
+       LatticeExtensions = GetLatticeExtension([1_int8:ndim])
 
+       forall(LocalIndex=1:size(LocalLatticeIndices))
+          xp_MPIWorld_Procs(LocalIndex) = GetProc_fromGeneralIndex(&
+               LocalLatticeIndices(LocalIndex),&
+               xp_LowerLatticeBoundaries,&
+               xp_UpperLatticeBoundaries,&
+               LatticeExtensions)
+       end forall
+
+       ! Initialising send-recv-list of WORLD-processes
+       call RemoveDuplicates(xp_MPIWorld_Procs,PointsPerProc_includingThisProc)
+       call Sort(xp_MPIWorld_Procs)
+       MaxCommPoints = MaxVal(&
+            PointsPerProc_includingThisProc, DIM=1)
+       xp_MPIWORLD_ncomms = size(xp_MPIWORLD_Procs)
        
-       ! 2. Initialise list where the which lattice points have sent
-       ! 3. Initialise list from where lattice points are recieved
+       if(allocated(xp_MPIWorld_CommPoints)) deallocate(xp_MPIWorld_CommPoints)
+       allocate(xp_MPIWorld_CommPoints(xp_MPIWORLD_ncomms))
        
+       if(allocated(xp_MPIWorld_SendRecvList)) deallocate(xp_MPIWorld_SendRecvList)
+       allocate(xp_MPIWorld_SendRecvList(MaxCommPoints,xp_MPIWorld_ncomms))
+
+       do proc=1,size(xp_MPIWorld_Procs)
+          xp_MPIWorld_Commpoints(proc) = PointsPerProc_includingThisProc(proc)
+
+          commpoint=0
+          do LocalIndex=1,size(LocalLatticeIndices)
+             if(GetProc_fromGeneralIndex(LocalLatticeIndices(LocalIndex),&
+                  xp_LowerLatticeBoundaries,&
+                  xp_UpperLatticeBoundaries,&
+                  LatticeExtensions)&
+                  ==xp_MPIWorld_Procs(proc)) then
+                commpoint = commpoint + 1_int64
+                xp_MPIWorld_SendRecvList(commpoint,proc) = LocalLatticeIndices(LocalIndex)
+             end if
+          end do
+       end do
+       ! Now the World-processes know to which MKL-processes they will send data
+       !-------------------------------------------------------------------------
+       ! Now letting all MKL-processes know from whom they recieve what
+       if(mkl_color==1) then
+          xp_datasize = product(&
+               1 &
+               + xp_UpperLatticeBoundaries(:,ThisProc()+1) &
+               - xp_LowerLatticeBoundaries(:,ThisProc()+1) )
+
+          if(allocated(xp_MKL_indices)) deallocate(xp_MKL_indices)
+          allocate(xp_MKL_indices(xp_datasize))
+
+          call InitLatticeIndices(xp_MKL_indices,&
+               xp_LowerLatticeBoundaries(:,ThisProc()+1),&
+               xp_UpperLatticeBoundaries(:,ThisProc()+1))
+
+          if(allocated(xp_MKL_Procs)) deallocate(xp_MKL_Procs)
+          allocate(xp_MKL_Procs(size(xp_MKL_indices)))
+          xp_MKL_Procs = GetProc(xp_MKL_indices)
+
+          call RemoveDuplicates(xp_MKL_Procs,PointsPerProc_includingThisProc)
+          call Sort(xp_MKL_Procs)
+
+          xp_MKL_ncomms = size(xp_MKL_Procs)
+          
+          if(allocated(xp_MKL_CommPoints)) deallocate(xp_MKL_CommPoints)
+          allocate(xp_MKL_CommPoints(xp_MKL_ncomms))
+          
+          MaxCommPoints = MaxVal(&
+               PointsPerProc_includingThisProc,DIM=1) ! Where to look
+
+          if(allocated(xp_MKL_SendRecvList)) deallocate(xp_MKL_SendRecvList)
+          allocate(xp_MKL_SendRecvList(MaxCommPoints,xp_MKL_ncomms))
+
+          do proc=1,size(xp_MKL_Procs)
+             xp_MKL_CommPoints(proc) = PointsPerProc_includingThisProc(proc)
+
+             commpoint=0
+             do LocalIndex=1,size(xp_MKL_indices)
+                if(GetProc(xp_MKL_indices(LocalIndex))==xp_MKL_Procs(proc)) then
+                   commpoint = commpoint + 1_int64
+                   xp_MKL_SendRecvList(commpoint,proc) = xp_MKL_indices(LocalIndex)
+                end if
+             end do
+          end do
+          ! Now the MKL-processes know from whom they will get the data
+          !-------------------------------------------------------------
+       end if ! is MKL-process
        
        IsInitialised = .TRUE.
     end if
@@ -202,7 +305,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 19.02.2019
   !! @version 1.0
-  pure integer function GetColor()
+  pure integer(intmpi) function GetColor()
     implicit none
     GetColor = mkl_color
   end function GetColor
@@ -255,4 +358,35 @@ contains
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
+
+  !> @brief DFT for ndim-dimensional signal from real space to momentum space using MKL-CDFT
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 21.02.2019
+  !! @version 1.0
+  impure subroutine x2p(data_)
+    implicit none
+    !> Fourier-transform input and output
+    complex(real64), intent(inout) :: data_(:)
+
+    integer status
+    
+    !status = DftiComputeForwardDM(xp_desc,data_)
+  end subroutine x2p
+
+  !> @brief DFT for ndim-dimensional signal from momentum space to real space using MKL-CDFT
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 21.02.2019
+  !! @version 1.0
+  impure subroutine p2x(data_)
+    implicit none
+    !> Fourier-transform input and output
+    complex(real64), intent(inout) :: data_(:)
+
+    integer status
+
+    !status = DftiComputeBackwardDM(xp_desc,data_)
+    
+  end subroutine p2x
 end module xpfft
