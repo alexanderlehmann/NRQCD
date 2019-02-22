@@ -10,14 +10,16 @@
 !! UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
 !! @date
-!! 11.01.2019
+!! 22.02.2019
 !! @version
-!! 1.0
+!! 1.1
 ! REVISION HISTORY:
 ! 11 01 2019 - Initial Version
+! 22 02 2019 - Using precision-module
 !----------------------------------------------------------------------
 module su3
   use, intrinsic :: iso_fortran_env
+  use precision, only: fp
   
   implicit none
 
@@ -32,9 +34,9 @@ module su3
        GetTraceWithGenerator
   
   !> Matrix size of the SU(N) gauge group elements
-  integer,parameter,public :: nsun = 3
+  integer(int8),parameter,public :: nsun = 3
   !> Number of generators of the gauge group
-  integer,parameter,public :: ngen = nsun**2-1
+  integer(int8),parameter,public :: ngen = nsun**2-1
 
   !> @brief SU(3)-generators aka Gell-Mann-matrices
   !! @details
@@ -97,40 +99,40 @@ module su3
   !! 14.07.2018
   !! @version
   !! 1.0
-  complex(real64), dimension(nsun,nsun,1:ngen), parameter, public :: &
+  complex(fp), dimension(nsun,nsun,1:ngen), parameter, public :: &
        Generators = reshape(&
        [ &                           ! First generator
-       & cmplx(00,00,real64),       cmplx(+0.5_real64,00,real64),cmplx(00,00,real64),& 
-       cmplx(+0.5_real64,00,real64),cmplx(00,00,real64),         cmplx(00,00,real64),&
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(+0.5_fp,00,fp),cmplx(00,00,fp),& 
+       cmplx(+0.5_fp,00,fp),cmplx(00,00,fp),         cmplx(00,00,fp),&
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,00,fp)&
        ,&                           ! Second generator
-       & cmplx(00,00,real64),       cmplx(00,-0.5_real64,real64),cmplx(00,00,real64),& 
-       cmplx(00,+0.5_real64,real64),cmplx(00,00,real64),         cmplx(00,00,real64),&
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(00,-0.5_fp,fp),cmplx(00,00,fp),& 
+       cmplx(00,+0.5_fp,fp),cmplx(00,00,fp),         cmplx(00,00,fp),&
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,00,fp)&
        ,&                           ! Third generator
-       & cmplx(+.5_real64,0,real64),cmplx(00,00,real64),         cmplx(00,00,real64),& 
-       cmplx(00,00,real64),         cmplx(-0.5_real64,00,real64),cmplx(00,00,real64),&
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,00,real64)&
+       & cmplx(+.5_fp,0,fp),cmplx(00,00,fp),         cmplx(00,00,fp),& 
+       cmplx(00,00,fp),         cmplx(-0.5_fp,00,fp),cmplx(00,00,fp),&
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,00,fp)&
        ,&                           ! Fourth generator
-       & cmplx(00,00,real64),       cmplx(00,00,real64),         cmplx(+0.5_real64,00,real64),& 
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,00,real64),&
-       cmplx(+0.5_real64,00,real64),cmplx(00,00,real64),         cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(00,00,fp),         cmplx(+0.5_fp,00,fp),& 
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,00,fp),&
+       cmplx(+0.5_fp,00,fp),cmplx(00,00,fp),         cmplx(00,00,fp)&
        ,&                           ! Fifth generator
-       & cmplx(00,00,real64),       cmplx(00,00,real64),         cmplx(00,-0.5_real64,real64),& 
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,00,real64),&
-       cmplx(00,+0.5_real64,real64),cmplx(00,00,real64),         cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(00,00,fp),         cmplx(00,-0.5_fp,fp),& 
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,00,fp),&
+       cmplx(00,+0.5_fp,fp),cmplx(00,00,fp),         cmplx(00,00,fp)&
        ,&                           ! Sixth generator
-       & cmplx(00,00,real64),       cmplx(00,00,real64),         cmplx(00,00,real64),& 
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(+0.5_real64,00,real64),&
-       cmplx(00,00,real64),         cmplx(+0.5_real64,00,real64),cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(00,00,fp),         cmplx(00,00,fp),& 
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(+0.5_fp,00,fp),&
+       cmplx(00,00,fp),         cmplx(+0.5_fp,00,fp),cmplx(00,00,fp)&
        ,&                           ! Seventh generator
-       & cmplx(00,00,real64),       cmplx(00,00,real64),         cmplx(00,00,real64),& 
-       cmplx(00,00,real64),         cmplx(00,00,real64),         cmplx(00,-0.5_real64,real64),&
-       cmplx(00,00,real64),         cmplx(00,+0.5_real64,real64),cmplx(00,00,real64)&
+       & cmplx(00,00,fp),       cmplx(00,00,fp),         cmplx(00,00,fp),& 
+       cmplx(00,00,fp),         cmplx(00,00,fp),         cmplx(00,-0.5_fp,fp),&
+       cmplx(00,00,fp),         cmplx(00,+0.5_fp,fp),cmplx(00,00,fp)&
        ,&                           ! Eighth generator
-       & cmplx(+0.5_real64/sqrt(3._real64),00,real64),cmplx(00,00,real64), cmplx(00,00,real64),& 
-       cmplx(00,00,real64), cmplx(+0.5_real64/sqrt(3._real64),00,real64),cmplx(00,00,real64),&
-       cmplx(00,00,real64), cmplx(00,00,real64),  cmplx(-1._real64/sqrt(3._real64),00,real64) &
+       & cmplx(+0.5_fp/sqrt(3._fp),00,fp),cmplx(00,00,fp), cmplx(00,00,fp),& 
+       cmplx(00,00,fp), cmplx(+0.5_fp/sqrt(3._fp),00,fp),cmplx(00,00,fp),&
+       cmplx(00,00,fp), cmplx(00,00,fp),  cmplx(-1._fp/sqrt(3._fp),00,fp) &
        ],shape=[nsun,nsun,ngen])
 
   !> @brief Exponential from Lie-algebra to Lie-group
@@ -160,9 +162,9 @@ contains
   pure function GetGenerator(i) result(res)
     implicit none
     !> Generator index
-    integer, intent(in) :: i
+    integer(int8), intent(in) :: i
     !> Generator
-    complex(real64), dimension(nsun,nsun) :: res
+    complex(fp), dimension(nsun,nsun) :: res
 
     if(i.lt.1 .or. i>ngen) then
        res = -1
@@ -188,17 +190,17 @@ contains
     use matrixoperations, only: EigenH, GetHerm
     implicit none
     !> \f$\mathfrak{su}(N)\f$-Lie-algebra parameters
-    real(real64), dimension(ngen), intent(in) :: input
-    real(real64), dimension(ngen)             :: GetWrappedAlgebraCoordinates
+    real(fp), dimension(ngen), intent(in) :: input
+    real(fp), dimension(ngen)             :: GetWrappedAlgebraCoordinates
 
     ! su(N)-Lie-algebra element
-    complex(real64), dimension(nsun,nsun) :: algebra
+    complex(fp), dimension(nsun,nsun) :: algebra
     ! Similarity transform to diagonalise Lie-algebra element
-    complex(real64), dimension(nsun,nsun) :: S,hermS,algebraS
+    complex(fp), dimension(nsun,nsun) :: S,hermS,algebraS
     ! Eigenvalues of Lie-algebra element
-    real(real64), dimension(nsun) :: ev
+    real(fp), dimension(nsun) :: ev
     ! Lie-group generator index
-    integer :: a
+    integer(int8) :: a
 
     ! Get input times generators
     algebra = GetAlgebraMatrix(input)
@@ -239,11 +241,11 @@ contains
     implicit none
     !> \f$\mathfrak{su}(N)\f$-coordinates \f$\alpha_a\f$
     !! in (hermitian) Lie-algebra
-    real(real64),    dimension(ngen),     intent(in) :: input
+    real(fp),    dimension(ngen),     intent(in) :: input
     !> SU(N)-Lie-group element corresponding to input
-    complex(real64), dimension(nsun,nsun)            :: res
+    complex(fp), dimension(nsun,nsun)            :: res
 
-    complex(real64), dimension(nsun,nsun) :: input_times_generators
+    complex(fp), dimension(nsun,nsun) :: input_times_generators
 
     input_times_generators = GetAlgebraMatrix(input)
     res = GetGroupExp_fromAlgebraMatrix(input_times_generators)
@@ -264,14 +266,14 @@ contains
     use matrixoperations, only: ExpAH
     implicit none
     !> (Hermitian) \f$\mathfrak{su}(N)\f$-Lie-algebra element \f$A\f$
-    complex(real64),dimension(nsun,nsun),intent(in) :: input
+    complex(fp),dimension(nsun,nsun),intent(in) :: input
     !> SU(N)-Lie-group element corresponding to input
-    complex(real64),dimension(nsun,nsun)            :: res
+    complex(fp),dimension(nsun,nsun)            :: res
 
     ! skew-hermitian matrix constructed from input
-    complex(real64),dimension(nsun,nsun)            :: A
+    complex(fp),dimension(nsun,nsun)            :: A
 
-    A = input*cmplx(0._real64,1._real64,real64)
+    A = input*cmplx(0._fp,1._fp,fp)
 
     res = ExpAH(A)
   end function GetGroupExp_fromAlgebraMatrix
@@ -290,14 +292,14 @@ contains
   pure function GetAlgebraMatrix(AlgebraCoordinates) result(res)
     implicit none
     !> \f$\mathfrak{su}(N)\f$-Lie-algebra coordinates \f$\alpha^a\f$
-    real(real64),    dimension(ngen),     intent(in) :: AlgebraCoordinates
+    real(fp),    dimension(ngen),     intent(in) :: AlgebraCoordinates
     !> \f$\mathfrak{su}(N)\f$-Lie-algebra element \f$A\f$
-    complex(real64), dimension(nsun,nsun)            :: res
+    complex(fp), dimension(nsun,nsun)            :: res
 
     ! Generator index
-    integer :: a
+    integer(int8) :: a
 
-    res = 0._real64
+    res = 0._fp
     do a=1,ngen
        res = res + AlgebraCoordinates(a)*Generators(:,:,a)
     end do !a
@@ -322,14 +324,14 @@ contains
     use matrixoperations, only: ArgLogU
     implicit none
     !> SU(N)-Lie-group element \f$G\f$
-    complex(real64), dimension(nsun,nsun), intent(in) :: input
+    complex(fp), dimension(nsun,nsun), intent(in) :: input
     !> \f$\mathfrak{su}(N)\f$-Lie-algebra element
-    real(real64),    dimension(ngen)                  :: res
+    real(fp),    dimension(ngen)                  :: res
 
     ! Logarithm of input
-    complex(real64), dimension(nsun,nsun) :: LogInput
+    complex(fp), dimension(nsun,nsun) :: LogInput
     ! Lie-group generator index
-    integer :: a
+    integer(int8) :: a
 
     LogInput = ArgLogU(input)
 
@@ -349,14 +351,14 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 28.08.2018
   !! @version 1.0
-  pure real(real64) function GetAlgebraCoordinate(a,matrix)
+  pure real(fp) function GetAlgebraCoordinate(a,matrix)
     use matrixoperations, only: GetTrace
     implicit none
     !> Generator index
-    integer,         intent(in) :: a
+    integer(int8),         intent(in) :: a
     !> Input matrix \f$M\f$
-    complex(real64), intent(in) :: matrix(nsun,nsun)
-    GetAlgebraCoordinate = 2._real64*real(GetTraceWithGenerator(a,matrix),real64)
+    complex(fp), intent(in) :: matrix(nsun,nsun)
+    GetAlgebraCoordinate = 2._fp*real(GetTraceWithGenerator(a,matrix),fp)
   end function GetAlgebraCoordinate
   
   !> @brief
@@ -369,15 +371,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 14.01.2019
   !! @version 1.0
-  pure complex(real64) function GetTraceWithGenerator(a,matrix)
+  pure complex(fp) function GetTraceWithGenerator(a,matrix)
     use matrixoperations, only: GetTrace
     implicit none
     !> Generator index
-    integer,         intent(in) :: a
+    integer(int8),         intent(in) :: a
     !> Input matrix \f$M\f$
-    complex(real64), intent(in) :: matrix(nsun,nsun)
+    complex(fp), intent(in) :: matrix(nsun,nsun)
     
-    complex(real64) :: generator_times_matrix(nsun,nsun)
+    complex(fp) :: generator_times_matrix(nsun,nsun)
 
     generator_times_matrix = matmul(Generators(:,:,a),matrix)
     GetTraceWithGenerator  = GetTrace(generator_times_matrix)
@@ -396,12 +398,12 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 26.11.2018
   !! @version 1.0
-  pure elemental integer function GetKroneckerDelta(i,j)
+  pure elemental integer(int8) function GetKroneckerDelta(i,j)
     implicit none
     !> Index \f$i\f$
-    integer, intent(in) :: i
+    integer(int8), intent(in) :: i
     !> Index \f$j\f$
-    integer, intent(in) :: j
+    integer(int8), intent(in) :: j
 
     if(i==j) then
        GetKroneckerDelta = 1

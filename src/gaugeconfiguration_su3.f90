@@ -20,6 +20,9 @@ module gaugeconfiguration_su3
 
   public gaugeconfiguration
   
+  !> Module name
+  character(len=22), parameter, public ::  modulename='gaugeconfiguration_su3'
+  
   !>@brief Gauge configuration in temporal gauge
   !!@details Electric field is safe in lattice units as
   !!\f$\tilde E_{i,\vec{v}}=ga_ta_S(i)E_{i}(\vec{v})\f$
@@ -48,6 +51,12 @@ module gaugeconfiguration_su3
      procedure, public :: SetLink
      procedure, private:: GetEfield
      procedure, private:: SetEfield
+
+     ! Initialisation routines
+     procedure, public :: ColdInit
+
+     ! Gauss law deviation
+     procedure, public :: GetDeviationFromGausslaw
   end type GaugeConfiguration
 
 
@@ -215,4 +224,92 @@ contains ! Module procedures
     class(GaugeConfiguration), intent(inout) :: GaugeConf
     call HaloComm_CommunicateBoundary(GaugeConf%links)
   end subroutine CommunicateBoundary_Links
+
+  !>@brief Initialises the links with unit matrices and electric field with zeroes
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  pure subroutine ColdInit(GaugeConf)
+    use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+
+    integer(int64) :: LocalIndex
+    integer(int8)  :: i
+    complex(fp) :: UnitMatrix(nSUN,nSUN)
+    
+    call GaugeConf%Allocate
+
+    GaugeConf%Efield = 0
+    UnitMatrix = GetUnitMatrix(nSUN)
+    forall(i=1:size(GaugeConf%Links,3), LocalIndex=1:size(GaugeConf%Links,4))
+       GaugeConf%Links(:,:,i,LocalIndex) = UnitMatrix
+    end forall
+  end subroutine ColdInit
+
+  !> @brief Total deviation from Gauss-law of the total MPI-distributed configuration
+  !! @returns Total deviation from Gauss-law of the total MPI-distributed configuration
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 22.02.2019
+  !! @version 1.0
+  impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
+    use mpiinterface, only: intmpi, GetRealSendType
+    use mpi
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib,GetLocalIndex,&
+         GetLocalLatticeIndices_allocatable, GetNeib
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+
+    integer(intmpi) :: mpierr
+    real(fp) :: local_contribution
+
+    real(fp), dimension(ngen) :: efield, efield_neib
+    complex(fp), dimension(nsun,nsun) :: Mefield, Mefield_neib, derivative, Link_neib
+    
+    integer(int8)  :: i, a
+    integer(int64) :: is, neib, latticeindex
+    integer(int64), allocatable :: LocalLatticeIndices(:)
+
+    ! 1. Calculation of local contribution
+    local_contribution = 0
+    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+    do concurrent (is=1:size(LocalLatticeIndices))
+       LatticeIndex = LocalLatticeIndices(is)
+       do concurrent(i=1_int8:ndim)
+          efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
+          
+          neib = GetNeib(-i,LatticeIndex)
+          efield_neib = GaugeConf%GetEfield([1_int8:ngen],i,Neib)
+
+          Mefield = GetAlgebraMatrix(efield)
+          Mefield_neib = GetAlgebraMatrix(efield_neib)
+
+          Link_neib = GaugeConf%GetLink(i,Neib)
+
+          derivative = (Mefield &
+               - matmul(matmul(&
+               conjg(transpose(Link_Neib)),&
+               Mefield_neib),&
+               Link_neib))&
+               /GetLatticeSpacing(i)**2/GetLatticeSpacing(0)
+          do concurrent(a=1_int8:ngen)
+             local_contribution = local_contribution &
+                  + 2*Abs(Aimag(GetTraceWithGenerator(a,derivative)))
+          end do
+       end do
+    end do
+
+    ! 2. MPI-Sum over all partitions
+    call MPI_ALLREDUCE(&
+         local_contribution,&
+         GetDeviationFromGaussLaw,&
+         1_intmpi,&
+         GetRealSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetDeviationFromGaussLaw
 end module gaugeconfiguration_su3

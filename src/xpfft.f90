@@ -16,6 +16,7 @@
   !------------------------------------------------------------------------------
 module xpfft
   use, intrinsic :: iso_fortran_env
+  use precision, only: fp
   use mkl_cdft
   use lattice, only: ndim
   use mpiinterface, only: intmpi
@@ -139,8 +140,9 @@ contains
 
           status = DftiGetValueDM(desc,CDFT_LOCAL_NX,extension)
           status = DftiGetValueDM(desc,CDFT_LOCAL_X_START,xp_offset)
-          status = DftiSetValueDM(desc,DFTI_FORWARD_SCALE,product(GetLatticeSpacing([1_int8:ndim])))
-          status = DftiSetValueDM(desc,DFTI_BACKWARD_SCALE,1._real64/GetVolume())
+          status = DftiSetValueDM(desc,DFTI_FORWARD_SCALE,&
+               real(product(GetLatticeSpacing([1_int8:ndim])),real64))
+          status = DftiSetValueDM(desc,DFTI_BACKWARD_SCALE,real(1/GetVolume(),real64))
           status = DftiCommitDescriptorDM(desc)
 
           status = DftiGetValueDM(desc,CDFT_LOCAL_SIZE,localfftsize)
@@ -626,7 +628,7 @@ contains
     use precision, only: fp
     implicit none
     !> Fourier-transform input and output
-    complex(real64), intent(inout) :: data(:)
+    complex(fp), intent(inout) :: data(:)
 
     integer(int64) :: status
 

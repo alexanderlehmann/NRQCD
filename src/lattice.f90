@@ -160,7 +160,8 @@ contains
           call MPIstop('Total lattice size has to be integer-divisible by number of MPI-processes')
        end if
 
-       numdivisions = int(log(real(NumProcs(),fp))/log(2._fp),int8) !log2 of numprocs
+       numdivisions = int(log(real(NumProcs(),real64))/log(2._real64),int8) !log2 of numprocs
+
        if(2**numdivisions /= NumProcs()) then
           call MPIstop('Number of MPI-processes has to be a power of 2')
        end if
@@ -386,15 +387,17 @@ contains
   impure real(fp) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
-    use mpiinterface, only: NumProcs, intmpi
+    use mpiinterface, only: NumProcs, intmpi, MPIstop
     implicit none
 
     integer(int64) :: LocalLatticeindex, LatticeIndex
     real(fp)   :: norm2momentum,currentMax
     real(fp), allocatable :: maxmomenta(:)
 
-    integer(intmpi) :: mpierr
-
+    integer(intmpi) :: mpierr, sendtype
+    
+    character(len=100) :: errormessage
+    
     currentMax = 0
     do LocalLatticeIndex=1,LocalLatticeSize
        LatticeIndex = LocalLatticeIndices(LocalLatticeIndex)
@@ -404,9 +407,23 @@ contains
 
     ! Communicate all local maxima
     allocate(maxmomenta(NumProcs()))
+
+    select case(fp)
+    case(real32)
+       sendtype = MPI_REAL4
+    case(real64)
+       sendtype = MPI_REAL8
+    case(real128)
+       sendtype = MPI_REAL16
+    case default
+       errormessage = 'Error in FindMaxNorm2Momentum of '//modulename&
+            //': unsupported floating point precision.'
+       call MPISTOP(errormessage)
+    end select
+    
     call mpi_allgather(&
-         currentMax,1,MPI_DOUBLE,& ! Sending
-         maxmomenta,1,MPI_DOUBLE,& ! Recieving
+         currentMax,1,sendtype,& ! Sending
+         maxmomenta,1,sendtype,& ! Recieving
          MPI_COMM_WORLD,mpierr)
 
     FindMaxNorm2Momentum = maxval(maxmomenta)

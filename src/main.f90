@@ -41,6 +41,10 @@ program simulation
   integer(intmpi) :: mpierr
   
   call InitSimulation
+
+  call GaugeConf%ColdInit
+
+  print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw()
   
   call EndSimulation
 

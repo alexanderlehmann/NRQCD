@@ -17,5 +17,5 @@ module precision
 
   PUBLIC
   !> Floating number precision
-  integer(int8), parameter :: fp = real64
+  integer, parameter :: fp = real64
 end module precision

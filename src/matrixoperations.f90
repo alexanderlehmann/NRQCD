@@ -10,13 +10,15 @@
 !! UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
 !! @date
-!! 03.09.2018
+!! 22.02.2019
 !! @version
-!! 1.0
+!! 1.1
 ! REVISION HISTORY:
-! 03 09 2018
+! 03 09 2018 - Initial version
+! 22 02 2019 - Using precision-module
 module matrixoperations
-  USE,INTRINSIC :: ISO_FORTRAN_ENV ! defines kinds
+  use, intrinsic :: iso_fortran_env
+  use precision, only: fp
 
   implicit none
 
@@ -28,8 +30,8 @@ module matrixoperations
   end interface ExpAH
 
   interface FrobeniusNorm
-     module procedure FrobeniusNorm_cmplx64
-     module procedure FrobeniusNorm_real64
+     module procedure FrobeniusNorm_complex
+     module procedure FrobeniusNorm_real
   end interface FrobeniusNorm
 contains
   !> @brief
@@ -42,12 +44,12 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.11.2018
   !! @version 1.0
-  pure real(real64) function FrobeniusNorm_cmplx64(A)
+  pure real(fp) function FrobeniusNorm_complex(A)
     implicit none
-    complex(real64), intent(in) :: A(:,:)
+    complex(fp), intent(in) :: A(:,:)
 
-    FrobeniusNorm_cmplx64 = sqrt(sum(real(A*conjg(A),real64)))
-  end function FrobeniusNorm_Cmplx64
+    FrobeniusNorm_complex = sqrt(sum(real(A*conjg(A),fp)))
+  end function FrobeniusNorm_Complex
 
   !> @brief
   !! Frobenius-norm of a real matrix
@@ -59,12 +61,12 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 17.11.2018
   !! @version 1.0
-  pure real(real64) function FrobeniusNorm_real64(A)
+  pure real(fp) function FrobeniusNorm_real(A)
     implicit none
-    real(real64), intent(in) :: A(:,:)
+    real(fp), intent(in) :: A(:,:)
 
-     FrobeniusNorm_Real64 = sqrt(sum(A**2))
-  end function FrobeniusNorm_Real64
+     FrobeniusNorm_real = sqrt(sum(A**2))
+  end function FrobeniusNorm_real
   
   !> @brief
   !! Computes Kronecker product
@@ -79,11 +81,11 @@ contains
   pure function GetKronProd(A,B) result(AB)
     IMPLICIT NONE
     !> Matrix A
-    complex(real64), dimension (:,:), intent(in) :: A
+    complex(fp), dimension (:,:), intent(in) :: A
     !> Matrix B
-    complex(real64), dimension (:,:), intent(in) :: B
+    complex(fp), dimension (:,:), intent(in) :: B
     !> Kronecker product \f$A\otimes B\f$
-    complex(real64), dimension (size(A,1)*size(B,1),size(A,2)*size(B,2)) :: AB
+    complex(fp), dimension (size(A,1)*size(B,1),size(A,2)*size(B,2)) :: AB
     
     integer R,RA,RB,C,CA,CB,I,J !Assistants.
     RA = UBOUND(A,DIM = 1)      !Ascertain the upper bounds of the incoming arrays.
@@ -114,13 +116,13 @@ contains
   pure function GetTrace(matrix) result(trace)
     implicit none
     !> Matrix of which the trace is to be computed
-    complex(real64), intent(in) :: matrix(:,:)
+    complex(fp), intent(in) :: matrix(:,:)
     !> Trace
-    complex(real64)             :: trace
+    complex(fp)             :: trace
 
     integer :: i
 
-    trace = 0._real64
+    trace = 0._fp
     do i=1,size(matrix,1)
        trace = trace + matrix(i,i)
     end do
@@ -141,12 +143,12 @@ contains
     !> Size of the unit matrix
     integer, intent(in) :: n
     !> Unit matrix
-    complex(real64)           :: res(n,n)
+    complex(fp)           :: res(n,n)
 
     integer :: i
 
-    res = 0._real64
-    forall(i=1:n) res(i,i) = 1._real64
+    res = 0._fp
+    forall(i=1:n) res(i,i) = 1._fp
   end function GetUnitmatrix
 
   !> @brief
@@ -162,9 +164,9 @@ contains
   pure function GetHerm(matrix) result(res)
     implicit none
     !> Matrix
-    complex(real64), dimension(:,:),               intent(in) :: matrix
+    complex(fp), dimension(:,:),               intent(in) :: matrix
     !> Hermitian conjugate
-    complex(real64), dimension(size(matrix,1),size(matrix,2)) :: res
+    complex(fp), dimension(size(matrix,1),size(matrix,2)) :: res
 
     res = conjg(transpose(matrix))
   end function GetHerm
@@ -185,56 +187,56 @@ contains
   pure subroutine EigenH(A_, d, U, sort)
     implicit none
     !> Hermitian input \f$A\f$
-    complex(real64), intent(in)  :: A_(:,:)
+    complex(fp), intent(in)  :: A_(:,:)
     !> Eigen values
-    real(real64),    intent(out) :: d(size(A_,1))
+    real(fp),    intent(out) :: d(size(A_,1))
     !> Unitary transform which diagonalizes \f$A\f$
-    complex(real64), intent(out), optional :: U(size(A_,1),size(A_,1))
+    complex(fp), intent(out), optional :: U(size(A_,1),size(A_,1))
     !> If given, sorting of eigen-values performed according to \f$d_i>d_{i+1}\forall i\f$
     integer,  intent(in),  optional :: sort
 
-    complex(real64)  :: A(size(A_,1),size(A_,1))
+    complex(fp)  :: A(size(A_,1),size(A_,1))
     integer    :: n,p, q, j
-    Real(real64)     :: red, off, thresh
-    Real(real64)     :: t, delta, invc, s
-    Complex(real64)  :: x, y, Apq
-    Real(real64)     :: ev(size(A_,1),2)
+    Real(fp)     :: red, off, thresh
+    Real(fp)     :: t, delta, invc, s
+    Complex(fp)  :: x, y, Apq
+    Real(fp)     :: ev(size(A_,1),2)
 
     integer :: sweep
-    REAL(REAL64), parameter :: SYM_EPS=2._real64**(-103)
+    REAL(FP), parameter :: SYM_EPS=2._fp**(-103)
 
     n = size(A_,1)
 
     A = A_
     ev = 0
-    forall(p=1:n) ev(p,2) = real(A(p,p),real64)
+    forall(p=1:n) ev(p,2) = real(A(p,p),fp)
     d = ev(:,2)
 
     U = GetUnitmatrix(n)
 
-    red = .04_real64/n**4
+    red = .04_fp/n**4
 
     do sweep = 1, 50
-       off = 0._real64
+       off = 0._fp
        do q = 2, n
           do p = 1, q - 1
-             off = off + real(A(p,q)*Conjg(A(p,q)),real64)
+             off = off + real(A(p,q)*Conjg(A(p,q)),fp)
           end do
        end do
        if(  off .le. SYM_EPS ) exit
        
-       thresh = 0._real64
+       thresh = 0._fp
        if( sweep .lt. 4 ) thresh = off*red
 
        do q = 2, n
           do p = 1, q - 1
              Apq = A(p,q)
-             off = real(Apq*Conjg(Apq),real64)
+             off = real(Apq*Conjg(Apq),fp)
              if( (sweep .gt. 4) .and. (off .lt. SYM_EPS*(ev(p,2)**2 + ev(q,2)**2)) ) then
-                A(p,q) = 0._real64
+                A(p,q) = 0._fp
              else if( off .gt. thresh ) then
-                t = .5_real64*(ev(p,2) - ev(q,2))
-                t = 1._real64/(t + sign(sqrt(t**2 + off), t))
+                t = .5_fp*(ev(p,2) - ev(q,2))
+                t = 1._fp/(t + sign(sqrt(t**2 + off), t))
 
                 delta = t*off
                 ev(p,1) = ev(p,1) + delta
@@ -242,9 +244,9 @@ contains
                 ev(q,1) = ev(q,1) - delta
                 ev(q,2) = d(q) + ev(q,1)
 
-                invc = sqrt(delta*t + 1._real64)
+                invc = sqrt(delta*t + 1._fp)
                 s = t/invc
-                t = delta/(invc + 1._real64)
+                t = delta/(invc + 1._fp)
 
                 do j = 1, p - 1
                    x = A(j,p)
@@ -267,7 +269,7 @@ contains
                    A(q,j) = y - s*(Conjg(Apq)*x + t*y)
                 end do
 
-                A(p,q) = 0._real64
+                A(p,q) = 0._fp
 
                 do j = 1, n
                    x = U(p,j)
@@ -323,22 +325,22 @@ contains
   pure subroutine EigenC(A_, d, U, sort)
     implicit none
     !> Input \f$A\f$
-    complex(real64), intent(in)  :: A_(:,:)
+    complex(fp), intent(in)  :: A_(:,:)
     !> Eigen values
-    complex(real64), intent(out) :: d(size(A_,1))
+    complex(fp), intent(out) :: d(size(A_,1))
     !> Unitary transform which diagonalizes \f$A\f$
-    complex(real64), intent(out), optional :: U(size(A_,1),size(A_,1))
+    complex(fp), intent(out), optional :: U(size(A_,1),size(A_,1))
     !> If given, sorting of eigen-values performed according to \f$d_i>d_{i+1}\forall i\f$
     integer,  intent(in),  optional :: sort
 
-    complex(real64)  :: A(size(A_,1),size(A_,1))
+    complex(fp)  :: A(size(A_,1),size(A_,1))
 
     integer  :: p, q, j, n
-    Real(real64)    :: red, off, thresh, norm
-    Complex(real64) :: delta, t, s, invc, sx, sy, tx, ty
-    Complex(real64) :: x, y
-    Complex(real64) :: ev(size(A_,1),2)
-    REAL(REAL64), parameter :: EPS=2._real64**(-103)
+    Real(fp)    :: red, off, thresh, norm
+    Complex(fp) :: delta, t, s, invc, sx, sy, tx, ty
+    Complex(fp) :: x, y
+    Complex(fp) :: ev(size(A_,1),2)
+    REAL(FP), parameter :: EPS=2._fp**(-103)
     integer :: sweep
 
     n = size(A_,1)
@@ -350,7 +352,7 @@ contains
 
     U = GetUnitmatrix(n)
 
-    red = .01_real64/n**4
+    red = .01_fp/n**4
 
     do sweep = 1, 50
        off = 0
@@ -373,7 +375,7 @@ contains
                 A(q,p) = 0
              else if( off .gt. thresh ) then
                 delta = A(p,q)*A(q,p)
-                x = .5_real64*(ev(p,2) - ev(q,2))
+                x = .5_fp*(ev(p,2) - ev(q,2))
                 y = sqrt(x**2 + delta)
                 t = x - y
                 s = x + y
@@ -470,12 +472,12 @@ contains
   pure function ArgLogU(U) result(res)
     implicit none
     !> Group element
-    complex(real64), dimension(:,:),     intent(in) :: U
+    complex(fp), dimension(:,:),     intent(in) :: U
     !> Algebra element
-    complex(real64), dimension(size(U,1),size(U,2)) :: res
+    complex(fp), dimension(size(U,1),size(U,2)) :: res
 
-    complex(real64), dimension(size(U,1)) :: ev
-    complex(real64), dimension(size(U,1),size(U,2)) :: S
+    complex(fp), dimension(size(U,1)) :: ev
+    complex(fp), dimension(size(U,1),size(U,2)) :: S
 
     integer :: i
 
@@ -483,8 +485,8 @@ contains
     call EigenC(U,ev,S)
 
     ! Complex logarithm via atan2
-    res = 0._real64
-    forall(i=1:size(ev)) res(i,i) = ATAN2(aimag(ev(i)),real(ev(i),real64))
+    res = 0._fp
+    forall(i=1:size(ev)) res(i,i) = ATAN2(aimag(ev(i)),real(ev(i),fp))
 
     ! Multiply similarity transform matrices to the result
     res = matmul(matmul(GetHerm(S),res),S)
@@ -506,12 +508,12 @@ contains
   pure function LogU(U) result(res)
     implicit none
     !> Group element
-    complex(real64), dimension(:,:),     intent(in) :: U
+    complex(fp), dimension(:,:),     intent(in) :: U
     !> Algebra element
-    complex(real64), dimension(size(U,1),size(U,2)) :: res
+    complex(fp), dimension(size(U,1),size(U,2)) :: res
 
-    complex(real64), dimension(size(U,1)) :: ev
-    complex(real64), dimension(size(U,1),size(U,2)) :: S
+    complex(fp), dimension(size(U,1)) :: ev
+    complex(fp), dimension(size(U,1),size(U,2)) :: S
 
     integer :: i
 
@@ -519,8 +521,8 @@ contains
     call EigenC(U,ev,S)
 
     ! Complex logarithm via atan2
-    res = 0._real64
-    forall(i=1:size(ev)) res(i,i) = cmplx(0,ATAN2(aimag(ev(i)),real(ev(i),real64)),real64)
+    res = 0._fp
+    forall(i=1:size(ev)) res(i,i) = cmplx(0,ATAN2(aimag(ev(i)),real(ev(i),fp)),fp)
 
     ! Multiply similarity transform matrices to the result
     res = matmul(matmul(GetHerm(S),res),S)
@@ -543,20 +545,20 @@ contains
   pure function ExpAH_diaglibrary(A_) result(res)
     implicit none
     !> Skew-hermitian input A
-    complex(real64), dimension(:,:), intent(in) :: A_
+    complex(fp), dimension(:,:), intent(in) :: A_
     !> Exponential of A
-    complex(real64), dimension(size(A_,1),size(A_,2)) :: res
+    complex(fp), dimension(size(A_,1),size(A_,2)) :: res
 
-    real(real64),    dimension(size(A_,1)) :: ev
-    complex(real64), dimension(size(A_,1),size(A_,2)) :: s
+    real(fp),    dimension(size(A_,1)) :: ev
+    complex(fp), dimension(size(A_,1),size(A_,2)) :: s
     integer :: i
 
     ! Eigen-decomposition with U = S^+ ev S
-    call EigenH(A_*cmplx(0._real64,-1._real64,real64),ev,S)
+    call EigenH(A_*cmplx(0._fp,-1._fp,fp),ev,S)
 
     ! Exponential
-    res = 0._real64
-    forall(i=1:size(A_,1)) res(i,i) = exp(cmplx(0._real64,ev(i),real64))
+    res = 0._fp
+    forall(i=1:size(A_,1)) res(i,i) = exp(cmplx(0._fp,ev(i),fp))
 
     ! Multiply similarity transform matrices to the result
     res = matmul(matmul(GetHerm(S),res),S)
@@ -565,9 +567,9 @@ contains
   !function ExpAH_mkl(A_) result(res)
   !  implicit none
   !  !> Skew-hermitian input A
-  !  complex(real64), dimension(:,:), intent(in) :: A_
+  !  complex(fp), dimension(:,:), intent(in) :: A_
   !  !> Exponential of A
-  !  complex(real64), dimension(size(A_,1),size(A_,2)) :: res
+  !  complex(fp), dimension(size(A_,1),size(A_,2)) :: res
   !
   !  !.. External Subroutines ..
   !  EXTERNAL ZHEEVD, ZCOPY, ZSCAL, ZGEMM
@@ -582,12 +584,12 @@ contains
   !  
   !  !.. Local Arrays ..
   !  INTEGER          IWORK( LWMAX )
-  !  REAL(REAL64),    allocatable :: ev( : )
-  !  REAL(REAL64) :: RWORK( LWMAX )
-  !  COMPLEX(REAL64), allocatable :: A( :,: )
-  !  complex(real64) :: WORK( LWMAX )
+  !  REAL(FP),    allocatable :: ev( : )
+  !  REAL(FP) :: RWORK( LWMAX )
+  !  COMPLEX(FP), allocatable :: A( :,: )
+  !  complex(fp) :: WORK( LWMAX )
   !  
-  !  complex(real64), allocatable :: S(:,:)
+  !  complex(fp), allocatable :: S(:,:)
   !
   !  integer :: i
   !  
@@ -606,15 +608,15 @@ contains
   !  !--** END **-- Allocation
   !
   !  !--**START**-- Transforming skew-hermitian input to hermitian matrix:A -> -i.A
-  !  A = A_*cmplx(0._real64,-1._real64,real64)
+  !  A = A_*cmplx(0._fp,-1._fp,fp)
   !  !--** END **-- Transforming skew-hermitian input to hermitian matrix:A -> -i.A
   !
   !  ! Diagonalisation for hermitian matrix -i.A
   !  call zheevd('V','L',N,A,LDA,ev, WORK, LWORK, RWORK,LRWORK, IWORK, LIWORK, INFO )
   !
   !  ! Exponentiation of eigenvalues of A = i.(-i.A)
-  !  res = 0._real64
-  !  forall(i=1:N) res(i,i) = exp(cmplx(0._real64,ev(i),real64))
+  !  res = 0._fp
+  !  forall(i=1:N) res(i,i) = exp(cmplx(0._fp,ev(i),fp))
   !
   !  S = A
   !  !--**START**-- Inverse similar transform: exp(A) = exp(S.A.S†) = S.exp(A).S†

@@ -40,10 +40,6 @@ module halocomm
   integer(int64), allocatable :: RecvList(:,:)
   !> Number of neighbours
   integer(intmpi) :: neibs=-1
-  !> Type for sending of real variables
-  integer(intmpi) :: sendtype_real=-1
-  !> Type for sending of complex variables
-  integer(intmpi) :: sendtype_complex=-1
   
   !> @brief Communication of boundary values
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -88,22 +84,6 @@ contains
 
        ! Initialise list of lattice points which are to be recieved from which other process
        call InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
-
-       ! Select proper mpi send types for real and complex variables
-       select case(fp)
-       case(real32)
-          sendtype_real    = MPI_REAL4
-          sendtype_complex = MPI_COMPLEX8
-       case(real64)
-          sendtype_real    = MPI_REAL8
-          sendtype_complex = MPI_COMPLEX16
-       case(real128)
-          sendtype_real    = MPI_REAL16
-          sendtype_complex = MPI_COMPLEX32
-       case default
-          errormessage = 'Error in init of '//modulename//': unsupported floating point precision.'
-          call MPISTOP(errormessage)
-       end select
        
        ! DONE
        IsInitialised = .TRUE.
@@ -247,7 +227,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc, GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:)
 
@@ -295,12 +275,12 @@ contains
             buffer(&            ! What to send ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to send
+            GetRealSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to recieve
+            GetRealSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -329,7 +309,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:)
 
@@ -377,12 +357,12 @@ contains
             buffer(&            ! What to send ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to send
+            GetRealSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to recieve
+            GetRealSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -411,7 +391,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:,:)
 
@@ -459,12 +439,12 @@ contains
             buffer(&            ! What to send ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to send
+            GetRealSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to recieve
+            GetRealSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -493,7 +473,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:,:,:)
 
@@ -541,12 +521,12 @@ contains
             buffer(&            ! What to send ...
             1,1,1,1),&          ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to send
+            GetRealSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1,1,1),&          ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_real,&     ! What type to recieve
+            GetRealSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -575,7 +555,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:)
 
@@ -623,12 +603,12 @@ contains
             buffer(&            ! What to send ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to send
+            GetComplexSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1),&                ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to recieve
+            GetComplexSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -657,7 +637,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:)
 
@@ -705,12 +685,12 @@ contains
             buffer(&            ! What to send ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to send
+            GetComplexSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1),&              ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to recieve
+            GetComplexSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -739,7 +719,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:,:)
 
@@ -787,12 +767,12 @@ contains
             buffer(&            ! What to send ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to send
+            GetComplexSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1,1),&            ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to recieve
+            GetComplexSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
@@ -821,7 +801,7 @@ contains
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetLocalIndex
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:,:,:)
 
@@ -869,12 +849,12 @@ contains
             buffer(&            ! What to send ...
             1,1,1,1),&          ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to send
+            GetComplexSendType(),& ! What type to send
             dest, sendtag,&     ! Destination and sendtag
             buffer(&            ! What to recieve ...
             1,1,1,1),&          ! ... and it's first index
             buffersize,&        ! How many points
-            sendtype_complex,&  ! What type to recieve
+            GetComplexSendType(),& ! What type to recieve
             src,  recvtag,&     ! Source and recvtag
             mpi_comm_world,&    ! Communicator
             status, mpierr)     ! Status and error-code
