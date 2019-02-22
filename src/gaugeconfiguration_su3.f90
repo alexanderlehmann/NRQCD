@@ -37,6 +37,11 @@ module gaugeconfiguration_su3
      ! Allocation and deallocation
      procedure, public :: Allocate
      procedure, public :: Deallocate
+
+     ! Boundary value communication
+     procedure, public :: CommunicateBoundary
+     procedure, public :: CommunicateBoundary_Links
+     procedure, public :: CommunicateBoundary_Efield
      
      ! Return and setting of member variables
      procedure, public :: GetLink
@@ -79,12 +84,12 @@ contains ! Module procedures
     if(allocated(GaugeConf%efield)) deallocate(GaugeConf%efield)
   end subroutine Deallocate
 
-  !> @brief Access routine to links
-  !! @returns Link at given index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 22.02.2019
-  !! @version 1.0
+  !>@brief Access routine to links
+  !!@returns Link at given index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
   pure function GetLink(GaugeConf,i,LatticeIndex)
     use matrixoperations, only: GetUnitmatrix
     use lattice, only: GetLocalIndex
@@ -104,11 +109,11 @@ contains ! Module procedures
     end if
   end function GetLink
 
-  !> @brief Setting routine for links
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 22.02.2019
-  !! @version 1.0
+  !>@brief Setting routine for links
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
   pure subroutine SetLink(GaugeConf,i,LatticeIndex,Link)
     use lattice, only: GetLocalIndex
     implicit none
@@ -122,4 +127,43 @@ contains ! Module procedures
     complex(fp),    intent(in) :: Link(nSUN,nSUN)
     GaugeConf%Links(:,:,i,GetLocalIndex(LatticeIndex)) = Link
   end subroutine SetLink
+
+  !>@brief Communication routine for boundary values
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  impure subroutine CommunicateBoundary(GaugeConf)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    call GaugeConf%CommunicateBoundary_Links
+    call GaugeConf%CommunicateBoundary_Efield
+  end subroutine CommunicateBoundary
+  
+  !>@brief Communication routine for boundary values
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  impure subroutine CommunicateBoundary_Efield(GaugeConf)
+    use HaloComm, only: HaloComm_CommunicateBoundary => CommunicateBoundary
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    call HaloComm_CommunicateBoundary(GaugeConf%efield)
+  end subroutine CommunicateBoundary_Efield
+  
+  !>@brief Communication routine for boundary values
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  impure subroutine CommunicateBoundary_Links(GaugeConf)
+    use HaloComm, only: HaloComm_CommunicateBoundary => CommunicateBoundary
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    call HaloComm_CommunicateBoundary(GaugeConf%links)
+  end subroutine CommunicateBoundary_Links
 end module gaugeconfiguration_su3
