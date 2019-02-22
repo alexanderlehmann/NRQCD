@@ -9,6 +9,7 @@ program simulation
   use halocomm
   use xpfft
   use gaugeconfiguration_su3
+  use mpi
   implicit none
 
   ! Simulation parameters
@@ -26,6 +27,9 @@ program simulation
   real(fp)   :: TimeRange
   !real(fp)  :: Wilsoncoeffs(nWilsonCoeffs)
 
+  ! Physical fields
+  type(GaugeConfiguration) :: GaugeConf
+  
   complex(fp), allocatable :: testcomm(:)
 
 
@@ -33,6 +37,8 @@ program simulation
   integer(intmpi) :: proc
   integer(int64), allocatable :: localindices(:)
   complex(fp), allocatable :: data(:)
+
+  integer(intmpi) :: mpierr
   
   call InitSimulation
   
@@ -40,16 +46,13 @@ program simulation
 
 contains
   
-  !> @brief
-  !! Initialisation of the simulation
+  !> @brief Initialisation of the simulation
   !! @details
   !! MPI\n
   !! Lattice-module\n
   !! Random number generator\n
   !! etc.
-  !! @author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 15.02.2019
   !! @version 1.0
@@ -107,6 +110,11 @@ contains
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
   end subroutine InitSimulation
 
+  !> @brief Ending of the simulation
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 15.02.2019
+  !! @version 1.0
   subroutine EndSimulation
     use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
     use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule

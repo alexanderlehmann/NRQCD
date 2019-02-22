@@ -29,9 +29,9 @@ module gaugeconfiguration_su3
   !!@version 1.0
   type GaugeConfiguration
      !> Gauge links \f$U_\mu(x)\f$
-     complex(fp), allocatable, private :: links(:,:,:,:)
+     complex(fp), allocatable, public :: links(:,:,:,:)
      !> Electric field
-     real(fp),    allocatable, private :: efield(:,:,:)
+     real(fp),    allocatable, public :: efield(:,:,:)
      
    contains ! Member functions
      ! Allocation and deallocation
@@ -46,6 +46,8 @@ module gaugeconfiguration_su3
      ! Return and setting of member variables
      procedure, public :: GetLink
      procedure, public :: SetLink
+     procedure, private:: GetEfield
+     procedure, private:: SetEfield
   end type GaugeConfiguration
 
 
@@ -127,6 +129,53 @@ contains ! Module procedures
     complex(fp),    intent(in) :: Link(nSUN,nSUN)
     GaugeConf%Links(:,:,i,GetLocalIndex(LatticeIndex)) = Link
   end subroutine SetLink
+
+  !>@brief Access routine to the electric field
+  !!@returns Efield at given index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  pure elemental function GetEfield(GaugeConf,a,i,LatticeIndex)
+    use lattice, only: GetLocalIndex
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Generator index
+    integer(int8),  intent(in) :: a
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+    !> Efield
+    real(fp) :: GetEfield
+    if(i/=0) then
+       GetEfield = GaugeConf%Efield(a,i,GetLocalIndex(LatticeIndex))
+    else
+       GetEfield = 0._fp
+    end if
+  end function GetEfield
+
+  !>@brief Setting routine for links
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  pure subroutine SetEfield(GaugeConf,a,i,LatticeIndex,Efield)
+    use lattice, only: GetLocalIndex
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Generator index
+    integer(int8),  intent(in) :: a
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+    !> Value for link variable
+    real(fp),       intent(in) :: Efield
+    GaugeConf%Efield(a,i,GetLocalIndex(LatticeIndex)) = Efield
+  end subroutine SetEfield
 
   !>@brief Communication routine for boundary values
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
