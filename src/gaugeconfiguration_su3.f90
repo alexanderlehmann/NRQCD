@@ -29,9 +29,9 @@ module gaugeconfiguration_su3
   !!@version 1.0
   type GaugeConfiguration
      !> Gauge links \f$U_\mu(x)\f$
-     complex(fp), allocatable, public :: links(:,:,:,:)
+     complex(fp), allocatable, private :: links(:,:,:,:)
      !> Electric field
-     real(fp),    allocatable, public :: efield(:,:,:)
+     real(fp),    allocatable, private :: efield(:,:,:)
      
    contains ! Member functions
      ! Allocation and deallocation
