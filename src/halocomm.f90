@@ -3,11 +3,11 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: halocomm
-!> @brief Communication of halo values
-!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief Communication of halo values
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 17.02.2019
-!! @version 1.0
+!!@date 17.02.2019
+!!@version 1.0
 ! REVISION HISTORY:
 ! 17 02 2019 - Initial version
 !----------------------------------------------------------------------
@@ -41,11 +41,11 @@ module halocomm
   !> Number of neighbours
   integer(intmpi) :: neibs=-1
   
-  !> @brief Communication of boundary values
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Communication of boundary values
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   interface CommunicateBoundary
      ! ..--** REAL **--..
      module procedure CommunicateBoundary_real_rank1
@@ -60,11 +60,11 @@ module halocomm
      module procedure CommunicateBoundary_complex_rank4
   end interface CommunicateBoundary
 contains
-  !> @brief Initialises module
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises module
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: mpistop
@@ -90,11 +90,11 @@ contains
     end if
   end subroutine InitModule
   
-  !> @brief Checks previous necessary initialisations
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Checks previous necessary initialisations
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
     use lattice, only: IsLatticeInitialised => IsModuleInitialised, latticename => modulename
@@ -109,11 +109,11 @@ contains
   end subroutine CheckObligatoryInitialisations
   
   !>@brief Returns, if module is initialised
-  !! @returns module's initialisation status
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns module's initialisation status
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure logical function IsModuleInitialised()
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -121,11 +121,11 @@ contains
   end function IsModuleInitialised
 
   !>@brief Initialises list of processes and points which send to this process
-  !! @returns list of processes and points which send to this process
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns list of processes and points which send to this process
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
     use, intrinsic :: iso_fortran_env
     use lattice, only: GetLocalLatticeIndices_includingHalo_Allocatable, GetProc
@@ -219,10 +219,10 @@ contains
   end subroutine InitSendRecvLists
 
   !>@brief Communication of 1D-array with real entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_real_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -301,10 +301,10 @@ contains
   end subroutine CommunicateBoundary_real_rank1
 
   !>@brief Communication of 2D-array with real entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_real_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -383,10 +383,10 @@ contains
   end subroutine CommunicateBoundary_real_rank2
 
   !>@brief Communication of 3D-array with real entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_real_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -465,10 +465,10 @@ contains
   end subroutine CommunicateBoundary_real_rank3
 
   !>@brief Communication of 4D-array with real entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_real_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -547,10 +547,10 @@ contains
   end subroutine CommunicateBoundary_real_rank4
 
   !>@brief Communication of 1D-array with complex entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_complex_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -629,10 +629,10 @@ contains
   end subroutine CommunicateBoundary_complex_rank1
 
   !>@brief Communication of 2D-array with complex entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_complex_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -711,10 +711,10 @@ contains
   end subroutine CommunicateBoundary_complex_rank2
 
   !>@brief Communication of 3D-array with complex entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_complex_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -793,10 +793,10 @@ contains
   end subroutine CommunicateBoundary_complex_rank3
 
   !>@brief Communication of 4D-array with complex entries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 18.02.2019
-  !! @version 1.0
+  !!@date 18.02.2019
+  !!@version 1.0
   impure subroutine CommunicateBoundary_complex_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi

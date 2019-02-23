@@ -3,16 +3,11 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: su2
-!> @brief
-!! SU(2) gauge group
-!! @author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!>@brief SU(2) gauge group
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
-!! 22.02.2019
-!! @version
-!! 1.2
+!!@date 22.02.2019
+!!@version 1.2
 ! REVISION HISTORY:
 ! 14 07 2018 - Initial Version
 ! 11 01 2019 - Added functions
@@ -39,8 +34,8 @@ module su2
   !> Number of generators of the gauge group
   integer(int8),parameter,public :: ngen = nsun**2-1
 
-  !> @brief SU(2)-generators aka Pauli-matrices
-  !! @details
+  !>@brief SU(2)-generators aka Pauli-matrices
+  !!@details
   !! Pauli-matrices times \f$1/2\f$ following the convention
   !! \f$\Tr(T^a\cdot T^b)=2\delta_{a,b}\f$:
   !! \f{align*}{
@@ -62,13 +57,13 @@ module su2
   !! 0 & -1
   !! \end{pmatrix}
   !! \f}
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
+  !!@date
   !! 14.07.2018
-  !! @version
+  !!@version
   !! 1.0
   complex(fp), dimension(nsun,nsun,1:ngen), parameter, public :: &
        Generators = reshape(&
@@ -83,29 +78,29 @@ module su2
        cmplx(00,00,fp),        cmplx(-0.5_fp,00,fp)&
        ],shape=[nsun,nsun,ngen])
 
-    !> @brief Exponential from Lie-algebra to Lie-group
-  !! @returns
+    !>@brief Exponential from Lie-algebra to Lie-group
+  !!@returns
   !! Matrix exponential from su(N)-Lie-algebra to SU(N)-Lie-group
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 14.07.2018
-  !! @version 1.0
+  !!@date 14.07.2018
+  !!@version 1.0
   interface GetGroupExp
      module procedure GetGroupExp_fromAlgebraCoordinates
      module procedure GetGroupExp_fromAlgebraMatrix
   end interface GetGroupExp
 contains
-  !> @brief
+  !>@brief
   !! Returns the i'th generator
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 14.07.2018
-  !! @version 1.0
-  !! @returns
+  !!@date 14.07.2018
+  !!@version 1.0
+  !!@returns
   !! i'th generator of the SU(N)-Lie-group
   pure function GetGenerator(i) result(res)
     implicit none
@@ -123,18 +118,18 @@ contains
   
   ! ..--** Auxiliary Mathematical Routines **--..
 
-  !> @brief
+  !>@brief
   !! Wraps \f$\mathfrak{su}(N)\f$-Lie-algebra parameters back to first branch
-  !! @details
+  !!@details
   !! The wrapping is performed is such a way that the result still corresponds to the same
   !! Lie-group element. Because this is specific to the considered gauge group, it has to be
   !! done in the following way:
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure function GetWrappedAlgebraCoordinates(input)
     use mathconstants, only: pi
     use matrixoperations, only: EigenH, GetHerm
@@ -173,20 +168,20 @@ contains
     forall(a=1:ngen) GetWrappedAlgebraCoordinates(a) = GetAlgebraCoordinate(a,algebra)
   end function GetWrappedAlgebraCoordinates
 
-  !> @brief
+  !>@brief
   !! Returns matrix-exponential with real
   !! \f$\mathfrak{su}(N)\f$-coordinates
-  !! @details
+  !!@details
   !! Computes \f$\exp(\text{i}\alpha_a T^a)\f$
   !! for real input \f$\vec{\alpha}\f$
-  !! @returns
+  !!@returns
   !! Exponential \f$\exp\left(\text{i}\alpha_a T^a\right)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure function GetGroupExp_fromAlgebraCoordinates(input) result(res)
     implicit none
     !> \f$\mathfrak{su}(N)\f$-coordinates \f$\alpha_a\f$
@@ -201,17 +196,17 @@ contains
     res = GetGroupExp_fromAlgebraMatrix(input_times_generators)
   end function GetGroupExp_fromAlgebraCoordinates
 
-  !> @brief
+  !>@brief
   !! Returns matrix-exponential for given
   !! \f$\mathfrak{su}(N)\f$-Lie-algebra element
-  !! @returns
+  !!@returns
   !! Exponential \f$\exp\left(\text{i} A\right)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure function GetGroupExp_fromAlgebraMatrix(input) result(res)
     use matrixoperations, only: ExpAH
     implicit none
@@ -228,17 +223,17 @@ contains
     res = ExpAH(A)
   end function GetGroupExp_fromAlgebraMatrix
 
-  !> @brief
+  !>@brief
   !! Returns
   !! \f$\mathfrak{su}(N)\f$-Lie-algebra element \f$A=\alpha^aT^a\f$
-  !! @returns
+  !!@returns
   !! \f$A=\alpha^aT^a\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure function GetAlgebraMatrix(AlgebraCoordinates) result(res)
     implicit none
     !> \f$\mathfrak{su}(N)\f$-Lie-algebra coordinates \f$\alpha^a\f$
@@ -255,21 +250,21 @@ contains
     end do !a
   end function GetAlgebraMatrix
 
-  !> @brief
+  !>@brief
   !! Returns matrix-logarithm for given
   !! \f$\mathfrak{su}(N)\f$-Lie-algebra element to SU(N)-Lie-group
-  !! @details
+  !!@details
   !! The output is the hermitian \f$\mathfrak{su}(N)\f$-Lie-algebra
   !! element \f$A\f$
   !! instead of the direct logarithm \f$\log\exp(iA)=iA\f$
-  !! @returns
+  !!@returns
   !! Logarithm \f$\log_{\text{SU(N)}}(G)=\log\exp(iA)=iA\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure function GetGroupLog(input) result(res)
     use matrixoperations, only: ArgLogU
     implicit none
@@ -288,19 +283,19 @@ contains
     forall(a=1:ngen) res(a) = GetAlgebraCoordinate(a,LogInput)
   end function GetGroupLog
 
-  !> @brief
+  !>@brief
   !! Returns \f$2\Re\Tr(T^a\cdot M)\f$
-  !! @details
+  !!@details
   !! This function is the scalar product with a generator
   !! and thus gives the group parameter
-  !! @returns
+  !!@returns
   !! \f$2\Re\Tr(T^a\cdot M)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 28.08.2018
-  !! @version 1.0
+  !!@date 28.08.2018
+  !!@version 1.0
   pure real(fp) function GetAlgebraCoordinate(a,matrix)
     use matrixoperations, only: GetTrace
     implicit none
@@ -311,16 +306,16 @@ contains
     GetAlgebraCoordinate = 2._fp*real(GetTraceWithGenerator(a,matrix),fp)
   end function GetAlgebraCoordinate
   
-  !> @brief
+  !>@brief
   !! Returns \f$\Tr(T^a\cdot M)\f$
-  !! @returns
+  !!@returns
   !! \f$\Tr(T^a\cdot M)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 14.01.2019
-  !! @version 1.0
+  !!@date 14.01.2019
+  !!@version 1.0
   pure complex(fp) function GetTraceWithGenerator(a,matrix)
     use matrixoperations, only: GetTrace
     implicit none
@@ -335,16 +330,16 @@ contains
     GetTraceWithGenerator  = GetTrace(generator_times_matrix)
   end function GetTraceWithGenerator
 
-  !> @brief
+  !>@brief
   !! Kronecker-Delta
-  !! @returns
+  !!@returns
   !! Kronecker-Delta \f$\delta_{i,j}\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 26.11.2018
-  !! @version 1.0
+  !!@date 26.11.2018
+  !!@version 1.0
   pure elemental integer(int8) function GetKroneckerDelta(i,j)
     implicit none
     !> Index \f$i\f$

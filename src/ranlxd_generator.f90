@@ -3,17 +3,17 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: ranlxd_generator
-!> @brief Ranlux-module from Lüscher
-!! @details
+!>@brief Ranlux-module from Lüscher
+!!@details
 !! See the notes\n
 !! User's guide for ranlxs and ranlxd [F90 programs] (December 1997)\n
 !! Double precision implementation of the random number generator ranlux (December 1997)
-!! @author
+!!@author
 !! Martin Lüscher <luscher@mail.desy.de>\n
 !! Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 15.12.1997 (03.09.2018)
-!! @version 2.1a
+!!@date 15.12.1997 (03.09.2018)
+!!@version 2.1a
 ! REVISION HISTORY:
 ! 15 12 1997 - Version from Martin Lüscher
 ! 03 09 2018 - Small adjustments for modern fortran
@@ -31,12 +31,12 @@ module ranlxd_generator
   real(real64),dimension(0:11),save,private :: xdbl
 
 contains
-  !> @brief Error messages
-  !! @author Martin Lüscher <luscher@mail.desy.de>\n
+  !>@brief Error messages
+  !!@author Martin Lüscher <luscher@mail.desy.de>\n
   !! Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 15.12.1997 (03.09.2018)
-  !! @version 2.1a
+  !!@date 15.12.1997 (03.09.2018)
+  !!@version 2.1a
   impure subroutine error(no)
     use iso_fortran_env
     !> Number of the error message
@@ -65,10 +65,10 @@ contains
     stop "Program aborted"
   end subroutine error
 
-  !> @brief Updates the pseudo-random number generator
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Updates the pseudo-random number generator
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   impure subroutine update()
 
     integer(int64) :: k,kmax
@@ -209,10 +209,10 @@ contains
 
   end subroutine update
 
-  !> @brief Defines constants in initialisation step
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Defines constants in initialisation step
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   impure subroutine define_constants()
 
     integer(int64) :: k
@@ -244,10 +244,10 @@ contains
 
   end subroutine define_constants
 
-  !> @brief Initialises Ranlux with given level and seed
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Initialises Ranlux with given level and seed
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   impure subroutine ranlxd_init(level,seed)
     !> Level for Ranlux
     integer(int64),intent(in) :: level
@@ -316,10 +316,10 @@ contains
 
   end subroutine ranlxd_init
 
-  !> @brief Draws a uniformly distributed real pseudo-random number with Ranlux
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Draws a uniformly distributed real pseudo-random number with Ranlux
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   impure subroutine ranlxd(r)
 
     real(real64),dimension(:),intent(out) :: r
@@ -348,10 +348,10 @@ contains
 
   end subroutine ranlxd
 
-  !> @brief Gets the state of the pseudo-random number generator (Ranlux)
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Gets the state of the pseudo-random number generator (Ranlux)
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   pure subroutine ranlxd_get(state)
 
     integer(int64),dimension(:),intent(out) :: state
@@ -381,10 +381,10 @@ contains
 
   end subroutine ranlxd_get
 
-  !> @brief Resets the state of the pseudo-random number generator (Ranlux)
-  !! @author Martin Lüscher <luscher@mail.desy.de>
-  !! @date 15.12.1997
-  !! @version 2.1
+  !>@brief Resets the state of the pseudo-random number generator (Ranlux)
+  !!@author Martin Lüscher <luscher@mail.desy.de>
+  !!@date 15.12.1997
+  !!@version 2.1
   impure subroutine ranlxd_reset(state)
 
     integer(int64),dimension(:),intent(in) :: state

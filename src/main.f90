@@ -44,22 +44,22 @@ program simulation
 
   call GaugeConf%ColdInit
 
-  print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw()
+  print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(), GaugeConf%GetEnergy()
   
   call EndSimulation
 
 contains
   
-  !> @brief Initialisation of the simulation
-  !! @details
+  !>@brief Initialisation of the simulation
+  !!@details
   !! MPI\n
   !! Lattice-module\n
   !! Random number generator\n
   !! etc.
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 15.02.2019
-  !! @version 1.0
+  !!@date 15.02.2019
+  !!@version 1.0
   impure subroutine InitSimulation
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -114,11 +114,11 @@ contains
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
   end subroutine InitSimulation
 
-  !> @brief Ending of the simulation
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Ending of the simulation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 15.02.2019
-  !! @version 1.0
+  !!@date 15.02.2019
+  !!@version 1.0
   subroutine EndSimulation
     use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
     use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule

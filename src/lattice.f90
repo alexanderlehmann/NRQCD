@@ -3,11 +3,11 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: lattice
-!> @brief Lattice index, extensions, momenta etc.
-!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief Lattice index, extensions, momenta etc.
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 17.02.2019
-!! @version 1.0
+!!@date 17.02.2019
+!!@version 1.0
 ! REVISION HISTORY:
 ! 17 02 2019 - Initial version
 !----------------------------------------------------------------------
@@ -87,15 +87,15 @@ module lattice
   !> local lattice indices including halo
   integer(int64), allocatable :: LocalLatticeIndices_includingHalo(:)
 
-  !> @brief
+  !>@brief
   !! Lattice momentum
-  !! @returns
+  !!@returns
   !! Lattice momentum
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date
+  !!@date
   !! 17.02.2019
-  !! @version
+  !!@version
   !! 1.0
   interface GetMomentum
      module procedure GetMomentum_BackwardDerivative
@@ -105,22 +105,22 @@ module lattice
 
 contains
   !>@brief Returns, if module is initialised
-  !! @returns module's initialisation status
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns module's initialisation status
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure logical function IsModuleInitialised()
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
   
-  !> @brief Initialises module
-  !! @details Lattice-extensions, lattice-size, volume etc
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises module
+  !!@details Lattice-extensions, lattice-size, volume etc
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   impure subroutine InitModule(LatticeExtensions_,LatticeSpacings_)
     use mpiinterface, only: ThisProc, NumProcs, MPISTOP, intmpi
     use arrayoperations, only: RemoveDuplicates, Sort
@@ -228,11 +228,11 @@ contains
     end if
   end subroutine InitModule
   
-  !> @brief Checks previous necessary initialisations
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Checks previous necessary initialisations
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised, mpiname => modulename,&
@@ -246,11 +246,11 @@ contains
     end if
   end subroutine CheckObligatoryInitialisations
 
-  !> @brief Initialises local lattice boundaries
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises local lattice boundaries
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure recursive subroutine InitLocalLatticeBoundaries(&
        LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,partitions,&
        proc,i,ipart,nHalo)
@@ -324,11 +324,11 @@ contains
 
   end subroutine InitLocalLatticeBoundaries
 
-  !> @brief Initialises local lattice indices
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises local lattice indices
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure recursive subroutine InitLatticeIndices(LatticeIndices,&
        LowerBoundaries,UpperBoundaries,i,x,index)
     use, intrinsic :: iso_fortran_env
@@ -378,12 +378,12 @@ contains
     end if
   end subroutine InitLatticeIndices
 
-  !> @brief Finds maximum of \f$||\vec{p}||_2\f$
-  !! @returns maximum of \f$||\vec{p}||_2\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Finds maximum of \f$||\vec{p}||_2\f$
+  !!@returns maximum of \f$||\vec{p}||_2\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   impure real(fp) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
@@ -430,15 +430,15 @@ contains
     deallocate(maxmomenta)
   end function FindMaxNorm2Momentum
 
-  !> @brief Returns lattice index
-  !! @returns lattice index
-  !! @details
+  !>@brief Returns lattice index
+  !!@returns lattice index
+  !!@details
   !! Lattice index is given by
   !! \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetLatticeIndex(Position)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -449,13 +449,13 @@ contains
          = GetIndex_FromPosition(Position,LatticeExtensions)
   end function GetLatticeIndex
 
-  !> @brief Returns lattice index of neighbouring point in i'th direction
-  !! @returns lattice index of neighbouring point in i'th direction
-  !! @details Periodic shift i'th direction
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns lattice index of neighbouring point in i'th direction
+  !!@returns lattice index of neighbouring point in i'th direction
+  !!@details Periodic shift i'th direction
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetNeib(i,LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -470,12 +470,12 @@ contains
          = GetNeib_FromIndex(i,LatticeIndex,LatticeExtensions)
   end function GetNeib
 
-  !> @brief Returns local lattice indices without halo
-  !! @returns local lattice indices without halo
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice indices without halo
+  !!@returns local lattice indices without halo
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure subroutine GetLocalLatticeIndices(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -484,12 +484,12 @@ contains
     indices = LocalLatticeIndices
   end subroutine GetLocalLatticeIndices
 
-  !> @brief Returns local lattice indices without halo with allocation
-  !! @returns local lattice indices without halo with allocation
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice indices without halo with allocation
+  !!@returns local lattice indices without halo with allocation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure subroutine GetLocalLatticeIndices_Allocatable(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -499,12 +499,12 @@ contains
     indices = LocalLatticeIndices
   end subroutine GetLocalLatticeIndices_Allocatable
 
-  !> @brief Returns local lattice indices including halo
-  !! @returns local lattice indices including halo
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice indices including halo
+  !!@returns local lattice indices including halo
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure subroutine GetLocalLatticeIndices_includingHalo(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -513,12 +513,12 @@ contains
     indices = LocalLatticeIndices_includingHalo
   end subroutine GetLocalLatticeIndices_IncludingHalo
 
-  !> @brief Returns local lattice indices including halo with allocation
-  !! @returns local lattice indices including halo
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice indices including halo with allocation
+  !!@returns local lattice indices including halo
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure subroutine GetLocalLatticeIndices_includingHalo_Allocatable(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -528,24 +528,24 @@ contains
     indices = LocalLatticeIndices_includingHalo
   end subroutine GetLocalLatticeIndices_IncludingHalo_Allocatable
 
-  !> @brief  Returns volume
-  !! @returns volume
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief  Returns volume
+  !!@returns volume
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure real(fp) function GetVolume()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetVolume = Volume
   end function GetVolume
   
-!> @brief  Returns lattice spacing
-  !! @returns lattice spacing
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief  Returns lattice spacing
+  !!@returns lattice spacing
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   pure elemental real(fp) function GetLatticeSpacing(i)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -554,12 +554,12 @@ contains
     GetLatticeSpacing = LatticeSpacings(i)
   end function GetLatticeSpacing
   
-  !> @brief Returns i'th lattice extension
-  !! @returns i'th lattice extension
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns i'th lattice extension
+  !!@returns i'th lattice extension
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   pure elemental integer(int64) function GetLatticeExtension(i)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -567,51 +567,51 @@ contains
     GetLatticeExtension = LatticeExtensions(i)
   end function GetLatticeExtension
   
-  !> @brief Returns lattice size
-  !! @returns Number of points on the whole lattice
-  !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns lattice size
+  !!@returns Number of points on the whole lattice
+  !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetLatticeSize()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetLatticeSize = LatticeSize
   end function GetLatticeSize
 
-  !> @brief Returns local lattice size without halo
-  !! @returns local lattice size without halo
-  !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice size without halo
+  !!@returns local lattice size without halo
+  !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetLocalLatticeSize()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetLocalLatticeSize = LocalLatticeSize
   end function GetLocalLatticeSize
 
-  !> @brief Returns local lattice size including halo
-  !! @returns local lattice size including halo
-  !! @details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice size including halo
+  !!@returns local lattice size including halo
+  !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetLocalLatticeSize_includingHalo()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetLocalLatticeSize_includingHalo = LocalLatticeSize_includingHalo
   end function GetLocalLatticeSize_includingHalo
 
-  !> @brief Returns MPI-process-rank corresponding to lattice index
-  !! @returns MPI-process-rank corresponding to lattice index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns MPI-process-rank corresponding to lattice index
+  !!@returns MPI-process-rank corresponding to lattice index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.1
+  !!@date 19.02.2019
+  !!@version 1.1
   pure elemental integer(intmpi) function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: intmpi
@@ -622,12 +622,12 @@ contains
          LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,LatticeExtensions)
   end function GetProc
 
-  !> @brief General function, returning MPI-process-rank corresponding to given index
-  !! @returns MPI-process-rank corresponding to index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief General function, returning MPI-process-rank corresponding to given index
+  !!@returns MPI-process-rank corresponding to index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   pure integer(intmpi) function GetProc_fromGeneralIndex(&
        Index,LowerBoundaries,UpperBoundaries,Extensions)
     use, intrinsic :: iso_fortran_env
@@ -655,18 +655,18 @@ contains
     end do
   end function GetProc_fromGeneralIndex
 
-  !> @brief Deconstructs lattice index into position indices
-  !! @returns position indices
-  !! @details
+  !>@brief Deconstructs lattice index into position indices
+  !!@returns position indices
+  !!@details
   !! Lattice index is given by \n
   !! \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
   !! This relation is inverted by\n
   !! \f$ v_i = (index-1)/N_i+1\f$
   !! Then \f$index - v_i\f$ and that as input for \f$v_{i-1}\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure function GetLatticePosition(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -679,12 +679,12 @@ contains
          GetPosition_FromIndex(LatticeIndex,LatticeExtensions)
   end function GetLatticePosition
 
-  !> @brief Returns local lattice index based on global lattice index
-  !! @returns local lattice index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local lattice index based on global lattice index
+  !!@returns local lattice index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure elemental integer(int64) function GetLocalIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -697,12 +697,12 @@ contains
          value = LatticeIndex)
   end function GetLocalIndex
   
-  !> @brief Returns lattice index based on local index
-  !! @returns lattice index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns lattice index based on local index
+  !!@returns lattice index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure elemental integer(int64) function GetGlobalLatticeIndex(LocalIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -711,13 +711,13 @@ contains
   end function GetGlobalLatticeIndex
 
   ! ..--** Generic Index Functions **--..
-  !> @brief Returns  index of neighbouring point in i'th direction
-  !! @returns lattice index of neighbouring point in i'th direction
-  !! @details Periodic shift i'th direction
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns  index of neighbouring point in i'th direction
+  !!@returns lattice index of neighbouring point in i'th direction
+  !!@details Periodic shift i'th direction
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetNeib_FromIndex(i,index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -748,13 +748,13 @@ contains
 
   end function GetNeib_FromIndex
 
-  !> @brief Generic index function
-  !! @returns index
-  !! @details index is given by \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Generic index function
+  !!@returns index
+  !!@details index is given by \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure integer(int64) function GetIndex_FromPosition(position,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -772,18 +772,18 @@ contains
     end do
   end function GetIndex_FromPosition
 
-  !> @brief
+  !>@brief
   !! Generic deconstruction function for index into position for given extensions
-  !! @returns position indices
-  !! @details Index is given by \n
+  !!@returns position indices
+  !!@details Index is given by \n
   !! \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
   !! This relation is inverted by\n
   !! \f$ v_i = (index-1)/N_i+1\f$
   !! Then \f$index - v_i\f$ and that as input for \f$v_{i-1}\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure function GetPosition_FromIndex(index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -805,12 +805,12 @@ contains
     end do
   end function GetPosition_FromIndex
 
-  !> @brief Implements periodic boundary conditions
-  !! @returns periodically projected position
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Implements periodic boundary conditions
+  !!@returns periodically projected position
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure elemental integer(int64) function GetPeriodicPosition(index,extension)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -822,19 +822,19 @@ contains
   end function GetPeriodicPosition
 
   ! ..--** Momenta **--..
-  !> @brief Eigenvalue of momentum operator, defined via backwards derivative
-  !! @returns Eigenvalue of momentum operator, defined via backwards derivative
-  !! @details
+  !>@brief Eigenvalue of momentum operator, defined via backwards derivative
+  !!@returns Eigenvalue of momentum operator, defined via backwards derivative
+  !!@details
   !! \f$\left(\hat{p}_k^{\text{F}}\right)_{m,n}
   !! =\frac{-\mathrm{i}}{a_k}\left(\delta_{m,n}-\delta_{m-1,n}\right)\f$
   !! with eigenvaues
   !! \f$p_{j,k}^{\text{F}}=\frac{2\sin\left(\frac{\pi j}{N_k}\right)}{a_k}
   !! e^{-\mathrm{i}\frac{\pi j}{N_k}}
   !! =\frac{2\sin\left(\frac{a_kp_{j,k}}{2}\right)}{a_k}e^{-\mathrm{i}\frac{a_kp_{j,k}}{2}}\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure function GetMomentum_BackwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -853,19 +853,19 @@ contains
          *Exp(cmplx(0,-pi*(LatticePosition-1)/LatticeExtensions,fp))
   end function GetMomentum_BackwardDerivative
 
-  !> @brief Eigenvalue of momentum operator, defined via forward derivative
-  !! @returns Eigenvalue of momentum operator, defined via backwards derivative
-  !! @details
+  !>@brief Eigenvalue of momentum operator, defined via forward derivative
+  !!@returns Eigenvalue of momentum operator, defined via backwards derivative
+  !!@details
   !! \f$\left(\hat{p}_k^{\text{F}}\right)_{m,n}
   !! =\frac{-\mathrm{i}}{a_k}\left(\delta_{m,n}-\delta_{m-1,n}\right)\f$
   !! with eigenvaues
   !! \f$p_{j,k}^{\text{F}}=\frac{2\sin\left(\frac{\pi j}{N_k}\right)}{a_k}
   !! e^{-\mathrm{i}\frac{\pi j}{N_k}}
   !! =\frac{2\sin\left(\frac{a_kp_{j,k}}{2}\right)}{a_k}e^{+\mathrm{i}\frac{a_kp_{j,k}}{2}}\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure function GetMomentum_ForwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -884,18 +884,18 @@ contains
          *Exp(cmplx(0,+pi*(LatticePosition-1)/LatticeExtensions,fp))
   end function GetMomentum_ForwardDerivative
 
-  !> @brief Eigenvalue of momentum operator, defined via central derivative
-  !! @returns Eigenvalue of momentum operator, defined via central derivative
-  !! @details
+  !>@brief Eigenvalue of momentum operator, defined via central derivative
+  !!@returns Eigenvalue of momentum operator, defined via central derivative
+  !!@details
   !! \f$\left(\hat{p}_k^{\text{F}}\right)_{m,n}
   !! =\frac{-\mathrm{i}}{a_k}\left(\delta_{m+1,n}-\delta_{m-1,n}\right)\f$
   !! with eigenvaues
   !! \f$p_{j,k}^{\text{F}}=\frac{\sin\left(\frac{2\pi j}{N_k}\right)}{a_k}
   !! =\frac{\sin\left(a_kp_{j,k}\right)}{a_k}\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure function GetMomentum_CentralDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
@@ -913,12 +913,12 @@ contains
          /LatticeSpacings(1:ndim)
   end function GetMomentum_CentralDerivative
 
-  !> @brief 2-Norm of lattice momentum
-  !! @returns 2-Norm of lattice momentum
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief 2-Norm of lattice momentum
+  !!@returns 2-Norm of lattice momentum
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure real(fp) function GetNorm2Momentum(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -929,16 +929,16 @@ contains
     GetNorm2Momentum = norm2(abs(Momentum))
   end function GetNorm2Momentum
 
-  !> @brief
+  !>@brief
   !! Returns biggest mometum norm on the lattice
-  !! @returns
+  !!@returns
   !! Biggest mometum norm on the lattice
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure real(fp) function GetMaxNorm2Momentum()
     use, intrinsic :: iso_fortran_env
     implicit none

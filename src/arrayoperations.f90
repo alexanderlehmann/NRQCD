@@ -1,8 +1,8 @@
-!> @brief Contains various array operations, like sorting and removing duplicates
-!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief Contains various array operations, like sorting and removing duplicates
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 17.02.2019
-!! @version 1.0
+!!@date 17.02.2019
+!!@version 1.0
 module arrayoperations
   use, intrinsic :: iso_fortran_env
   implicit none
@@ -13,11 +13,11 @@ module arrayoperations
        RemoveDuplicates,&
        Sort
 
-  !> @brief Removes duplicates from 1-dimensional array containing integers, real or complex numbers
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Removes duplicates from 1-dimensional array containing integers, real or complex numbers
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   interface RemoveDuplicates
      module procedure RemoveDuplicates_int8
      module procedure RemoveDuplicates_int16
@@ -33,11 +33,11 @@ module arrayoperations
      module procedure RemoveDuplicates_complex128
   end interface RemoveDuplicates
 
-  !> @brief Sorts 1-dimensional integer or real array
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Sorts 1-dimensional integer or real array
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   interface Sort
      module procedure sort_int8
      module procedure sort_int16

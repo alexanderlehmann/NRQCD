@@ -3,15 +3,15 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: fft
-!> @brief
+!>@brief
 !! Providing interfaces for fast fourier transforms between real and momentum space
-!! @author
+!!@author
 !! Alexander Lehmann,
 !! UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
+!!@date
 !! 19.02.2019
-!! @version
+!!@version
 !! 1.0
   !------------------------------------------------------------------------------
 module xpfft
@@ -39,8 +39,8 @@ module xpfft
   ! Variables  for (x<->p)-FFT
   !> MKL communicator for (x<->p)-FFT
   integer(intmpi) :: mkl_comm
-  !> @brief Colour of this process for (x<->p)-FFT.
-  !! @details
+  !>@brief Colour of this process for (x<->p)-FFT.
+  !!@details
   !! 0: This process does not participate in FFT\n
   !! 1: This process does participate in FFT
   integer(intmpi), allocatable :: mkl_colors(:)
@@ -77,11 +77,11 @@ module xpfft
   integer(int64), allocatable :: xp_UpperLatticeBoundaries(:,:)
 contains
 
-  !> @brief Initialises module
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises module
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     use lattice, only: nDim, GetLatticeExtension, GetLocalLatticeIndices_allocatable,&
@@ -316,12 +316,12 @@ contains
     end if
   end subroutine InitModule
 
-  !> @brief Returns MPI-colour regarding MKL's distributed cluster FFT
-  !! @returns MPI-colour regarding MKL's distributed cluster FFT
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns MPI-colour regarding MKL's distributed cluster FFT
+  !!@returns MPI-colour regarding MKL's distributed cluster FFT
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   pure integer(intmpi) function GetMKLColor(proc)
     use mpiinterface, only: intmpi, ThisProc
     implicit none
@@ -333,11 +333,11 @@ contains
     end if
   end function GetMKLColor
 
-  !> @brief Checks previous necessary initialisations
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Checks previous necessary initialisations
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   impure subroutine CheckObligatoryInitialisations
     use, intrinsic :: iso_fortran_env
     use lattice, only: IsLatticeInitialised => IsModuleInitialised, latticename => modulename
@@ -351,11 +351,11 @@ contains
     end if
   end subroutine CheckObligatoryInitialisations
   
-  !> @brief Finalizes module
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Finalizes module
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 19.02.2019
-  !! @version 1.0
+  !!@date 19.02.2019
+  !!@version 1.0
   impure subroutine FinalizeModule
     use mpiinterface, only: mpistop,thisproc
     implicit none
@@ -392,21 +392,21 @@ contains
   end subroutine FinalizeModule
   
   !>@brief Returns, if module is initialised
-  !! @returns module's initialisation status
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns module's initialisation status
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure logical function IsModuleInitialised()
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
 
-  !> @brief Loads data from the original processes into the distributed FFT-array
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Loads data from the original processes into the distributed FFT-array
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   impure subroutine LoadDataToFFT(data)
     use precision, only: fp
     use lattice
@@ -501,11 +501,11 @@ contains
     deallocate(sendrequest,sendstatus,SendBuffer)
   end subroutine LoadDataToFFT
 
-  !> @brief Distributes data from distributed FFT-array back to the original processes
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Distributes data from distributed FFT-array back to the original processes
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   impure subroutine DistributeDataFromFFT(data)
     use precision, only: fp
     use lattice
@@ -598,11 +598,11 @@ contains
     deallocate(recvbuffer)
   end subroutine DistributeDataFromFFT
   
-  !> @brief DFT for ndim-dimensional signal from real space to momentum space using MKL-CDFT
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief DFT for ndim-dimensional signal from real space to momentum space using MKL-CDFT
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   impure subroutine x2p(data)
     use precision, only: fp
     implicit none
@@ -619,11 +619,11 @@ contains
     call DistributeDataFromFFT(data)
   end subroutine x2p
   
-  !> @brief DFT for ndim-dimensional signal from momentum space to real space using MKL-CDFT
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief DFT for ndim-dimensional signal from momentum space to real space using MKL-CDFT
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   impure subroutine p2x(data)
     use precision, only: fp
     implicit none
@@ -641,11 +641,11 @@ contains
     
   end subroutine p2x
 
-  !> @brief Returns local FFT-index based on global lattice index
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Returns local FFT-index based on global lattice index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 21.02.2019
-  !! @version 1.0
+  !!@date 21.02.2019
+  !!@version 1.0
   pure elemental integer(int64) function GetFFTIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: ThisProc

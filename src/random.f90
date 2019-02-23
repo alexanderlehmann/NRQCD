@@ -3,11 +3,11 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: random
-!> @brief Pseudo-random number generation interface using Ranlux
-!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief Pseudo-random number generation interface using Ranlux
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 17.02.2019
-!! @version 1.0
+!!@date 17.02.2019
+!!@version 1.0
 ! REVISION HISTORY:
 ! 03 09 2018 - Initial version
 ! 14 01 2019 - Added random number drawing from specific process
@@ -31,41 +31,41 @@ module random
   !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
   
-  !> @brief Getting an uniformly distributed real pseudo-random number
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting an uniformly distributed real pseudo-random number
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   interface GetRandomUniformReal
      module procedure GetRandomUniformRealScalar
      module procedure GetRandomUniformRealArray
   end interface GetRandomUniformReal
 
-  !> @brief Getting an uniformly distributed complex pseudo-random number
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting an uniformly distributed complex pseudo-random number
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   interface GetRandomUniformCmplx
      module procedure GetRandomUniformCmplxScalar
      module procedure GetRandomUniformCmplxArray
   end interface GetRandomUniformCmplx
 
-  !> @brief Getting a normal distributed complex pseudo-random number
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting a normal distributed complex pseudo-random number
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   interface GetRandomNormalCmplx
      module procedure GetRandomNormalCmplxScalar
      module procedure GetRandomNormalCmplxArray
   end interface GetRandomNormalCmplx
 
-  !> @brief Getting a normal distributed complex pseudo-random number from specific process
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Getting a normal distributed complex pseudo-random number from specific process
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   interface GetRandomNormalCmplx_specificProcess
      module procedure GetRandomNormalCmplxScalar_specificProcess
      module procedure GetRandomNormalCmplxArray_specificProcess
@@ -73,25 +73,25 @@ module random
 contains
   
   !>@brief Returns, if module is initialised
-  !! @returns module's initialisation status
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns module's initialisation status
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   pure logical function IsModuleInitialised()
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
   
-  !> @brief Current state of pseudo-random number generator
-  !! @details
+  !>@brief Current state of pseudo-random number generator
+  !!@details
   !! The current state is necessary for, e.g., continuing a sequence of pseudo-random numbers (Ranlux)
   !! after closing the program
-  !! @returns Current state of pseudo-random number generator (Ranlux)
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@returns Current state of pseudo-random number generator (Ranlux)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function GetState() result(state)
     implicit none
     !> State of pseudo-random number generator
@@ -99,14 +99,14 @@ contains
     call ranlxd_get(state)
   end function GetState
 
-  !> @brief Sets the random number generator (Ranlux) to given state
-  !! @details
+  !>@brief Sets the random number generator (Ranlux) to given state
+  !!@details
   !! The current state is necessary for, e.g., continuing a sequence of pseudo-random numbers (Ranlux)
   !! after closing the program
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   impure subroutine ResetState(state)
     implicit none
     !> To-be set state of pseudo-random number generator
@@ -115,11 +115,11 @@ contains
     IsInitialised = .TRUE.
   end subroutine ResetState
   
-  !> @brief Initialises pseudo-random number generator (Ranlux)
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Initialises pseudo-random number generator (Ranlux)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.1
+  !!@date 17.02.2019
+  !!@version 1.1
   impure subroutine InitModule(CustomSeed)
     implicit none
     !> seed for random number generator
@@ -136,11 +136,11 @@ contains
     IsInitialised = .TRUE.
   end subroutine InitModule
   
-  !> @brief Draws a real pseudo-random number (Ranlux) from uniform distribution in [0,1[
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Draws a real pseudo-random number (Ranlux) from uniform distribution in [0,1[
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   impure function GetRandomUniformRealScalar() result(res)
     implicit none
     !> Pseudo-random number
@@ -150,11 +150,11 @@ contains
     res = r(1)
   end function GetRandomUniformRealScalar
   
-  !> @brief Draws real pseudo-random numbers (Ranlux) from uniform distribution in [0,1[
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Draws real pseudo-random numbers (Ranlux) from uniform distribution in [0,1[
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   impure function GetRandomUniformRealArray(n) result(res)
     implicit none
     !> Number of random numbers
@@ -164,11 +164,11 @@ contains
     call ranlxd(res)
   end function GetRandomUniformRealArray
   
-  !> @brief Draws a complex pseudo-random number (Ranlux) from uniform distribution in [0,1[
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Draws a complex pseudo-random number (Ranlux) from uniform distribution in [0,1[
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   impure function GetRandomUniformCmplxScalar() result(res)
     implicit none
     !> Pseudo-random number
@@ -178,11 +178,11 @@ contains
     res = cmplx(r(1),r(2),real64)
   end function GetRandomUniformCmplxScalar
   
-  !> @brief Draws complex pseudo-random numbers (Ranlux) from uniform distribution in ]0,1]
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Draws complex pseudo-random numbers (Ranlux) from uniform distribution in ]0,1]
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.02.2019
-  !! @version 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   impure function GetRandomUniformCmplxArray(n) result(res)
     implicit none
     !> Number of random numbers
@@ -200,15 +200,15 @@ contains
     end do
   end function GetRandomUniformCmplxArray
     
-  !> @brief Draws complex pseudo-random number (Ranlux) from normal distribution
-  !! @details
+  !>@brief Draws complex pseudo-random number (Ranlux) from normal distribution
+  !!@details
   !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
   !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   impure function GetRandomNormalCmplxScalar() result(res)
     use mathconstants, only: pi
     implicit none
@@ -223,15 +223,15 @@ contains
          sin(twopi*r(2)),real64)
   end function GetRandomNormalCmplxScalar
   
-  !> @brief Draws n complex pseudo-random numbers (Ranlux) from normal distribution
-  !! @details
+  !>@brief Draws n complex pseudo-random numbers (Ranlux) from normal distribution
+  !!@details
   !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
   !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   impure function GetRandomNormalCmplxArray(n) result(res)
     use mathconstants, only: pi
     implicit none
@@ -251,17 +251,17 @@ contains
     end do
   end function GetRandomNormalCmplxArray
 
-  !> @brief
+  !>@brief
   !! Draws n complex pseudo-random numbers (Ranlux) from normal distribution on one specific process\n
   !! and sends it to another recieving one
-  !! @details
+  !!@details
   !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
   !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 16.02.2019
-  !! @version 1.0
+  !!@date 16.02.2019
+  !!@version 1.0
   impure function GetRandomNormalCmplxScalar_specificProcess(send_proc,recv_proc) result(res)
     use mpiinterface, only: ThisProc
     use mpi
@@ -300,17 +300,17 @@ contains
     end if
   end function GetRandomNormalCmplxScalar_specificProcess
 
-  !> @brief
+  !>@brief
   !! Draws n complex pseudo-random numbers (Ranlux) from normal distribution on one specific process\n
   !! and sends it to another recieving one
-  !! @details
+  !!@details
   !! Uses Box-M\"uller transform on normal distributed random numbers (Ranlux)
   !! \f$r_{\text{u}}\in]0,1]^2\f$:
   !! \f$r_{\text{normal}}=\sqrt{-2\cdot\log(r_1)}\cdot(\cos(2\pi r_2)+\text{i}\sin(2\pi r_2))\f$
-  !! @authorAlexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!@authorAlexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 16.02.2019
-  !! @version 1.1
+  !!@date 16.02.2019
+  !!@version 1.1
   impure function GetRandomNormalCmplxArray_specificProcess(n,send_proc,recv_proc) result(res)
     use mpiinterface, only: ThisProc
     use mpi

@@ -2,11 +2,11 @@
 ! RTLQCD, Real-Time-Lattice-QCD Simulation of Gauge Fields
 !----------------------------------------------------------------------
 !
-!> @brief SU(3)-gauge-link-configuration in temporal gauge
-!! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!>@brief SU(3)-gauge-link-configuration in temporal gauge
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date 22.01.2019
-!! @version 1.0
+!!@date 22.01.2019
+!!@version 1.0
 !----------------------------------------------------------------------
 module gaugeconfiguration_su3
   use, intrinsic :: iso_fortran_env
@@ -48,7 +48,7 @@ module gaugeconfiguration_su3
      
      ! Return and setting of member variables
      procedure, public :: GetLink
-     procedure, public :: SetLink
+     procedure, private:: SetLink
      procedure, private:: GetEfield
      procedure, private:: SetEfield
 
@@ -57,6 +57,15 @@ module gaugeconfiguration_su3
 
      ! Gauss law deviation
      procedure, public :: GetDeviationFromGausslaw
+
+     ! Energy
+     procedure, public :: GetEnergy
+
+     ! Field strength tensor and plaquettes
+     procedure, public :: GetFieldStrengthTensor
+     procedure, public :: GetPlaquette
+     procedure, private :: GetSpatialPlaquette
+     procedure, private :: GetTemporalPlaquette
   end type GaugeConfiguration
 
 
@@ -249,12 +258,12 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
-  !> @brief Total deviation from Gauss-law of the total MPI-distributed configuration
-  !! @returns Total deviation from Gauss-law of the total MPI-distributed configuration
-  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !>@brief Total deviation from Gauss-law of the total MPI-distributed configuration
+  !!@returns Total deviation from Gauss-law of the total MPI-distributed configuration
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 22.02.2019
-  !! @version 1.0
+  !!@date 22.02.2019
+  !!@version 1.0
   impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
@@ -312,4 +321,195 @@ contains ! Module procedures
          MPI_SUM,&
          MPI_COMM_WORLD,mpierr)
   end function GetDeviationFromGaussLaw
+
+  !>@brief Returns field strength tensor
+  !!@details: Field strength tensor in physical units \f$g F_{ij}(\vec{v})^aT^a\f$
+  !!in order \f$O(a_i^2,a_j^2,a_i\cdot a_j)\f$
+  !!@returns Spatial field strength tensor \f$F_{i,j,\vec{v}}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 23.02.2019
+  !!@version 1.0
+  pure function GetFieldStrengthTensor(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetLatticeSpacing
+    use matrixoperations, only: LogU
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Lattice index
+    integer(int64),            intent(in) :: LatticeIndex
+    !> Field strength tensor
+    complex(fp) :: GetFieldStrengthTensor(nSUN,nSUN)
+
+    complex(fp) :: Plaquette(nSUN,nSUN)
+
+    Plaquette = GaugeConf%GetPlaquette(i,j,LatticeIndex)
+    
+    GetFieldStrengthTensor = &
+         LogU(Plaquette)/GetLatticeSpacing(i)/GetLatticeSpacing(j)/cmplx(0,1,fp)
+  end function GetFieldStrengthTensor
+
+  !> @brief Returns spatial plaquette \f$U_{ij,\vec{v}} =U_{i,\vec{v}}\cdot U_{j,\vec{v}+\hat{i}}
+  !! \cdot U_{i,\vec{v}+\hat{j}}^\dagger\cdot U_{j,\vec{v}}^\dagger\f$
+  !! @returns Spatial plaquette
+  !! \f$U_{i,j,v}=U_{i,v}\cdot U_{j,v+\hat{i}}\cdot U_{i,v+\hat{j}}^\dagger\cdot U_{j,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 23.02.2019
+  !! @version 1.0
+  pure function GetSpatialPlaquette(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetNeib
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Spatial direction
+    integer(int8),             intent(in) :: i,j
+    !> Lattice index
+    integer(int64),            intent(in) :: LatticeIndex
+    !> Spatial plaquette
+    complex(fp) :: GetSpatialPlaquette(nSUN,nSUN)
+
+    complex(fp), dimension(nSUN,nSUN) :: link1,link2,link3,link4
+
+    link1 = GaugeConf%GetLink(i,LatticeIndex)                             ! U_i(x)
+    link2 = GaugeConf%GetLink(j,GetNeib(i,LatticeIndex))                  ! U_j(x+î)
+    link3 = conjg(transpose(GaugeConf%GetLink(i,GetNeib(j,LatticeIndex))))! U_i(x+ĵ)†
+    link4 = conjg(transpose(GaugeConf%GetLink(j,LatticeIndex)))           ! U_j(x)†
+
+    GetSpatialPlaquette = matmul(matmul(matmul(&
+         link1,&  ! U_i(x)
+         link2),& ! U_j(x+î)
+         link3),& ! U_i(x+ĵ)†
+         link4)   ! U_j(x)†
+  end function GetSpatialPlaquette
+
+  !> @brief Returns temporal plaquette
+  !! @details The temporal plaquette is computed via the chromo-electric field
+  !! due to the knowledge of the evolution scheme. Using that
+  !! \f$U_{i,\vec{v}}(t+a_t) =\exp\left(i \tilde{E}_{C,i,\vec{v}}(t)^aT^a\right)
+  !! \cdot U_{i,\vec{v}}(t)\f$
+  !! one can exactly compute the temporal plaquette with
+  !! \f$U_{0j,\vec{v}}(t)=U_{j,\vec{v}}(t+a_t)
+  !! \cdot U_{j,\vec{v}}(t)^\dagger
+  !! =\exp\left(i \tilde{E}_{C,i,\vec{v}}(t)^aT^a\right)\f$
+  !! @returns Temporal plaquette
+  !! \f$U_{0,j,v}=U_{0,v}\cdot U_{j,v+\hat{0}}
+  !! \cdot U_{0,v+\hat{j}}^\dagger\cdot U_{j,v}^\dagger
+  !! = U_{j,v+\hat{0}}\cdot U_{j,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 23.02.2019
+  !! @version 1.0
+  pure function GetTemporalPlaquette(GaugeConf,i,j,LatticeIndex)
+    use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Lattice index
+    integer(int64),            intent(in) :: LatticeIndex
+    !> Temporal plaquette
+    complex(fp) :: GetTemporalPlaquette(nSUN,nSUN)
+
+    real(fp) :: efield(ngen)
+    
+    if(     i==0 .and. j/=0 ) then
+       efield = +GaugeConf%GetEfield([1_int8:ngen],j,LatticeIndex)
+       GetTemporalPlaquette = GetGroupExp(efield)
+    elseif( i/=0 .and. j==0 ) then
+       efield = -GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
+       GetTemporalPlaquette = GetGroupExp(efield)
+    else
+       GetTemporalPlaquette = GetUnitMatrix(nSUN)
+    end if
+  end function GetTemporalPlaquette
+  
+  !> @brief Returns plaquette \f$U_{jk,\vec{v}}
+  !! =U_{j,\vec{v}}\cdot U_{k,\vec{v}+\hat{j}}
+  !! \cdot U_{j,\vec{v}+\hat{k}}^\dagger\cdot U_{k,\vec{v}}^\dagger\f$
+  !! @returns Plaquette
+  !! \f$U_{j,k,v}=U_{j,v}\cdot U_{k,v+\hat{j}}
+  !! \cdot U_{j,v+\hat{k}}^\dagger\cdot U_{k,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 23.02.2019
+  !! @version 1.0
+  pure function GetPlaquette(GaugeConf,i,j,LatticeIndex)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Lattice index
+    integer(int64),            intent(in) :: LatticeIndex
+    !> Temporal plaquette
+    complex(fp) :: GetPlaquette(nSUN,nSUN)
+    if(i==0 .or. j==0) then
+       GetPlaquette = GaugeConf%GetTemporalPlaquette(i,j,LatticeIndex)
+    else
+       GetPlaquette = GaugeConf%GetSpatialPlaquette(i,j,LatticeIndex)
+    end if
+  end function GetPlaquette
+
+  !>@brief Energy functional
+  !!@returns Energy functional
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+  impure real(fp) function GetEnergy(GaugeConf)
+    use precision, only: fp
+    use matrixoperations, only: GetTrace
+    use lattice, only: nDim, GetLatticeSpacing, GetLocalLatticeIndices_allocatable
+    use mpiinterface, only: intmpi, GetRealSendType
+    use mpi
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+
+    integer(intmpi) :: mpierr
+    real(fp) :: local_contribution
+
+    real(fp), dimension(ngen) :: Efield
+    complex(fp), dimension(nsun,nsun) :: Plaquette
+
+    real(fp) :: PotentialTerm
+    integer(int8)  :: i, j
+    integer(int64) :: is, latticeindex
+    integer(int64), allocatable :: LocalLatticeIndices(:)
+
+    ! 1. Calculation of local contribution
+    local_contribution = 0
+    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+    do concurrent (is=1:size(LocalLatticeIndices))
+       LatticeIndex = LocalLatticeIndices(is)
+       do concurrent(i=1_int8:ndim)
+          efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
+          
+          local_contribution = local_contribution &
+               ! Electric energy
+               + sum(efield**2)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)/2
+          ! Magnetic energy
+          do concurrent(j=i+1_int8:ndim)
+             Plaquette = GaugeConf%GetPlaquette(i,j,LatticeIndex)
+             PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
+                  /GetLatticeSpacing(i)/GetLatticeSpacing(j)
+
+             Local_contribution = Local_Contribution &
+                  + 2*nSUN*PotentialTerm
+          end do
+       end do
+    end do
+
+    ! 2. MPI-Sum over all partitions
+    call MPI_ALLREDUCE(&
+         local_contribution,&
+         GetEnergy,&
+         1_intmpi,&
+         GetRealSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetEnergy
 end module gaugeconfiguration_su3

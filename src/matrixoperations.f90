@@ -3,15 +3,15 @@
 !----------------------------------------------------------------------
 !
 ! MODULE: matrixoperations
-!> @brief
+!>@brief
 !! Matrix functions and routines
-!! @author
+!!@author
 !! Alexander Lehmann,
 !! UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!! @date
+!!@date
 !! 22.02.2019
-!! @version
+!!@version
 !! 1.1
 ! REVISION HISTORY:
 ! 03 09 2018 - Initial version
@@ -34,16 +34,16 @@ module matrixoperations
      module procedure FrobeniusNorm_real
   end interface FrobeniusNorm
 contains
-  !> @brief
+  !>@brief
   !! Frobenius-norm of a complex matrix
-  !! @returns
+  !!@returns
   !! \f$\sqrt{\sum\limits_{i,j}|A_{ij}|^2}\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.11.2018
-  !! @version 1.0
+  !!@date 17.11.2018
+  !!@version 1.0
   pure real(fp) function FrobeniusNorm_complex(A)
     implicit none
     complex(fp), intent(in) :: A(:,:)
@@ -51,16 +51,16 @@ contains
     FrobeniusNorm_complex = sqrt(sum(real(A*conjg(A),fp)))
   end function FrobeniusNorm_Complex
 
-  !> @brief
+  !>@brief
   !! Frobenius-norm of a real matrix
-  !! @returns
+  !!@returns
   !! \f$\sqrt{\sum\limits_{i,j}|A_{ij}|^2}\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 17.11.2018
-  !! @version 1.0
+  !!@date 17.11.2018
+  !!@version 1.0
   pure real(fp) function FrobeniusNorm_real(A)
     implicit none
     real(fp), intent(in) :: A(:,:)
@@ -68,16 +68,16 @@ contains
      FrobeniusNorm_real = sqrt(sum(A**2))
   end function FrobeniusNorm_real
   
-  !> @brief
+  !>@brief
   !! Computes Kronecker product
-  !! @returns
+  !!@returns
   !! Kronecker product \f$A\otimes B\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function GetKronProd(A,B) result(AB)
     IMPLICIT NONE
     !> Matrix A
@@ -103,16 +103,16 @@ contains
     end do !On to the next row of A.
   end function GetKronProd
 
-  !> @brief
+  !>@brief
   !! Computes trace
-  !! @returns
+  !!@returns
   !! Trace \f$\Tr(A)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function GetTrace(matrix) result(trace)
     implicit none
     !> Matrix of which the trace is to be computed
@@ -128,16 +128,16 @@ contains
     end do
   end function GetTrace
   
-  !> @brief
+  !>@brief
   !! Returns a unit matrix of size \f$n\f$
-  !! @returns
+  !!@returns
   !! Unit matrix of size \f$n\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function GetUnitmatrix(n) result(res)
     implicit none
     !> Size of the unit matrix
@@ -151,16 +151,16 @@ contains
     forall(i=1:n) res(i,i) = 1._fp
   end function GetUnitmatrix
 
-  !> @brief
+  !>@brief
   !! Computes hermitian conjugate
-  !! @returns
+  !!@returns
   !! Hermitian conjugate
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function GetHerm(matrix) result(res)
     implicit none
     !> Matrix
@@ -171,19 +171,19 @@ contains
     res = conjg(transpose(matrix))
   end function GetHerm
 
-  !> @brief
+  !>@brief
   !! Performs eigen-system decomposition of hermitian matrix using the Jacobi algorithm
-  !! @details
+  !!@details
   !! Unitary transformation matrix \f$U\f$ fulfills
   !! \f$d=U\cdot A\cdot U^\dagger\Leftrightarrow A=U^\dagger\cdot d\cdot U\Leftrightarrow U\cdot A=d\cdot U
-  !! @author
+  !!@author
   !! Taken from diag library (then modernized),
   !! adapted from Wilkinson, Reinsch: Handbook for Automatic Computation, p. 202\n
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure subroutine EigenH(A_, d, U, sort)
     implicit none
     !> Hermitian input \f$A\f$
@@ -309,19 +309,19 @@ contains
     end if
   end subroutine EigenH
 
-  !> @brief
+  !>@brief
   !! Performs eigen-system decomposition of general complex matrix using the Jacobi algorithm
-  !! @details
+  !!@details
   !! Unitary transformation matrix \f$U\f$ fulfills
   !! \f$d=U\cdot A\cdot U^\dagger\Leftrightarrow A=U^\dagger\cdot d\cdot U\Leftrightarrow U\cdot A=d\cdot U
-  !! @author
+  !!@author
   !! Taken from diag library (then modernized),
   !! adapted from Wilkinson, Reinsch: Handbook for Automatic Computation, p. 202\n
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure subroutine EigenC(A_, d, U, sort)
     implicit none
     !> Input \f$A\f$
@@ -456,19 +456,19 @@ contains
     end if
   end subroutine EigenC
 
-  !> @brief
+  !>@brief
   !! Computes the logarithm of a U(n) or SU(n) group element, returning the algebra element
-  !! @details
+  !!@details
   !! Via diagonalisation of the input, the complex logarithm into the first branch
   !! is taken and then the back-wards-similarity transform performed (diagonalisation reverted)
-  !! @returns
+  !!@returns
   !! \f$H=\log(U)/\text{i}\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function ArgLogU(U) result(res)
     implicit none
     !> Group element
@@ -492,19 +492,19 @@ contains
     res = matmul(matmul(GetHerm(S),res),S)
   end function ArgLogU
   
-  !> @brief
+  !>@brief
   !! Computes the logarithm of a U(n) or SU(n) group element
-  !! @details
+  !!@details
   !! Via diagonalisation of the input, the complex logarithm into the first branch
   !! is taken and then the back-wards-similarity transform performed (diagonalisation reverted)
-  !! @returns
+  !!@returns
   !! \f$H=\log(U)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function LogU(U) result(res)
     implicit none
     !> Group element
@@ -528,20 +528,20 @@ contains
     res = matmul(matmul(GetHerm(S),res),S)
   end function LogU
   
-  !> @brief
+  !>@brief
   !! Matrix exponential of skew-hermitian input
-  !! @details
+  !!@details
   !! \f$ \exp(A) = \exp( \text{i}S\cdot (-\text{i})A\cdot S^\dagger) = S\cdot \exp(\text{i} D )\cdot S^\dagger\f$
   !! First computes eigenvalues and eigenvectors, thus obtaining \f$S\f$, then computes exponential
   !! of the eigen values and then in a final step reverts the similarity transform
-  !! @returns
+  !!@returns
   !! \f$H=\exp(A)\f$
-  !! @author
+  !!@author
   !! Alexander Lehmann,
   !! UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 03.09.2018
-  !! @version 1.0
+  !!@date 03.09.2018
+  !!@version 1.0
   pure function ExpAH_diaglibrary(A_) result(res)
     implicit none
     !> Skew-hermitian input A
