@@ -23,7 +23,7 @@ module tolerances
   real(real64), parameter :: tol_zero_real64=1.E-14
 
   !> Zero-tolerance
-  real(fp) :: tol_zero
+  real(fp) :: tol_zero=tol_zero_real64
 
 contains
   !>@brief Initialization of module

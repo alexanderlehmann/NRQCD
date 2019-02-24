@@ -383,13 +383,9 @@ contains
   
   ! ..--** Auxiliary Mathematical Routines **--..
   
-  !>@brief
-  !! Kronecker-Delta
-  !!@returns
-  !! Kronecker-Delta \f$\delta_{i,j}\f$
-  !!@author
-  !! Alexander Lehmann,
-  !! UiS (<alexander.lehmann@uis.no>)
+  !>@brief Kronecker-Delta
+  !!@returns Kronecker-Delta \f$\delta_{i,j}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 26.11.2018
   !!@version 1.0

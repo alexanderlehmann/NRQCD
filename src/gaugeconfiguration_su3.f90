@@ -315,8 +315,13 @@ contains ! Module procedures
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
     use tolerances, only: GetZeroTol
-    use mpiinterface, only: ThisProc, mpistop
-    use lattice, only: nDim
+    use mpiinterface, only: intmpi, ThisProc, mpistop, SyncAll
+    use lattice, only: nDim, GetLocalLatticeSize_includingHalo, GetLocalIndex, GetLatticeSize,&
+         GetProc, GetVolume, GetPolarisationVectors, GetNorm2Momentum, GetMomentum,&
+         GetLocalLatticeIndices_allocatable, GetLatticeSpacing
+    use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
+         GetRandomNormalCmplx_specificProcess, modulename_random=>modulename
+    use xpfft, only: p2x
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -332,14 +337,235 @@ contains ! Module procedures
     ! Number of transverse polarisations
     integer(int8), parameter :: nPol_transverse = ndim - 1_int8
     ! Transverse polarisation vectors
-    complex(fp), dimension(nDim,nDim) :: polarisations
-    
-    real(fp) :: zero_tolerance
+    complex(fp), dimension(nDim,nDim) :: PolarisationVectors
+    ! Random numbers for fluctuations in mode decomposition
+    complex(real64) :: r_afield(npol_transverse), r_efield(npol_transverse)
+    ! Momentum
+    complex(fp), dimension(nDim) :: Momentum(nDim)
+    ! Norm of momentum
+    real(fp) :: MomentumNorm
 
-    zero_tolerance = GetZeroTol()
-    
+    ! Lattice
+    integer(int64) :: LatticeIndex, LocalIndex, is
+    integer(int64), allocatable :: LocalLatticeIndices(:)
+    integer(int8) :: i,a
+    ! MPI
+    integer(intmpi) :: RecvProc
+    integer(intmpi), parameter :: SendProc=0_intmpi
 
+    ! Link
+    complex(fp) :: Link(nSUN,nSUN)
+    ! E-field
+    real(fp) :: Efield_site(ngen)
+    ! A-field
+    real(fp) :: Afield_site(ngen)
+    character(len=105) :: errormessage
+    ! Check if random numbers are initialised
+    if(.not.isModuleInitialised_random()) then
+       errormessage = 'Error in TransversePolarisedOccupiedInit of '//modulename&
+               //':'// modulename_random //' is not initialised.'
+       call MPISTOP(errormessage)
+    end if
     
+    ! ..--** START: Allocations **--..
+    allocate(afield(GetLocalLatticeSize_includingHalo(),nGen,nDim))
+    allocate(efield(GetLocalLatticeSize_includingHalo(),nGen,nDim))
+    ! ..--**  END : Allocations **--..
+
+    ! ..--** START: Drawing random numbers and setting the field in p-space **--..
+    !
+    !        Note : All processes are doing this simultaneously together
+    !               in order to ensure that the results do not depend on
+    !               the number of used processes
+    !
+    GlobalLattice: do LatticeIndex=1,GetLatticeSize()
+       RecvProc = GetProc(LatticeIndex)
+
+       if(ThisProc()==RecvProc .or. ThisProc()==SendProc) then
+
+          MomentumNorm = GetNorm2Momentum(LatticeIndex)
+          if(MomentumNorm > GetZeroTol()) then
+             if(ThisProc()==RecvProc) then
+                Momentum = GetMomentum(LatticeIndex)
+                call GetPolarisationVectors(Momentum,PolarisationVectors)
+
+                LocalIndex = GetLocalIndex(LatticeIndex)
+
+                prefactor_afield = &
+                     sqrt(GetVolume()*Occupation(LocalIndex)/MomentumNorm/2)
+
+                prefactor_efield = &
+                     cmplx(0,sqrt(GetVolume()*Occupation(LocalIndex)*MomentumNorm/2),fp)
+             end if ! is recieving process
+
+             generator: do a=1_int8,ngen
+                r_afield = GetRandomNormalCmplx_specificProcess(int(ngen,int64),SendProc,RecvProc)
+
+                if(ThisProc()==RecvProc) then
+                   r_efield = r_afield
+                   
+                   dims: do concurrent(i=1_int8:ndim)
+                      afield(LocalIndex,a,i) = &
+                           prefactor_afield*(&
+                                ! First transversal polarisation
+                           + r_afield(1)*PolarisationVectors(i,1) &
+                                ! Second transversal polarisation
+                           + r_afield(2)*PolarisationVectors(i,2) )
+
+                      efield(LocalIndex,a,i) = &
+                           prefactor_efield*(&
+                                ! First transversal polarisation
+                           + r_efield(1)*PolarisationVectors(i,1) &
+                                ! Second transversal polarisation
+                           + r_efield(2)*PolarisationVectors(i,2) )
+                   end do dims
+                end if ! is recieving process
+             end do generator ! Generators
+          
+          else !p=0
+             if(ThisProc()==RecvProc) then
+                LocalIndex = GetLocalIndex(LatticeIndex)
+                afield(LocalIndex,:,:) = 0
+                efield(LocalIndex,:,:) = 0
+             end if !recieving process
+          end if !p>0
+       end if !recieving or sending process
+
+       call SyncAll
+    end do GlobalLattice
+    ! ..--**  END : Drawing random numbers and setting the field in p-space **--..
+
+    ! Symmetrisation A(p) = A(-p)* in order to make A(x) real
+    do i=1,ndim
+       do a=1,ngen
+          call SymmetriseInPspace(afield(:,a,i))
+          call SymmetriseInPspace(efield(:,a,i))
+       end do !a
+    end do !i
+
+    !..--** START: FFT p-->x **--..
+    do i=1,ndim
+       do a=1,ngen
+          call p2x(afield(:,a,i))
+          call p2x(efield(:,a,i))
+       end do !a
+    end do !i
+    !..--**  END : FFT p-->x **--..
+
+    !..--** START: Writing fields to configuration **--..
+    call GaugeConf%Allocate
+    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+    do concurrent(&
+         is=1:size(LocalLatticeIndices),&
+         i =1:ndim)
+       LatticeIndex = LocalLatticeIndices(is)
+       LocalIndex   = GetLocalIndex(LatticeIndex)
+       ! Link
+       afield_site = real(afield(LocalIndex,:,i),fp) &
+            ! Translation to lattice units
+            *GetLatticeSpacing(i)
+       Link = GetGroupExp(afield_site)
+       call GaugeConf%SetLink(i,LatticeIndex,Link)
+
+       ! E-field
+       efield_site = real(efield(LocalIndex,:,i),fp) &
+            ! Translation to lattice units
+            *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+       do concurrent(a=1_int8:ngen) 
+          call GaugeConf%SetEfield(a,i,LatticeIndex,efield_site(a))
+       end do
+    end do
+    !..--**  END : Writing fields to configuration **--..
+    call GaugeConf%CommunicateBoundary()
+  contains
+    impure subroutine SymmetriseInPspace(field)
+      use precision, only: fp
+      use lattice, only: nDim, GetProc, GetNegativeLatticeIndex, GetLatticeSize
+      use mpiinterface, only: ThisProc, SyncAll, intmpi, GetComplexSendType
+      use mpi
+      implicit none
+      complex(fp), intent(inout) :: field(:)
+
+
+      ! MPI
+      complex(fp) :: a
+      integer(intmpi) :: status(mpi_status_size)
+      integer(intmpi), parameter :: buffersize=1_intmpi
+      integer(intmpi) :: dest, source
+      integer(intmpi) :: tag
+      integer(intmpi) :: mpierr
+
+      ! Indices
+      integer(intmpi) :: PositiveProc, NegativeProc
+      integer(int64)  :: PositiveLatticeIndex, NegativeLatticeIndex
+      integer(int64)  :: PositiveLocalIndex, NegativeLocalIndex
+      integer(int64)  :: LatticeSize
+
+      LatticeSize = GetLatticeSize()
+
+      do PositiveLatticeIndex=1,LatticeSize
+         ! Getting negative lattice index, corresponding to -p
+         NegativeLatticeIndex = GetNegativeLatticeIndex(PositiveLatticeIndex)
+
+         ! Getting process numbers for positive and negative momentum
+         PositiveProc = GetProc(PositiveLatticeIndex)
+         NegativeProc = GetProc(NegativeLatticeIndex)
+
+         ! Setting field such that f(p) = f(-p)*
+
+         if(PositiveProc == NegativeProc) then
+            ! positive and negative process are the same --> No MPI-communication needed
+            if(ThisProc()==PositiveProc) then
+               PositiveLocalIndex = GetLocalIndex(PositiveLatticeIndex)
+               NegativeLocalIndex = GetLocalIndex(NegativeLatticeIndex)
+               
+               a = field(PositiveLocalIndex)
+               if(PositiveLocalIndex==NegativeLocalIndex) then
+                  field(PositiveLocalIndex) = real(a,fp)
+               else
+                  field(PositiveLocalIndex) = a
+                  field(NegativeLocalIndex) = conjg(a)
+               end if
+            end if
+         else 
+            ! positive and negative process are not the same --> MPI-communication
+            tag  = PositiveLatticeIndex
+            source = PositiveProc
+            dest = NegativeProc
+            
+            if(ThisProc()==PositiveProc) then
+               PositiveLocalIndex = GetLocalIndex(PositiveLatticeIndex)
+               a = field(PositiveLocalIndex)
+
+               call MPI_Send(&
+                    a,                   & ! What to send
+                    buffersize,          & ! How many points to send
+                    GetComplexSendType(),& ! What type to send
+                    dest,                & ! Destination
+                    tag,                 & ! Tag
+                    MPI_COMM_WORLD,      & ! Communicator
+                    mpierr)                ! Error code
+            elseif(ThisProc()==NegativeProc) then
+               call MPI_Recv(&
+                    a,                   & ! What to send
+                    buffersize,          & ! How many points to send
+                    GetComplexSendType(),& ! What type to send
+                    source,              & ! Destination
+                    tag,                 & ! Tag
+                    MPI_COMM_WORLD,      & ! Communicator
+                    status,              & ! Status
+                    mpierr)                ! Error code
+               
+               NegativeLocalIndex = GetLocalIndex(NegativeLatticeIndex)
+               field(NegativeLocalIndex) = conjg(a)
+            else
+               ! do nothing
+            end if
+         end if
+
+         call SyncAll
+      end do
+    end subroutine SymmetriseInPspace
   end subroutine TransversePolarisedOccupiedInit
 
   !>@brief Box occupation

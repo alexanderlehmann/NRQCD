@@ -149,7 +149,6 @@ contains
           if(allocated(xp_data)) deallocate(xp_data)
           allocate(xp_data(localfftsize))
 
-          print*,ThisProc(),xp_offset
           call mpi_barrier(mkl_comm,mpierr)
        end if
 
@@ -411,7 +410,7 @@ contains
     use precision, only: fp
     use lattice
     use mpi
-    use mpiinterface, only: ThisProc, intmpi
+    use mpiinterface, only: ThisProc, intmpi, SyncAll
     implicit none
     !> Fourier-transform input
     complex(fp), intent(in) :: data(:)
@@ -447,7 +446,8 @@ contains
 
        ! Sending the data to the FFT-process
        dest    = xp_MPIWorld_Procs(proc)
-       sendtag = ThisProc() + size(xp_MPIWorld_Commpoints)*xp_MPIWorld_Procs(proc)
+       sendtag = ThisProc() + mklprocs*xp_MPIWorld_Procs(proc)
+       
        call MPI_ISend(&       
             sendbuffer(&     ! What to send...
             1,proc),&        ! ... and it's first index
@@ -457,7 +457,7 @@ contains
             mpi_comm_world,& ! Communicator
             sendrequest(proc),& ! Request handle
             mpierr)          ! Error-code
-    end do Destinations
+    end do Destinations   
 
     if(GetMKLColor()==1) then
        MaxPoints = MaxVal(xp_MKL_Commpoints,DIM=1)
@@ -469,6 +469,7 @@ contains
           ! Recieving the data
           src     = xp_MKL_Procs(proc)
           recvtag = xp_MKL_Procs(proc) + mklprocs*ThisProc()
+          
           call MPI_Recv(&       
                recvbuffer(&     ! Where to recieve...
                1,proc),&        ! ... and it's first index
@@ -495,10 +496,11 @@ contains
     end if
 
     ! Checking all status
-    allocate(sendstatus(MPI_STATUS_SIZE,size(sendrequest)))
-    call MPI_WAITALL(int(size(xp_MPIWorld_Procs),intmpi),sendrequest,sendstatus,mpierr)
-    
-    deallocate(sendrequest,sendstatus,SendBuffer)
+    !allocate(sendstatus(MPI_STATUS_SIZE,size(sendrequest)))
+    !call MPI_WAITALL(int(size(xp_MPIWorld_Procs),intmpi),sendrequest,sendstatus,mpierr)
+    !deallocate(sendrequest,sendstatus,SendBuffer)
+    !call SyncAll
+    deallocate(sendrequest,SendBuffer)
   end subroutine LoadDataToFFT
 
   !>@brief Distributes data from distributed FFT-array back to the original processes
@@ -565,7 +567,7 @@ contains
 
        ! Sending the data to the FFT-process
        src     = xp_MPIWorld_Procs(proc)
-       recvtag = ThisProc() + size(xp_MPIWorld_Commpoints)*xp_MPIWorld_Procs(proc)
+       recvtag = ThisProc() + mklprocs*xp_MPIWorld_Procs(proc)
        call MPI_Recv(&       
             recvbuffer(&     ! What to recieve...
             1,proc),&        ! ... and it's first index
@@ -626,6 +628,8 @@ contains
   !!@version 1.0
   impure subroutine p2x(data)
     use precision, only: fp
+
+    use mpiinterface, only: ThisProc
     implicit none
     !> Fourier-transform input and output
     complex(fp), intent(inout) :: data(:)

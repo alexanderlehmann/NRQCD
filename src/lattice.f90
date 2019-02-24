@@ -42,7 +42,8 @@ module lattice
        GetNeib,&
        GetMomentum,&
        GetNorm2Momentum,&
-       GetMaxNorm2Momentum
+       GetMaxNorm2Momentum,&
+       GetPolarisationVectors
 
   !> Module name
   character(len=7), parameter, public ::  modulename='lattice'
@@ -1050,4 +1051,48 @@ contains
        PolarisationVectors = 0
     end select
   end subroutine GetPolarisationVectors
+
+  !>@brief Transverse projection operator on the lattice
+  !!@returns Transverse projection operator on the lattice
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  pure real(fp) function GetTransverseProjector(i,j,momentum)
+    use tolerances, only: GetZeroTol
+    implicit none
+    !> Direction
+    integer(int8), intent(in) :: i,j
+    !> Lattice momentum
+    complex(fp),   intent(in) :: momentum(ndim)
+
+    if(norm2(abs(momentum)) < GetZeroTol()) then
+       GetTransverseProjector = 0
+    else
+       GetTransverseProjector = &
+            (GetKroneckerDelta(i,j) - conjg(momentum(i))*momentum(j)/norm2(abs(momentum))**2)/2
+    end if
+  end function GetTransverseProjector
+
+  ! ..--** Auxiliary Mathematical Routines **--..
+  
+  !>@brief Kronecker-Delta
+  !!@returns Kronecker-Delta \f$\delta_{i,j}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 26.11.2018
+  !!@version 1.0
+  pure elemental integer(int8) function GetKroneckerDelta(i,j)
+    implicit none
+    !> Index \f$i\f$
+    integer(int8), intent(in) :: i
+    !> Index \f$j\f$
+    integer(int8), intent(in) :: j
+
+    if(i==j) then
+       GetKroneckerDelta = 1
+    else
+       GetKroneckerDelta = 0
+    end if
+  end function GetKroneckerDelta
 end module lattice

@@ -4,7 +4,8 @@ program simulation
   use mpiinterface, only: ThisProc, NumProcs, MPIstop, intmpi
   use lattice, only: ndim
 
-  use lattice, only: GetLocalLatticeSize_IncludingHalo, GetLocalLatticeSize
+  use lattice, only: GetLocalLatticeSize_IncludingHalo, GetLocalLatticeSize,&
+       GetVolume
   use lattice
   use halocomm
   use xpfft
@@ -46,7 +47,8 @@ program simulation
           GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
   !call GaugeConf%ColdInit
 
-  !print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(), GaugeConf%GetEnergy()
+  print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(),&
+       GaugeConf%GetEnergy()/GetVolume()
   
   call EndSimulation
 

@@ -28,6 +28,9 @@ module random
        GetRandomNormalCmplx,&
        GetRandomNormalCmplx_specificProcess
   
+  !> Module name
+  character(len=6), parameter, public ::  modulename='random'
+  
   !> Contains information, whether module is initialised
   logical :: IsInitialised = .false.
   
@@ -263,7 +266,7 @@ contains
   !!@date 16.02.2019
   !!@version 1.0
   impure function GetRandomNormalCmplxScalar_specificProcess(send_proc,recv_proc) result(res)
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc, intmpi
     use mpi
     implicit none
     !> Sending MPI-process
@@ -274,11 +277,11 @@ contains
     complex(real64) :: res
 
     ! MPI
-    integer :: status(mpi_status_size)
-    integer :: buffersize
-    integer :: dest, source
-    integer :: tag
-    integer :: mpierr
+    integer(intmpi) :: status(mpi_status_size)
+    integer(intmpi) :: buffersize
+    integer(intmpi) :: dest, source
+    integer(intmpi) :: tag
+    integer(intmpi) :: mpierr
     
     if(send_proc==recv_proc) then
        if(ThisProc()==send_proc) res = GetRandomNormalCmplxScalar()
@@ -312,24 +315,24 @@ contains
   !!@date 16.02.2019
   !!@version 1.1
   impure function GetRandomNormalCmplxArray_specificProcess(n,send_proc,recv_proc) result(res)
-    use mpiinterface, only: ThisProc
+    use mpiinterface, only: ThisProc, intmpi
     use mpi
     implicit none
     !> Number of pseudo-random numbers
     integer(int64), intent(in) :: n
     !> Sending MPI-process
-    integer(int64), intent(in) :: send_proc
+    integer(intmpi), intent(in) :: send_proc
     !> Recieving MPI-process
-    integer(int64), intent(in) :: recv_proc
+    integer(intmpi), intent(in) :: recv_proc
     !> Pseudo-random numbers
     complex(real64) :: res(n)
 
     ! MPI
-    integer :: status(mpi_status_size)
-    integer :: buffersize
-    integer :: dest, source
-    integer :: tag
-    integer :: mpierr
+    integer(intmpi) :: status(mpi_status_size)
+    integer(intmpi) :: buffersize
+    integer(intmpi) :: dest, source
+    integer(intmpi) :: tag
+    integer(intmpi) :: mpierr
 
     if(ThisProc()==recv_proc .or. ThisProc()==send_proc) then
        if(send_proc==recv_proc) then
