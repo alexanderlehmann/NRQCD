@@ -42,9 +42,21 @@ program simulation
   
   call InitSimulation
 
-  call GaugeConf%ColdInit
 
-  print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(), GaugeConf%GetEnergy()
+  call GetLocalLatticeIndices_allocatable(LocalIndices)
+  do proc=0,numprocs()-1
+     if(ThisProc()==proc) then
+        print*,'Process',int(proc,int8)
+        print*,int(LocalIndices(1),int32),int(GetLatticePosition(LocalIndices(1)),int32)
+        print*,int(GetNegativeLatticeIndex(LocalIndices(1)),int32),int(GetLatticePosition(GetNegativeLatticeIndex(LocalIndices(1))),int32)
+        print*
+     end if
+     call flush(OUTPUT_UNIT)
+     call mpi_barrier(mpi_comm_world,mpierr)
+  end do
+  !call GaugeConf%ColdInit
+
+  !print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(), GaugeConf%GetEnergy()
   
   call EndSimulation
 

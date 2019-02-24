@@ -147,7 +147,7 @@ contains
     integer(intmpi), intent(in), optional :: errorcode
     integer(intmpi) :: mpierr
 
-    call flush(6)
+    call flush(OUTPUT_UNIT)
     call flush(ERROR_UNIT)
     if(.not.isInitialised) call InitModule
     call mpi_barrier(mpi_comm_world,mpierr)

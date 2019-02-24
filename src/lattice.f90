@@ -29,6 +29,7 @@ module lattice
        GetLocalLatticeIndices_includingHalo_allocatable,&
        GetLatticePosition,&
        GetLatticeIndex,&
+       GetNegativeLatticeIndex,&
        GetProc,&
        GetProc_fromGeneralIndex,&
        GetLatticeExtension,&
@@ -87,16 +88,12 @@ module lattice
   !> local lattice indices including halo
   integer(int64), allocatable :: LocalLatticeIndices_includingHalo(:)
 
-  !>@brief
-  !! Lattice momentum
-  !!@returns
-  !! Lattice momentum
+  !>@brief Lattice momentum
+  !!@returns Lattice momentum
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date
-  !! 17.02.2019
-  !!@version
-  !! 1.0
+  !!@date 17.02.2019
+  !!@version 1.0
   interface GetMomentum
      module procedure GetMomentum_BackwardDerivative
      !module procedure GetMomentum_CentralDerivative
@@ -449,6 +446,44 @@ contains
          = GetIndex_FromPosition(Position,LatticeExtensions)
   end function GetLatticeIndex
 
+  !>@brief Returns the lattice index corresponding to \f$-j\f$
+  !!@returns lattice index
+  !!@details
+  !! Lattice index is given by
+  !! \f$index(\vec{v}) = v_i+N_i\cdot index(\vec{v}_{i+1..ndim})-1\f$\n
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  pure integer(int64) function GetNegativeLatticeIndex(LatticeIndex)
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+
+    integer(int64) :: Position(ndim), NegativePosition(ndim)
+    Position = GetLatticePosition(LatticeIndex)
+    NegativePosition = GetNegativeLatticePosition(Position)
+    GetNegativeLatticeIndex = GetLatticeIndex(NegativePosition)
+  end function GetNegativeLatticeIndex
+
+  !>@brief Returns the lattice position corresponding to \f$-j\f$
+  !!@returns Lattice position corresponding to \f$-j\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  pure function GetNegativeLatticePosition(Position)
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    !> Lattice position
+    integer(int64), intent(in) :: Position(ndim)
+    !> Negative lattice position
+    integer(int64) :: GetNegativeLatticePosition(ndim)
+    GetNegativeLatticePosition&
+         = 1_int64 + modulo(LatticeExtensions - (Position-1_int64),LatticeExtensions)
+  end function GetNegativeLatticePosition
+    
   !>@brief Returns lattice index of neighbouring point in i'th direction
   !!@returns lattice index of neighbouring point in i'th direction
   !!@details Periodic shift i'th direction
