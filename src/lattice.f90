@@ -979,4 +979,75 @@ contains
     implicit none
     GetMaxNorm2Momentum = MaxNorm2Momentum
   end function GetMaxNorm2Momentum
+
+  ! ..--** Polarisation Vectors **--..
+  !>@brief Returns polarisation vectors
+  !!@details The polarisation vectors are constructed based on the
+  !! lattice momentum index \f$\vec{p}\f$ with minimum momentum position \f$\vec{0}\f$.
+  !! The choice of polarisation vectors is based on the paper from Kaspar and Hebenstreit in
+  !! <a href="https://arxiv.org/abs/1403.4849">arxiv:1403.4849</a> 
+  !!@author Alexander Lehmann, !UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  !!@todo Finding a dimension-independend way of programming this -- or at least one which compiles
+  !! for different numbers of dimensions. For now one would have to overwrite this code when
+  !! one wants to change the numbers of dimensions
+  pure subroutine GetPolarisationVectors(p,PolarisationVectors)
+    use precision, only: fp
+    use tolerances, only: GetZeroTol
+    implicit none
+    !> Lattice momentum vector
+    complex(fp), intent(in) :: p(nDim)
+    !> Polarisations
+    complex(fp), intent(out) :: PolarisationVectors(nDim,nDim)
+
+    real(fp) :: abs_p
+    
+    select case(nDim)
+    case(1)
+       PolarisationVectors(1,1) = 1 !(only one component)
+    case(3)
+       abs_p = norm2(abs(p))
+       if(abs_p < GetZeroTol()) then
+          PolarisationVectors = 0
+       elseif( abs(p(1)) > GetZeroTol()) then
+          ! First transversal polarisation vector
+          PolarisationVectors(:,1) = [&
+               -p(2)/norm2(abs(p(1:2))),& ! First component
+               +p(1)/norm2(abs(p(1:2))),& ! Second component
+               cmplx(0,0,fp)&             ! Third component
+               ]
+
+          ! Second transversal polarisation vector
+          PolarisationVectors(:,2) = [&
+               conjg(p(1))*p(3)/(abs_p*norm2(abs(p(1:2)))),& ! First component
+               conjg(p(2))*p(3)/(abs_p*norm2(abs(p(1:2)))),& ! Second component
+               cmplx(-norm2(abs(p(1:2)))/abs_p,0,fp)&        ! Third component
+               ]
+
+          ! Third == longitudinal polarisation vector
+          PolarisationVectors(:,3) = p/abs_p
+       else
+          ! First transversal polarisation vector
+          PolarisationVectors(:,1) = [&
+               cmplx(0,0,fp),&            ! First component
+               +p(3)/norm2(abs(p(2:3))),& ! Second component
+               -p(2)/norm2(abs(p(2:3)))&  ! Third component
+               ]
+          
+          ! Second transversal polarisation vector
+          PolarisationVectors(:,2) = [&
+               cmplx(1,0,fp),& ! First component
+               cmplx(0,0,fp),& ! Second comonent
+               cmplx(0,0,fp) & ! Third componetn
+               ]
+
+          ! Third == longitudinal polarisation vector
+          PolarisationVectors(:,3) = p/abs_p
+       end if
+    case default
+       PolarisationVectors = 0
+    end select
+  end subroutine GetPolarisationVectors
 end module lattice

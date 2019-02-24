@@ -54,6 +54,8 @@ module gaugeconfiguration_su3
 
      ! Initialisation routines
      procedure, public :: ColdInit
+     procedure, public :: TransversePolarisedOccupiedInit_Box
+     procedure, private :: TransversePolarisedOccupiedInit
 
      ! Gauss law deviation
      procedure, public :: GetDeviationFromGausslaw
@@ -257,6 +259,114 @@ contains ! Module procedures
        GaugeConf%Links(:,:,i,LocalIndex) = UnitMatrix
     end forall
   end subroutine ColdInit
+
+  !>@brief Initialises the configuration as in the shape of a box highly occupied,
+  !! transverse polarised fields
+  !!@details Initialises the configuration with gaussian initial conditions which fills
+  !! the gluon occupation up to a saturation scale \f$q_s\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  impure subroutine TransversePolarisedOccupiedInit_Box(GaugeConf,SaturationScale,Amplitude,Coupling)
+    use, intrinsic :: iso_fortran_env
+    use precision, only: fp
+    use lattice, only: GetLocalLatticeIndices_allocatable, GetNorm2Momentum,&
+         GetLocalLatticeSize_includingHalo, GetLocalIndex
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+    !> Saturation scale \f$q_s\f$
+    real(fp),                  intent(in)  :: SaturationScale
+    !> Occupation of the box for \f$p<q_s\f$
+    real(fp),                  intent(in)  :: Amplitude
+    !> Coupling
+    real(fp),                  intent(in)  :: Coupling
+
+    real(fp), allocatable :: Occupation(:)
+    integer(int64), allocatable :: LocalLatticeIndices(:)
+    integer(int64) :: LatticeIndex, is
+    
+    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+    allocate(Occupation(GetLocalLatticeSize_includingHalo()))
+    forall(is=1:size(LocalLatticeIndices))
+       Occupation(GetLocalIndex(LocalLatticeIndices(is)))&
+            = GetBoxOccupation(&
+            GetNorm2Momentum(LocalLatticeIndices(is)),& !|p|
+            SaturationScale,&
+            Amplitude,&
+            Coupling)
+    end forall
+    deallocate(LocalLatticeIndices)
+
+    call GaugeConf%TransversePolarisedOccupiedInit(Occupation)
+
+    deallocate(Occupation)
+    
+  end subroutine TransversePolarisedOccupiedInit_Box
+
+  !>@brief Initialises the configuration as highly occupied, transverse polarised fields
+  !!@details Initialises the configuration according to a given gluon occupation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  impure subroutine TransversePolarisedOccupiedInit(GaugeConf,Occupation)
+    use, intrinsic :: iso_fortran_env
+    use precision, only: fp
+    use tolerances, only: GetZeroTol
+    use mpiinterface, only: ThisProc, mpistop
+    use lattice, only: nDim
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+    !> Gauge particle occupation
+    real(fp),                  intent(in)  :: Occupation(:)
+
+    ! Gauge and electric field
+    complex(fp), allocatable :: afield(:,:,:), efield(:,:,:)
+
+    ! Prefactors
+    complex(fp) :: prefactor_afield, prefactor_efield
+
+    ! Number of transverse polarisations
+    integer(int8), parameter :: nPol_transverse = ndim - 1_int8
+    ! Transverse polarisation vectors
+    complex(fp), dimension(nDim,nDim) :: polarisations
+    
+    real(fp) :: zero_tolerance
+
+    zero_tolerance = GetZeroTol()
+    
+
+    
+  end subroutine TransversePolarisedOccupiedInit
+
+  !>@brief Box occupation
+  !!@details Step function with amplitude until saturation scale. Afterwards coupling\f$^2/2\f$
+  !!@returns Box occupation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  pure elemental real(fp) function GetBoxOccupation(Momentum,SaturationScale,Amplitude,Coupling)
+    use precision, only: fp
+    implicit none
+    !> Lattice momentum norm
+    real(fp), intent(in) :: Momentum
+    !> Saturation scale \f$q_s\f$
+    real(fp), intent(in)  :: SaturationScale
+    !> Occupation of the box for \f$p<q_s\f$
+    real(fp), intent(in)  :: Amplitude
+    !> Coupling
+    real(fp), intent(in)  :: Coupling
+    if( Momentum < SaturationScale ) then
+       GetBoxOccupation = Amplitude
+    else
+       GetBoxOccupation = Coupling**2/2
+    end if
+  end function GetBoxOccupation
+    
 
   !>@brief Total deviation from Gauss-law of the total MPI-distributed configuration
   !!@returns Total deviation from Gauss-law of the total MPI-distributed configuration

@@ -42,18 +42,8 @@ program simulation
   
   call InitSimulation
 
-
-  call GetLocalLatticeIndices_allocatable(LocalIndices)
-  do proc=0,numprocs()-1
-     if(ThisProc()==proc) then
-        print*,'Process',int(proc,int8)
-        print*,int(LocalIndices(1),int32),int(GetLatticePosition(LocalIndices(1)),int32)
-        print*,int(GetNegativeLatticeIndex(LocalIndices(1)),int32),int(GetLatticePosition(GetNegativeLatticeIndex(LocalIndices(1))),int32)
-        print*
-     end if
-     call flush(OUTPUT_UNIT)
-     call mpi_barrier(mpi_comm_world,mpierr)
-  end do
+  call GaugeConf%TransversePolarisedOccupiedInit_Box(&
+          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
   !call GaugeConf%ColdInit
 
   !print*,ThisProc(),GaugeConf%GetDeviationFromGaussLaw(), GaugeConf%GetEnergy()
@@ -81,6 +71,7 @@ contains
     use halocomm,           only: InitModule_HaloComm           => InitModule
     use random,             only: InitModule_Random             => InitModule
     use xpfft,              only: InitModule_xpFFT              => InitModule
+    use tolerances,         only: InitModule_tolerances         => InitModule
     implicit none
 
     integer(int64) :: arg_count
@@ -116,12 +107,29 @@ contains
     arg_count = arg_count +1; call get_command_argument(arg_count,arg);
     read(arg,'(I4)') RandomNumberSeed
     
+    ! Initial gluon distribution (box): Saturation scale
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(F10.13)') GluonSaturationScale
+
+    ! Initial gluon distribution (box): Amplitude
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(F10.13)') GluonOccupationAmplitude
+
+    ! Coupling (only relevant in initialisation)
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(F10.13)') GluonCoupling
+
+    ! Ensemble size (statistical average of classical statistical simulation)
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(I6)') EnsembleSize
+    
     !..--** Module initialisations **--..
     call InitModule_MPIinterface
     call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
     call InitModule_HaloComm
     call InitModule_xpFFT
     call InitModule_Random(RandomNumberSeed + ThisProc())
+    call InitModule_tolerances
 
     call mpi_barrier(MPI_COMM_WORLD,mpierr)
   end subroutine InitSimulation

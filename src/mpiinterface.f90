@@ -106,7 +106,7 @@ contains
           realsendtype_fp    = MPI_REAL16
           complexsendtype_fp = MPI_COMPLEX32
        case default
-          errormessage = 'Error in GetDeviationFromGaussLaw of '//modulename&
+          errormessage = 'Error in initialisation of '//modulename&
                //': unsupported floating point precision.'
           call MPISTOP(errormessage)
        end select
