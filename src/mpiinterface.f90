@@ -24,6 +24,7 @@ module mpiInterface
        ThisProc,&
        NumProcs,&
        MPIstop,&
+       SyncAll,&
        GetComplexSendType,&
        GetRealSendType
 
@@ -239,4 +240,20 @@ contains
        end select
     end if
   end function GetRealSendType
+
+  !>@brief Synchronizes all processes (or in given optional communicator)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  impure subroutine SyncAll(communicator)
+    implicit none
+    integer(intmpi), intent(in), optional :: communicator
+    integer(intmpi) :: mpierr
+    if(present(communicator)) then
+       call mpi_barrier(communicator,mpierr)
+    else
+       call mpi_barrier(mpi_comm_world,mpierr)
+    end if
+  end subroutine SyncAll
 end module mpiInterface
