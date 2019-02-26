@@ -128,7 +128,7 @@ contains
   !!@version 1.0
   impure subroutine InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
     use, intrinsic :: iso_fortran_env
-    use lattice, only: GetLocalLatticeIndices_includingHalo_Allocatable, GetProc
+    use lattice, only: GetLatticeIndex, GetMemorySize, GetProc
     use mpiinterface, only: NumProcs, ThisProc, MPISTOP
     use arrayoperations, only: RemoveDuplicates, Sort
     use mpi
@@ -144,10 +144,9 @@ contains
     !> List of points and to this process sending processes
     integer(int64),    allocatable, intent(out) :: RecvList(:,:)
 
-    integer(int64), allocatable :: LocalLatticeIndices(:)
     integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
     integer(intmpi), allocatable :: HaloProcs_includingThisProc(:)
-    integer(int64) :: LocalIndex, neibpoint
+    integer(int64) :: LatticeIndex, MemoryIndex, neibpoint
     integer(intmpi) :: proc, neib
     integer(int64) :: MaxHaloPoints
 
@@ -155,10 +154,15 @@ contains
     integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
     
     ! 1. Compute halo points and the associated process numbers
-    call GetLocalLatticeIndices_includingHalo_Allocatable(LocalLatticeIndices)
+    !call GetLocalLatticeIndices_includingHalo_Allocatable(LocalLatticeIndices)
 
-    allocate(HaloProcs_includingThisProc(size(LocalLatticeIndices)))
-    HaloProcs_includingThisProc = GetProc(LocalLatticeIndices)
+    !allocate(HaloProcs_includingThisProc(size(LocalLatticeIndices)))
+    !HaloProcs_includingThisProc = GetProc(LocalLatticeIndices)
+    allocate(HaloProcs_includingThisProc(GetMemorySize()))
+    do MemoryIndex=1,GetMemorySize()
+       HaloProcs_includingThisProc(MemoryIndex) = GetProc(GetLatticeIndex(MemoryIndex))
+    end do
+    
     call RemoveDuplicates(HaloProcs_includingThisProc,PointsPerProc_includingThisProc)
     call Sort(HaloProcs_includingThisProc)
     
@@ -182,10 +186,11 @@ contains
 
           ! Assign global lattice indices of halo to the process which sends them
           neibpoint=0
-          do LocalIndex=1,size(LocalLatticeIndices)
-             if(GetProc(LocalLatticeIndices(LocalIndex))==HaloProcs(neib)) then
+          do MemoryIndex=1,GetMemorySize()
+             LatticeIndex = GetLatticeIndex(MemoryIndex)
+             if(GetProc(LatticeIndex)==HaloProcs(neib)) then
                 neibpoint = neibpoint + 1_int64
-                RecvList(neibpoint,neib) = LocalLatticeIndices(LocalIndex)
+                RecvList(neibpoint,neib) = LatticeIndex
              end if
           end do
        end if
@@ -226,7 +231,7 @@ contains
   impure subroutine CommunicateBoundary_real_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc, GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:)
@@ -240,7 +245,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -258,10 +263,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
+          buffer(BufferIndex) = data(MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -291,10 +296,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          data(LocalIndex) = buffer(BufferIndex)
+          data(MemoryIndex) = buffer(BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -308,7 +313,7 @@ contains
   impure subroutine CommunicateBoundary_real_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:)
@@ -322,7 +327,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -340,10 +345,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
+          buffer(:,BufferIndex) = data(:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -373,10 +378,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,LocalIndex) = buffer(:,BufferIndex)
+          data(:,MemoryIndex) = buffer(:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -390,7 +395,7 @@ contains
   impure subroutine CommunicateBoundary_real_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:,:)
@@ -404,7 +409,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -422,10 +427,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
+          buffer(:,:,BufferIndex) = data(:,:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -455,10 +460,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
+          data(:,:,MemoryIndex) = buffer(:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -472,7 +477,7 @@ contains
   impure subroutine CommunicateBoundary_real_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:,:,:,:)
@@ -486,7 +491,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -504,10 +509,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          buffer(:,:,:,BufferIndex) = data(:,:,:,LocalIndex)
+          buffer(:,:,:,BufferIndex) = data(:,:,:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -537,10 +542,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,:,LocalIndex) = buffer(:,:,:,BufferIndex)
+          data(:,:,:,MemoryIndex) = buffer(:,:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -554,7 +559,7 @@ contains
   impure subroutine CommunicateBoundary_complex_rank1(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:)
@@ -568,7 +573,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -586,10 +591,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(BufferIndex) = data(LocalIndex)
+          buffer(BufferIndex) = data(MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -619,10 +624,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(LocalIndex) = buffer(BufferIndex)
+          data(MemoryIndex) = buffer(BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -636,7 +641,7 @@ contains
   impure subroutine CommunicateBoundary_complex_rank2(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:)
@@ -650,7 +655,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -668,10 +673,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,LocalIndex)
+          buffer(:,BufferIndex) = data(:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -701,10 +706,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,LocalIndex) = buffer(:,BufferIndex)
+          data(:,MemoryIndex) = buffer(:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -718,7 +723,7 @@ contains
   impure subroutine CommunicateBoundary_complex_rank3(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:,:)
@@ -732,7 +737,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -750,10 +755,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,LocalIndex)
+          buffer(:,:,BufferIndex) = data(:,:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -783,10 +788,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,LocalIndex) = buffer(:,:,BufferIndex)
+          data(:,:,MemoryIndex) = buffer(:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)
@@ -800,7 +805,7 @@ contains
   impure subroutine CommunicateBoundary_complex_rank4(data)
     use, intrinsic :: iso_fortran_env
     use mpi
-    use lattice, only: GetLocalIndex
+    use lattice, only: GetMemoryIndex
     use mpiinterface, only: ThisProc,GetComplexSendType
     implicit none
     complex(fp), intent(inout) :: data(:,:,:,:)
@@ -814,7 +819,7 @@ contains
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex
+    integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
@@ -832,10 +837,10 @@ contains
           LatticeIndex = SendList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,:,BufferIndex) = data(:,:,:,LocalIndex)
+          buffer(:,:,:,BufferIndex) = data(:,:,:,MemoryIndex)
        end do packing
 
        ! Send and recieve
@@ -865,10 +870,10 @@ contains
           LatticeIndex = RecvList(BufferIndex,neib)
           
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,:,LocalIndex) = buffer(:,:,:,BufferIndex)
+          data(:,:,:,MemoryIndex) = buffer(:,:,:,BufferIndex)
        end do unpacking
     end do AllNeighbours
     deallocate(buffer)

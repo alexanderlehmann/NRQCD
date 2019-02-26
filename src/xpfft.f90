@@ -84,9 +84,9 @@ contains
   !!@version 1.0
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
-    use lattice, only: nDim, GetLatticeExtension, GetLocalLatticeIndices_allocatable,&
-         GetProc,GetProc_fromGeneralIndex, InitLatticeIndices,&
-         GetLatticeSpacing, GetVolume
+    use lattice, only: nDim, GetLatticeExtension,&
+         GetProc, GetProc_fromGeneralIndex, InitLatticeIndices,&
+         GetLatticeSpacing, GetVolume, GetMemorySize, GetLocalLatticeSize, GetLatticeIndex
     use mpiinterface, only: ThisProc, NumProcs, mpistop
     use mpi
     use arrayoperations, only: RemoveDuplicates, Sort
@@ -103,8 +103,7 @@ contains
     character(len=100) :: errormessage
 
     integer(int64),  allocatable :: firstindices(:), extensions(:)
-    integer(int64),  allocatable :: locallatticeindices(:)
-    integer(int64) :: LatticeExtensions(ndim), LocalIndex, commpoint
+    integer(int64) :: LatticeExtensions(ndim), MKLMemoryIndex, MemoryIndex, commpoint, LatticeIndex,is
 
     integer(int64), allocatable :: indices_includingThisProc(:)
     integer(int64), allocatable :: PointsPerProc_includingThisProc(:)
@@ -221,18 +220,24 @@ contains
        ! 2. Initialise communication lists
        ! i.   Compute the indices of the local lattice indices
        ! ii.  Compute where on which world (a) and on which mkl (b) process this index lies
-       call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
        if(allocated(xp_MPIWorld_Procs)) deallocate(xp_MPIWorld_Procs)
-       allocate(xp_MPIWorld_Procs(size(LocalLatticeIndices)))
+       allocate(xp_MPIWorld_Procs(GetLocalLatticeSize()))
        LatticeExtensions = GetLatticeExtension([1_int8:ndim])
 
-       forall(LocalIndex=1:size(LocalLatticeIndices))
-          xp_MPIWorld_Procs(LocalIndex) = GetProc_fromGeneralIndex(&
-               LocalLatticeIndices(LocalIndex),&
-               xp_LowerLatticeBoundaries,&
-               xp_UpperLatticeBoundaries,&
-               LatticeExtensions)
-       end forall
+       !forall(LocalIndex=1:size(LocalLatticeIndices))
+       is=0
+       do MemoryIndex=1,GetMemorySize()
+          LatticeIndex = GetLatticeIndex(MemoryIndex)
+          if(ThisProc()==GetProc(LatticeIndex)) then
+             is = is+1
+             xp_MPIWorld_Procs(is) = GetProc_fromGeneralIndex(&
+                  LatticeIndex,&
+                  xp_LowerLatticeBoundaries,&
+                  xp_UpperLatticeBoundaries,&
+                  LatticeExtensions)
+          end if
+       end do
+       !end forall
 
        ! Initialising send-recv-list of WORLD-processes
        call RemoveDuplicates(xp_MPIWorld_Procs,PointsPerProc_includingThisProc)
@@ -251,14 +256,20 @@ contains
           xp_MPIWorld_Commpoints(proc) = PointsPerProc_includingThisProc(proc)
 
           commpoint=0
-          do LocalIndex=1,size(LocalLatticeIndices)
-             if(GetProc_fromGeneralIndex(LocalLatticeIndices(LocalIndex),&
-                  xp_LowerLatticeBoundaries,&
-                  xp_UpperLatticeBoundaries,&
-                  LatticeExtensions)&
-                  ==xp_MPIWorld_Procs(proc)) then
-                commpoint = commpoint + 1_int64
-                xp_MPIWorld_SendRecvList(commpoint,proc) = LocalLatticeIndices(LocalIndex)
+          is=0
+          do MemoryIndex=1,GetMemorySize()
+             LatticeIndex = GetLatticeIndex(MemoryIndex)
+             if(GetProc(LatticeIndex)==ThisProc()) then
+                is = is + 1
+                if(GetProc_fromGeneralIndex(&
+                     LatticeIndex,&
+                     xp_LowerLatticeBoundaries,&
+                     xp_UpperLatticeBoundaries,&
+                     LatticeExtensions)&
+                     ==xp_MPIWorld_Procs(proc)) then
+                   commpoint = commpoint + 1
+                   xp_MPIWorld_SendRecvList(commpoint,proc) = LatticeIndex
+                end if
              end if
           end do
        end do
@@ -300,10 +311,10 @@ contains
              xp_MKL_CommPoints(proc) = PointsPerProc_includingThisProc(proc)
 
              commpoint=0
-             do LocalIndex=1,size(xp_MKL_indices)
-                if(GetProc(xp_MKL_indices(LocalIndex))==xp_MKL_Procs(proc)) then
+             do MKLMemoryIndex=1,size(xp_MKL_indices)
+                if(GetProc(xp_MKL_indices(MKLMemoryIndex))==xp_MKL_Procs(proc)) then
                    commpoint = commpoint + 1_int64
-                   xp_MKL_SendRecvList(commpoint,proc) = xp_MKL_indices(LocalIndex)
+                   xp_MKL_SendRecvList(commpoint,proc) = xp_MKL_indices(MKLMemoryIndex)
                 end if
              end do
           end do
@@ -422,7 +433,7 @@ contains
     integer(intmpi) :: proc
     integer(intmpi) :: MaxPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex, LatticeIndex
+    integer(int64) :: MKLMemoryIndex,MemoryIndex, LatticeIndex
 
     MaxPoints = MaxVal(xp_MPIWorld_Commpoints,DIM=1)
 
@@ -437,11 +448,11 @@ contains
           ! Get global lattice index
           LatticeIndex = xp_MPIWorld_SendRecvList(BufferIndex,proc)
 
-          ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          ! Get memory index in data
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          sendbuffer(BufferIndex,proc) = data(LocalIndex)
+          sendbuffer(BufferIndex,proc) = data(MemoryIndex)
        end do packing
 
        ! Sending the data to the FFT-process
@@ -485,10 +496,10 @@ contains
              LatticeIndex = xp_MKL_SendRecvList(BufferIndex,proc)
 
              ! Get local index in data
-             LocalIndex = GetFFTIndex(LatticeIndex)
+             MKLMemoryIndex = GetMKLMemoryIndex(LatticeIndex)
 
              ! Assign buffer to data
-             xp_data(LocalIndex) = Recvbuffer(BufferIndex,proc)
+             xp_data(MKLMemoryIndex) = Recvbuffer(BufferIndex,proc)
           end do unpacking
        end do Sources
 
@@ -524,7 +535,7 @@ contains
     integer(intmpi) :: proc
     integer(intmpi) :: MaxPoints
     integer(intmpi) :: BufferIndex
-    integer(int64) :: LocalIndex, LatticeIndex
+    integer(int64) :: MKLMemoryIndex, MemoryIndex, LatticeIndex
 
     if(GetMKLColor()==1) then
        MaxPoints = MaxVal(xp_MKL_Commpoints,DIM=1)
@@ -540,10 +551,10 @@ contains
              LatticeIndex = xp_MKL_SendRecvList(BufferIndex,proc)
 
              ! Get local index in data
-             LocalIndex = GetFFTIndex(LatticeIndex)
+             MKLMemoryIndex = GetMKLMemoryIndex(LatticeIndex)
 
              ! Assign data to buffer
-             SendBuffer(BufferIndex,proc) = xp_data(LocalIndex)
+             SendBuffer(BufferIndex,proc) = xp_data(MKLMemoryIndex)
           end do packing
           
           ! Sending the data
@@ -584,10 +595,10 @@ contains
           LatticeIndex = xp_MPIWorld_SendRecvList(BufferIndex,proc)
 
           ! Get local index in data
-          LocalIndex = GetLocalIndex(LatticeIndex)
+          MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          data(LocalIndex) = recvbuffer(BufferIndex,proc)
+          data(MemoryIndex) = recvbuffer(BufferIndex,proc)
        end do unpacking
     end do Sources
 
@@ -650,13 +661,13 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 21.02.2019
   !!@version 1.0
-  pure elemental integer(int64) function GetFFTIndex(LatticeIndex)
+  pure elemental integer(int64) function GetMKLMemoryIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: ThisProc
     implicit none
     integer(int64), intent(in) :: LatticeIndex
 
-    GetFFTIndex = FindLoc(&
+    GetMKLMemoryIndex = FindLoc(&
                                 ! Where to look
          xp_MKL_Indices,dim=1,&
                                 ! What to look for
@@ -667,5 +678,5 @@ contains
          1&
          +xp_UpperLatticeBoundaries(1:ndim-1,ThisProc()+1)&
          -xp_LowerLatticeBoundaries(1:ndim-1,ThisProc()+1))
-  end function GetFFTIndex
+  end function GetMKLMemoryIndex
 end module xpfft

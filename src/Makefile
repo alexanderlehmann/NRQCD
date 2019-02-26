@@ -25,7 +25,7 @@ MKLROOT=intel/mkl
 
 #### Debugging options
 # Checking everything
-FFLAGS += -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
+FFLAGS += -diag-disable 5462 -diag-disable 6536 -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
 
 # Robust debug result
 #FFLAGS = -init=snan -traceback -warn interfaces -fp-speculation safe -traceback -check uninit -check bounds -ftrapuv -g

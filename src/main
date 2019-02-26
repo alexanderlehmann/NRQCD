@@ -39,7 +39,7 @@ program simulation
   ! Monitoring variables
   integer(int64) :: it, idistmeas
 
-  integer(int64) :: MemoryIndex, LatticeIndex, i
+  integer(int64) :: LocalIndex, LatticeIndex, i
   integer(int64), allocatable :: LocalLatticeIndices(:)
   
   ! MPI
@@ -69,6 +69,163 @@ program simulation
   complex(fp), allocatable :: data(:)
   
   call InitSimulation
+
+  allocate(data(GetMemorySize()))
+
+
+  call mpistop
+
+  
+  allocate(AA_correlator_ensemble(GetLocalLatticeSize(),&
+       0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
+  allocate(EE_correlator_ensemble(GetLocalLatticeSize(),&
+       0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
+  ensemble: do iensemble=1,EnsembleSize
+     if(ThisProc()==0) print*,iensemble
+
+     call GaugeConf%TransversePolarisedOccupiedInit_Box(&
+          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+
+     idistmeas = 0
+     call GaugeConf%GetTransverseAACorrelator(correlator)
+     AA_correlator_ensemble(:,idistmeas,iensemble) = correlator
+
+     call GaugeConf%GetTransverseEECorrelator(correlator)
+     EE_correlator_ensemble(:,idistmeas,iensemble) = correlator
+  end do ensemble
+
+  ! ..--** Start: Statistics and output **--..
+
+  it = 0
+  call StatisticsCorrelator(AA_correlator_ensemble,AA_correlator,AA_correlator_stderror,0)
+  call StatisticsCorrelator(EE_correlator_ensemble,EE_correlator,EE_correlator_stderror,0)
+
+  allocate(GluonDistribution(&
+       lbound(AA_correlator,1):ubound(AA_correlator,1),&
+       lbound(AA_correlator,2):ubound(AA_correlator,2)))
+  allocate(GluonDistribution_stderror(&
+       lbound(AA_correlator,1):ubound(AA_correlator,1),&
+       lbound(AA_correlator,2):ubound(AA_correlator,2)))
+
+  GluonDistribution = &
+                                !AA_correlator
+       sqrt(AA_correlator*EE_correlator)
+  GluonDistribution_stderror = &
+                                !AA_correlator_stderror
+       sqrt(&
+       + (AA_correlator_stderror*EE_correlator)**2 &
+       + (EE_correlator_stderror*AA_correlator)**2&
+       )
+
+  ! Collecting data by process 0 and printing to file
+  do idistmeas=lbound(GluonDistribution,2),ubound(GluonDistribution,2)
+     if(ThisProc()==0) then
+        write(filename,"(A18,I0.3,A1,I0.3,A1,I0.3)") 'gluondistribution_', &
+             LatticeExtensions(1),'x',LatticeExtensions(2),'x',&
+             LatticeExtensions(3)
+
+        time = (idistmeas - lbound(GluonDistribution,2)) &
+             * TimeBetweenGluonMeasurements
+        write(time_tag,"(F12.3)") time
+        time_tag = '_t' // trim(ADJUSTL(time_tag))
+        filename = trim(filename) // trim(time_tag) // '.txt'
+
+        fileID = OpenFile(filename=filename,st='REPLACE',fm='FORMATTED',act='WRITE')
+     end if
+     dest = 0
+
+     
+     allocate(Momenta(GetLocalLatticeSize()))
+
+     call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
+     forall(LocalIndex=1:GetLocalLatticeSize())
+        Momenta(LocalIndex) = GetNorm2Momentum(LocalLatticeIndices(LocalIndex))
+     end forall
+     
+     do proc=0,NumProcs()-1
+        ! Allocate at destination and sending process the buffer for output
+        if(ThisProc()==dest .or. ThisProc()==proc) then
+           if(allocated(GluonDistribution_AtTimePoint))&
+                deallocate(GluonDistribution_AtTimePoint)
+
+           if(allocated(GluonDistribution_AtTimePoint_stderror))&
+                deallocate(GluonDistribution_AtTimePoint_stderror)
+
+           allocate(GluonDistribution_AtTimePoint(GetLocalLatticeSize()))
+           allocate(GluonDistribution_AtTimePoint_stderror(GetLocalLatticeSize()))
+        end if
+
+        if(proc/=dest) then
+           source = proc
+
+           buffersize = size(GluonDistribution_atTimePoint)
+
+           if(ThisProc()==proc) then
+
+              ! Sending gluon distribution
+              tag = proc
+              
+              GluonDistribution_AtTimePoint = GluonDistribution(:,idistmeas)
+              call mpi_send(GluonDistribution_AtTimePoint,buffersize,MPI_DOUBLE,&
+                   dest,tag,&
+                   MPI_COMM_WORLD,mpierr)
+
+              ! Sending its standard error
+              tag = proc+NumProcs()
+              GluonDistribution_AtTimePoint_stderror = GluonDistribution_stderror(:,idistmeas)
+              call mpi_send(GluonDistribution_AtTimePoint_stderror,buffersize,MPI_DOUBLE,&
+                   dest,tag,&
+                   MPI_COMM_WORLD,mpierr)
+
+              ! sending momenta
+              tag = proc+2*NumProcs()
+              call mpi_send(Momenta,buffersize,MPI_DOUBLE,dest,tag,MPI_COMM_WORLD,mpierr)
+           else if(ThisProc()==dest) then
+              ! Recieving gluon distribution
+              tag = proc
+              call mpi_recv(GluonDistribution_AtTimePoint,buffersize,MPI_DOUBLE,&
+                   source,tag,&
+                   MPI_COMM_WORLD,mpistatus,mpierr)
+
+              ! Recieving its standard error
+              tag = proc+NumProcs()
+              call mpi_recv(GluonDistribution_AtTimePoint_stderror,buffersize,MPI_DOUBLE,&
+                   source,tag,&
+                   MPI_COMM_WORLD,mpistatus,mpierr)
+              
+              ! Recieving momenta
+              tag = proc+2*NumProcs()
+              call mpi_send(Momenta,buffersize,MPI_DOUBLE,source,tag,MPI_COMM_WORLD,mpistatus,mpierr)
+           else
+              ! Do nothing
+           end if
+        elseif(ThisProc()==dest) then
+           GluonDistribution_AtTimePoint = GluonDistribution(:,idistmeas)
+           GluonDistribution_AtTimePoint_stderror = GluonDistribution_stderror(:,idistmeas)
+        end if
+
+        ! Writing step
+        if(ThisProc()==dest) then
+           do LocalIndex=&
+                lbound(GluonDistribution_AtTimePoint,1),&
+                ubound(GluonDistribution_AtTimePoint,1)
+
+              !LatticeIndex = GetGlobalLatticeIndex(LocalIndex,proc)
+              !if(GetProc(LatticeIndex)==proc) then
+              !   print*,ThisProc(),proc,LatticeIndex
+              write(fileID,'(3(SP,E13.6,1X))') &
+                   Momenta(LocalIndex),&
+                   GluonDistribution_AtTimePoint(LocalIndex),&
+                   GluonDistribution_AtTimePoint_stderror(LocalIndex)
+              !end if
+           end do
+        end if
+        call syncall
+     end do
+     if(ThisProc()==0) call CloseFile(FileID)
+  end do
+  ! ..--**  END : Statistics and output **--..
+
   
   call EndSimulation
 

@@ -21,12 +21,8 @@ module lattice
   public :: &
        InitModule, &
        IsModuleInitialised,&
-       GetGlobalLatticeIndex,&
-       GetLocalIndex, &
-       GetLocalLatticeIndices,&
-       GetLocalLatticeIndices_includingHalo,&
-       GetLocalLatticeIndices_allocatable,&
-       GetLocalLatticeIndices_includingHalo_allocatable,&
+       !GetLocalLatticeIndices,&
+       !GetLocalLatticeIndices_allocatable,&
        GetLatticePosition,&
        GetLatticeIndex,&
        GetNegativeLatticeIndex,&
@@ -34,16 +30,18 @@ module lattice
        GetProc_fromGeneralIndex,&
        GetLatticeExtension,&
        GetLatticeSize,&
-       GetLocalLatticeSize,&
        InitLatticeIndices,&
-       GetLocalLatticeSize_includingHalo,&
+       GetMemoryIndex, &
+       GetMemorySize,&
+       GetLocalLatticeSize,&
        GetLatticeSpacing,&
        GetVolume,&
        GetNeib,&
        GetMomentum,&
        GetNorm2Momentum,&
        GetMaxNorm2Momentum,&
-       GetPolarisationVectors
+       GetPolarisationVectors,&
+       GetTransverseProjector
 
   !> Module name
   character(len=7), parameter, public ::  modulename='lattice'
@@ -61,14 +59,14 @@ module lattice
   integer(int64) :: LatticeExtensions(ndim) = -1
   !> lattice size
   integer(int64) :: LatticeSize = -1
+  !> local lattice size
+  integer(int64) :: LocalLatticeSize = -1
   !> lattice spacings
   real(fp)   :: LatticeSpacings(0:ndim) = -1._fp
   !> volume
   real(fp)   :: Volume = -1._fp
-  !> local lattice sizes
-  integer(int64) :: LocalLatticeSize=-1
-  !> local lattice sizes including halo
-  integer(int64) :: LocalLatticeSize_includingHalo=-1
+  !> local lattice size including halo
+  integer(int64) :: MemorySize=-1
 
   !> maximum 2-norm of momentum
   real(fp) :: MaxNorm2Momentum=-1._fp
@@ -78,16 +76,16 @@ module lattice
   integer(int64), allocatable :: LocalLowerLatticeBoundaries(:,:)
   !> local upper lattice boundaries
   integer(int64), allocatable :: LocalUpperLatticeBoundaries(:,:)
-  !> local lattice indices
-  integer(int64), allocatable :: LocalLatticeIndices(:)
-  !> local lattice size including halo
-  integer(int64), allocatable :: LocalLatticeSizes_IncludingHalo(:)
   !> local lower lattice boundaries including halo
   integer(int64), allocatable :: LocalLowerLatticeBoundaries_IncludingHalo(:,:)
   !> local upper lattice boundaries including halo
   integer(int64), allocatable :: LocalUpperLatticeBoundaries_IncludingHalo(:,:)
-  !> local lattice indices including halo
-  integer(int64), allocatable :: LocalLatticeIndices_includingHalo(:)
+  !> local lattice indices
+  integer(int64), allocatable :: LocalLatticeIndices(:)
+  !> local lattice extensions
+  integer(int64) :: LocalLatticeExtensions(ndim)
+  !> local lattice extensions including halo
+  integer(int64) :: LocalLatticeExtensions_includingHalo(ndim)
 
   !>@brief Lattice momentum
   !!@returns Lattice momentum
@@ -101,6 +99,10 @@ module lattice
      !module procedure GetMomentum_ForwardDerivative
   end interface GetMomentum
 
+  interface GetLatticeIndex
+     module procedure GetLatticeIndex_fromPosition
+     module procedure GetLatticeIndex_fromMemoryIndex
+  end interface GetLatticeIndex
 contains
   !>@brief Returns, if module is initialised
   !!@returns module's initialisation status
@@ -108,7 +110,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure logical function IsModuleInitialised()
+ pure logical function IsModuleInitialised()
     implicit none
     IsModuleInitialised = IsInitialised
   end function IsModuleInitialised
@@ -194,30 +196,30 @@ contains
 
        ! Local lattice points
        call InitLatticeIndices(&
-            LocalLatticeIndices,                        &
-            LocalLowerLatticeBoundaries(:,ThisProc()+1),&
-            LocalUpperLatticeBoundaries(:,ThisProc()+1))
-       call InitLatticeIndices(&
-            LocalLatticeIndices_includingHalo,&
+            LocalLatticeIndices,&
             LocalLowerLatticeBoundaries_includingHalo(:,ThisProc()+1),&
             LocalUpperLatticeBoundaries_includingHalo(:,ThisProc()+1))
 
-       LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
+       MemorySize = size(LocalLatticeIndices)
 
        ! Deleting lattice points which are contained more than once ...
        ! (important in case of small partitions)
        call RemoveDuplicates(&
             LocalLatticeIndices)
-       call RemoveDuplicates(&
-            LocalLatticeIndices_includingHalo)
        ! ... and sort the arrays
        call Sort(LocalLatticeIndices)
-       call Sort(LocalLatticeIndices_includingHalo)
 
        ! Setting local lattice size (including and without halo)
-       LocalLatticeSize = size(LocalLatticeIndices)
-       LocalLatticeSize_includingHalo = size(LocalLatticeIndices_includingHalo)
+       MemorySize = size(LocalLatticeIndices)
 
+       LocalLatticeExtensions= 1 + LocalUpperLatticeBoundaries(:,1) -LocalLowerLatticeBoundaries(:,1)
+       LocalLatticeExtensions_includingHalo=&
+            +1&
+            +LocalUpperLatticeBoundaries_includingHalo(:,1)&
+            -LocalLowerLatticeBoundaries_includingHalo(:,1)
+       
+       LocalLatticeSize = product(LocalLatticeExtensions)
+       
        ! Find maximum momentum
        MaxNorm2Momentum = FindMaxNorm2Momentum()
 
@@ -249,7 +251,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure recursive subroutine InitLocalLatticeBoundaries(&
+ pure recursive subroutine InitLocalLatticeBoundaries(&
        LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,partitions,&
        proc,i,ipart,nHalo)
     use, intrinsic :: iso_fortran_env
@@ -327,7 +329,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure recursive subroutine InitLatticeIndices(LatticeIndices,&
+ pure recursive subroutine InitLatticeIndices(LatticeIndices,&
        LowerBoundaries,UpperBoundaries,i,x,index)
     use, intrinsic :: iso_fortran_env
     implicit none
@@ -385,10 +387,10 @@ contains
   impure real(fp) function FindMaxNorm2Momentum
     use, intrinsic :: iso_fortran_env
     use mpi
-    use mpiinterface, only: NumProcs, intmpi, MPIstop
+    use mpiinterface, only: ThisProc, NumProcs, intmpi, MPIstop
     implicit none
 
-    integer(int64) :: LocalLatticeindex, LatticeIndex
+    integer(int64) :: MemoryIndex, LatticeIndex
     real(fp)   :: norm2momentum,currentMax
     real(fp), allocatable :: maxmomenta(:)
 
@@ -397,10 +399,12 @@ contains
     character(len=100) :: errormessage
     
     currentMax = 0
-    do LocalLatticeIndex=1,LocalLatticeSize
-       LatticeIndex = LocalLatticeIndices(LocalLatticeIndex)
-       norm2momentum = GetNorm2Momentum(LatticeIndex)
-       if(norm2momentum.gt.currentMax) currentMax = norm2Momentum
+    do MemoryIndex=1,MemorySize
+       LatticeIndex = GetLatticeIndex(MemoryIndex)
+       if(GetProc(LatticeIndex)==ThisProc()) then
+          norm2momentum = GetNorm2Momentum(LatticeIndex)
+          if(norm2momentum.gt.currentMax) currentMax = norm2Momentum
+       end if
     end do
 
     ! Communicate all local maxima
@@ -437,15 +441,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure integer(int64) function GetLatticeIndex(Position)
+ pure integer(int64) function GetLatticeIndex_fromPosition(Position)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> position vector
     integer(int64), intent(in) :: Position(ndim)
 
-    GetLatticeIndex &
+    GetLatticeIndex_fromPosition &
          = GetIndex_FromPosition(Position,LatticeExtensions)
-  end function GetLatticeIndex
+  end function GetLatticeIndex_fromPosition
 
   !>@brief Returns the lattice index corresponding to \f$-j\f$
   !!@returns lattice index
@@ -456,7 +460,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  pure integer(int64) function GetNegativeLatticeIndex(LatticeIndex)
+ pure integer(int64) function GetNegativeLatticeIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Lattice index
@@ -474,7 +478,7 @@ contains
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  pure function GetNegativeLatticePosition(Position)
+ pure function GetNegativeLatticePosition(Position)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Lattice position
@@ -492,7 +496,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure integer(int64) function GetNeib(i,LatticeIndex)
+ pure integer(int64) function GetNeib(i,LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Direction
@@ -512,7 +516,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure subroutine GetLocalLatticeIndices(indices)
+ pure subroutine GetLocalLatticeIndices(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> local lattice indices
@@ -526,43 +530,14 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure subroutine GetLocalLatticeIndices_Allocatable(indices)
+ pure subroutine GetLocalLatticeIndices_Allocatable(indices)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> local lattice indices
     integer(int64), intent(out), allocatable :: indices(:)
-    allocate(indices(LocalLatticeSize))
+    allocate(indices(MemorySize))
     indices = LocalLatticeIndices
   end subroutine GetLocalLatticeIndices_Allocatable
-
-  !>@brief Returns local lattice indices including halo
-  !!@returns local lattice indices including halo
-  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 17.02.2019
-  !!@version 1.0
-  pure subroutine GetLocalLatticeIndices_includingHalo(indices)
-    use, intrinsic :: iso_fortran_env
-    implicit none
-    !> local lattice indices
-    integer(int64), intent(out) :: indices(:)
-    indices = LocalLatticeIndices_includingHalo
-  end subroutine GetLocalLatticeIndices_IncludingHalo
-
-  !>@brief Returns local lattice indices including halo with allocation
-  !!@returns local lattice indices including halo
-  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 17.02.2019
-  !!@version 1.0
-  pure subroutine GetLocalLatticeIndices_includingHalo_Allocatable(indices)
-    use, intrinsic :: iso_fortran_env
-    implicit none
-    !> local lattice indices
-    integer(int64), intent(out), allocatable :: indices(:)
-    allocate(indices(LocalLatticeSize_includingHalo))
-    indices = LocalLatticeIndices_includingHalo
-  end subroutine GetLocalLatticeIndices_IncludingHalo_Allocatable
 
   !>@brief  Returns volume
   !!@returns volume
@@ -570,7 +545,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure real(fp) function GetVolume()
+ pure real(fp) function GetVolume()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetVolume = Volume
@@ -582,7 +557,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 21.02.2019
   !!@version 1.0
-  pure elemental real(fp) function GetLatticeSpacing(i)
+ pure elemental real(fp) function GetLatticeSpacing(i)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Direction \f$\in\{0,...,ndim\}\f$
@@ -596,7 +571,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 19.02.2019
   !!@version 1.0
-  pure elemental integer(int64) function GetLatticeExtension(i)
+ pure elemental integer(int64) function GetLatticeExtension(i)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int8), intent(in) :: i
@@ -610,14 +585,27 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure integer(int64) function GetLatticeSize()
+ pure integer(int64) function GetLatticeSize()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetLatticeSize = LatticeSize
   end function GetLatticeSize
 
-  !>@brief Returns local lattice size without halo
-  !!@returns local lattice size without halo
+  !>@brief Returns local lattice size including halo
+  !!@returns local lattice size including halo
+  !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 17.02.2019
+  !!@version 1.0
+  pure integer(int64) function GetMemorySize()
+    use, intrinsic :: iso_fortran_env
+    implicit none
+    GetMemorySize = MemorySize
+  end function GetMemorySize
+
+  !>@brief Returns local lattice size
+  !!@returns local lattice size
   !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -628,27 +616,14 @@ contains
     implicit none
     GetLocalLatticeSize = LocalLatticeSize
   end function GetLocalLatticeSize
-
-  !>@brief Returns local lattice size including halo
-  !!@returns local lattice size including halo
-  !!@details Lattice size is \f$|\Lambda|=\prod\limits_{i=1}^{d}N_i\f$
-  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 17.02.2019
-  !!@version 1.0
-  pure integer(int64) function GetLocalLatticeSize_includingHalo()
-    use, intrinsic :: iso_fortran_env
-    implicit none
-    GetLocalLatticeSize_includingHalo = LocalLatticeSize_includingHalo
-  end function GetLocalLatticeSize_includingHalo
-
+  
   !>@brief Returns MPI-process-rank corresponding to lattice index
   !!@returns MPI-process-rank corresponding to lattice index
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 19.02.2019
   !!@version 1.1
-  pure elemental integer(intmpi) function GetProc(LatticeIndex)
+ pure elemental integer(intmpi) function GetProc(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: intmpi
     implicit none
@@ -664,7 +639,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 19.02.2019
   !!@version 1.0
-  pure integer(intmpi) function GetProc_fromGeneralIndex(&
+ pure integer(intmpi) function GetProc_fromGeneralIndex(&
        Index,LowerBoundaries,UpperBoundaries,Extensions)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: intmpi
@@ -703,7 +678,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure function GetLatticePosition(LatticeIndex)
+ pure function GetLatticePosition(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice index
@@ -721,30 +696,31 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure elemental integer(int64) function GetLocalIndex(LatticeIndex)
+ pure elemental integer(int64) function GetMemoryIndex(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     integer(int64), intent(in) :: LatticeIndex
 
-    GetLocalIndex = FindLoc(&
+    GetMemoryIndex = FindLoc(&
                                 ! Where to look
-         LocalLatticeIndices_includingHalo,dim=1,&
+         LocalLatticeIndices,dim=1,&
                                 ! What to look for
          value = LatticeIndex)
-  end function GetLocalIndex
+  end function GetMemoryIndex
   
-  !>@brief Returns lattice index based on local index
+  !>@brief Returns lattice index based on memory index
   !!@returns lattice index
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure elemental integer(int64) function GetGlobalLatticeIndex(LocalIndex)
+ pure elemental integer(int64) function GetLatticeIndex_fromMemoryIndex(MemoryIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
-    integer(int64), intent(in) :: LocalIndex
-    GetGlobalLatticeIndex = LocalLatticeIndices_IncludingHalo(LocalIndex)
-  end function GetGlobalLatticeIndex
+    !> Local index
+    integer(int64), intent(in) :: MemoryIndex
+    GetLatticeIndex_fromMemoryIndex = LocalLatticeIndices(MemoryIndex)
+  end function GetLatticeIndex_fromMemoryIndex
 
   ! ..--** Generic Index Functions **--..
   !>@brief Returns  index of neighbouring point in i'th direction
@@ -754,7 +730,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure integer(int64) function GetNeib_FromIndex(i,index,extensions)
+ pure integer(int64) function GetNeib_FromIndex(i,index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Direction
@@ -791,7 +767,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure integer(int64) function GetIndex_FromPosition(position,extensions)
+ pure integer(int64) function GetIndex_FromPosition(position,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> position vector
@@ -820,7 +796,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure function GetPosition_FromIndex(index,extensions)
+ pure function GetPosition_FromIndex(index,extensions)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> index
@@ -847,7 +823,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure elemental integer(int64) function GetPeriodicPosition(index,extension)
+ pure elemental integer(int64) function GetPeriodicPosition(index,extension)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> component of position
@@ -871,7 +847,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure function GetMomentum_BackwardDerivative(LatticeIndex)
+ pure function GetMomentum_BackwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
@@ -902,7 +878,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure function GetMomentum_ForwardDerivative(LatticeIndex)
+ pure function GetMomentum_ForwardDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
@@ -932,7 +908,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure function GetMomentum_CentralDerivative(LatticeIndex)
+ pure function GetMomentum_CentralDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mathconstants, only: pi
     implicit none
@@ -955,7 +931,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure real(fp) function GetNorm2Momentum(LatticeIndex)
+ pure real(fp) function GetNorm2Momentum(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice index
@@ -975,7 +951,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  pure real(fp) function GetMaxNorm2Momentum()
+ pure real(fp) function GetMaxNorm2Momentum()
     use, intrinsic :: iso_fortran_env
     implicit none
     GetMaxNorm2Momentum = MaxNorm2Momentum
@@ -994,7 +970,7 @@ contains
   !!@todo Finding a dimension-independend way of programming this -- or at least one which compiles
   !! for different numbers of dimensions. For now one would have to overwrite this code when
   !! one wants to change the numbers of dimensions
-  pure subroutine GetPolarisationVectors(p,PolarisationVectors)
+ pure subroutine GetPolarisationVectors(p,PolarisationVectors)
     use precision, only: fp
     use tolerances, only: GetZeroTol
     implicit none
@@ -1058,7 +1034,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  pure real(fp) function GetTransverseProjector(i,j,momentum)
+ pure real(fp) function GetTransverseProjector(i,j,momentum)
     use tolerances, only: GetZeroTol
     implicit none
     !> Direction
@@ -1082,7 +1058,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 26.11.2018
   !!@version 1.0
-  pure elemental integer(int8) function GetKroneckerDelta(i,j)
+ pure elemental integer(int8) function GetKroneckerDelta(i,j)
     implicit none
     !> Index \f$i\f$
     integer(int8), intent(in) :: i
