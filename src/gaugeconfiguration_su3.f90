@@ -20,7 +20,7 @@ module gaugeconfiguration_su3
 
   implicit none
 
-  PRIVATe
+  PRIVATE
 
   public gaugeconfiguration
   
@@ -57,6 +57,7 @@ module gaugeconfiguration_su3
      procedure, private:: SetEfield
 
      ! Initialisation routines
+     procedure, public :: HotInit
      procedure, public :: ColdInit
      procedure, public :: TransversePolarisedOccupiedInit_Box
      procedure, private :: TransversePolarisedOccupiedInit
@@ -85,6 +86,12 @@ module gaugeconfiguration_su3
      procedure, public :: GetTransverseAACorrelator
      procedure, public :: GetTransverseEECorrelator
      !procedure, public :: GetAACorrelator
+
+     ! Update routines
+     generic, public :: Update => Update_Leapfrog
+     procedure, private :: Update_Leapfrog
+     procedure, private :: Update_Efield_Leapfrog
+     procedure, private :: Update_Links_Leapfrog
   end type GaugeConfiguration
 
 
@@ -266,16 +273,45 @@ contains ! Module procedures
 
     integer(int64) :: MemoryIndex
     integer(int8)  :: i
-    complex(fp) :: UnitMatrix(nSUN,nSUN)
     
     call GaugeConf%Allocate
 
     GaugeConf%Efield = 0
-    UnitMatrix = GetUnitMatrix(nSUN)
     forall(i=1:size(GaugeConf%Links,3), MemoryIndex=1:size(GaugeConf%Links,4))
-       GaugeConf%Links(:,:,i,MemoryIndex) = UnitMatrix
+       GaugeConf%Links(:,:,i,MemoryIndex) = GetUnitMatrix(nSUN)
     end forall
   end subroutine ColdInit
+
+  impure subroutine HotInit(GaugeConf)
+    use random, only: GetRandomUniformReal
+    use lattice, only: ndim, GetLatticeIndex, GetProc, GetMemorySize, GetLatticeSpacing
+    implicit none
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+
+    integer(int64) :: MemoryIndex, LatticeIndex
+    integer(int8)  :: i
+    real(fp) :: r(ngen)
+
+    
+    call GaugeConf%Allocate
+    
+    do MemoryIndex=1,GetMemorySize()
+       LatticeIndex = GetLatticeIndex(MemoryIndex)
+       if(ThisProc()==GetProc(LatticeIndex)) then
+          do i=1,ndim
+             ! Link
+             r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)
+             GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(r)
+
+             ! E-field
+             r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)*GetLatticeSpacing(0_int8)
+             GaugeConf%Efield(:,i,MemoryIndex) = r
+          end do
+       end if
+    end do
+
+    call GaugeConf%CommunicateBoundary
+  end subroutine HotInit
 
   !>@brief Initialises the configuration as in the shape of a box highly occupied,
   !! transverse polarised fields
@@ -285,11 +321,11 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  impure subroutine TransversePolarisedOccupiedInit_Box(GaugeConf,SaturationScale,Amplitude,Coupling)
+  impure subroutine TransversePolarisedOccupiedInit_Box(GaugeConf,SaturationScale,Amplitude,Coupling,&
+       aa_correlator,ee_correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: GetLocalLatticeIndices_allocatable, GetNorm2Momentum,&
-         GetLocalLatticeSize_includingHalo, GetLocalIndex
+    use lattice, only: GetNorm2Momentum,GetMemorySize,GetLatticeIndex
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -299,26 +335,35 @@ contains ! Module procedures
     real(fp),                  intent(in)  :: Amplitude
     !> Coupling
     real(fp),                  intent(in)  :: Coupling
-
-    real(fp), allocatable :: Occupation(:)
-    integer(int64), allocatable :: LocalLatticeIndices(:)
-    integer(int64) :: LatticeIndex, is
+    !> AA-Correlator
+    real(fp), optional, allocatable, intent(out) :: aa_correlator(:)
+    !> EE-Correlator
+    real(fp), optional, allocatable, intent(out) :: ee_correlator(:)
     
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
-    allocate(Occupation(GetLocalLatticeSize_includingHalo()))
+    real(fp), allocatable :: Occupation(:)
+    integer(int64) :: LatticeIndex, MemoryIndex
+    
+    allocate(Occupation(GetMemorySize()))
     !forall(is=1:size(LocalLatticeIndices))
-    do is=1,size(LocalLatticeIndices)
-       Occupation(GetLocalIndex(LocalLatticeIndices(is)))&
+    do MemoryIndex=1,GetMemorySize()
+       Occupation(MemoryIndex)&
             = GetBoxOccupation(&
-            GetNorm2Momentum(LocalLatticeIndices(is)),& !|p|
+            GetNorm2Momentum(GetLatticeIndex(MemoryIndex)),& !|p|
             SaturationScale,&
             Amplitude,&
             Coupling)
     end do
     !end forall
-    deallocate(LocalLatticeIndices)
 
-    call GaugeConf%TransversePolarisedOccupiedInit(Occupation)
+    if(present(aa_correlator).and.present(ee_correlator)) then
+       call GaugeConf%TransversePolarisedOccupiedInit(Occupation,aa_correlator,ee_correlator)
+    elseif(present(aa_correlator).and..not.present(ee_correlator)) then
+       call GaugeConf%TransversePolarisedOccupiedInit(Occupation,aa_correlator=aa_correlator)
+    elseif(.not.present(aa_correlator).and.present(ee_correlator)) then
+       call GaugeConf%TransversePolarisedOccupiedInit(Occupation,ee_correlator=ee_correlator)
+    else
+       call GaugeConf%TransversePolarisedOccupiedInit(Occupation)
+    end if
 
     deallocate(Occupation)
     
@@ -330,22 +375,26 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  impure subroutine TransversePolarisedOccupiedInit(GaugeConf,Occupation)
+  impure subroutine TransversePolarisedOccupiedInit(GaugeConf,Occupation,aa_correlator,ee_correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
     use tolerances, only: GetZeroTol
     use mpiinterface, only: intmpi, ThisProc, mpistop, SyncAll
-    use lattice, only: nDim, GetLocalLatticeSize_includingHalo, GetLocalIndex, GetLatticeSize,&
+    use lattice, only: nDim, GetMemorySize, GetMemoryIndex, GetLatticeSize,&
          GetProc, GetVolume, GetPolarisationVectors, GetNorm2Momentum, GetMomentum,&
-         GetLocalLatticeIndices_allocatable, GetLatticeSpacing
+         GetLatticeSpacing, GetLatticeIndex, GetLocalLatticeSize
     use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
          GetRandomNormalCmplx_specificProcess, modulename_random=>modulename
-    use xpfft, only: p2x
+    use xpfft, only: p2x, x2p
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
     !> Gauge particle occupation
     real(fp),                  intent(in)  :: Occupation(:)
+    !> AA-Correlator
+    real(fp), optional, allocatable, intent(out) :: aa_correlator(:)
+    !> EE-Correlator
+    real(fp), optional, allocatable, intent(out) :: ee_correlator(:)
 
     ! Gauge and electric field
     complex(fp), allocatable :: afield(:,:,:), efield(:,:,:)
@@ -365,8 +414,7 @@ contains ! Module procedures
     real(fp) :: MomentumNorm
 
     ! Lattice
-    integer(int64) :: LatticeIndex, LocalIndex, is
-    integer(int64), allocatable :: LocalLatticeIndices(:)
+    integer(int64) :: LatticeIndex, MemoryIndex, is
     integer(int8) :: i,a
     ! MPI
     integer(intmpi) :: RecvProc
@@ -379,6 +427,9 @@ contains ! Module procedures
     ! A-field
     real(fp) :: Afield_site(ngen)
     character(len=105) :: errormessage
+
+    complex(fp) :: afield_p(ndim),efield_p(ndim)
+    
     ! Check if random numbers are initialised
     if(.not.isModuleInitialised_random()) then
        errormessage = 'Error in TransversePolarisedOccupiedInit of '//modulename&
@@ -387,8 +438,8 @@ contains ! Module procedures
     end if
     
     ! ..--** START: Allocations **--..
-    allocate(afield(GetLocalLatticeSize_includingHalo(),nGen,nDim))
-    allocate(efield(GetLocalLatticeSize_includingHalo(),nGen,nDim))
+    allocate(afield(GetMemorySize(),nGen,nDim))
+    allocate(efield(GetMemorySize(),nGen,nDim))
     ! ..--**  END : Allocations **--..
 
     ! ..--** START: Drawing random numbers and setting the field in p-space **--..
@@ -408,13 +459,13 @@ contains ! Module procedures
                 Momentum = GetMomentum(LatticeIndex)
                 call GetPolarisationVectors(Momentum,PolarisationVectors)
 
-                LocalIndex = GetLocalIndex(LatticeIndex)
+                MemoryIndex = GetMemoryIndex(LatticeIndex)
 
                 prefactor_afield = &
-                     sqrt(GetVolume()*Occupation(LocalIndex)/MomentumNorm/2)
+                     sqrt(GetVolume()*Occupation(MemoryIndex)/MomentumNorm/2)
 
                 prefactor_efield = &
-                     cmplx(0,sqrt(GetVolume()*Occupation(LocalIndex)*MomentumNorm/2),fp)
+                     cmplx(0,sqrt(GetVolume()*Occupation(MemoryIndex)*MomentumNorm/2),fp)
              end if ! is recieving process
 
              generator: do a=1_int8,ngen
@@ -424,14 +475,14 @@ contains ! Module procedures
                    r_efield = r_afield
                    
                    dims: do i=1,ndim !concurrent(i=1_int8:ndim)
-                      afield(LocalIndex,a,i) = &
+                      afield(MemoryIndex,a,i) = &
                            prefactor_afield*(&
                                 ! First transversal polarisation
                            + r_afield(1)*PolarisationVectors(i,1) &
                                 ! Second transversal polarisation
                            + r_afield(2)*PolarisationVectors(i,2) )
 
-                      efield(LocalIndex,a,i) = &
+                      efield(MemoryIndex,a,i) = &
                            prefactor_efield*(&
                                 ! First transversal polarisation
                            + r_efield(1)*PolarisationVectors(i,1) &
@@ -443,9 +494,9 @@ contains ! Module procedures
           
           else !p=0
              if(ThisProc()==RecvProc) then
-                LocalIndex = GetLocalIndex(LatticeIndex)
-                afield(LocalIndex,:,:) = 0
-                efield(LocalIndex,:,:) = 0
+                MemoryIndex = GetMemoryIndex(LatticeIndex)
+                afield(MemoryIndex,:,:) = 0
+                efield(MemoryIndex,:,:) = 0
              end if !recieving process
           end if !p>0
        end if !recieving or sending process
@@ -462,6 +513,41 @@ contains ! Module procedures
        end do !a
     end do !i
 
+    if(present(aa_correlator)) then
+       allocate(aa_correlator(GetLocalLatticeSize()))
+       is=0
+       do MemoryIndex=1,GetMemorySize()
+          LatticeIndex = GetLatticeIndex(MemoryIndex)
+          if(GetProc(LatticeIndex)==ThisProc()) then
+             is = is+1
+             aa_correlator(is) = 0
+             do a=1,ngen
+                afield_p = afield(MemoryIndex,a,:)
+                aa_correlator(is) = aa_correlator(is) &
+                     + GetTransverseField_usingProjector(afield_p,LatticeIndex)&
+                     /GetVolume()/nGen
+             end do
+          end if
+       end do
+    end if
+    if(present(ee_correlator)) then
+       allocate(ee_correlator(GetLocalLatticeSize()))
+       is=0
+       do MemoryIndex=1,GetMemorySize()
+          LatticeIndex = GetLatticeIndex(MemoryIndex)
+          if(GetProc(LatticeIndex)==ThisProc()) then
+             is = is+1
+             ee_correlator(is) = 0
+             do a=1,ngen
+                efield_p = efield(MemoryIndex,a,:)
+                ee_correlator(is) = ee_correlator(is) &
+                     + GetTransverseField_usingProjector(efield_p,LatticeIndex)&
+                     /GetVolume()/nGen
+             end do
+          end if
+       end do
+    end if
+    
     !..--** START: FFT p-->x **--..
     do i=1,ndim
        do a=1,ngen
@@ -471,32 +557,29 @@ contains ! Module procedures
     end do !i
     !..--**  END : FFT p-->x **--..
 
+    
     !..--** START: Writing fields to configuration **--..
     call GaugeConf%Allocate
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
     !do concurrent(&
     !     is=1:size(LocalLatticeIndices),&
     !     i =1:ndim)
-    do is=1,size(LocalLatticeIndices)
+    do MemoryIndex=1,GetMemorySize()
        do i=1,ndim
-       LatticeIndex = LocalLatticeIndices(is)
-       LocalIndex   = GetLocalIndex(LatticeIndex)
-       ! Link
-       afield_site = real(afield(LocalIndex,:,i),fp) &
-            ! Translation to lattice units
-            *GetLatticeSpacing(i)
-       Link = GetGroupExp(afield_site)
-       call GaugeConf%SetLink(i,LatticeIndex,Link)
-
-       ! E-field
-       efield_site = real(efield(LocalIndex,:,i),fp) &
-            ! Translation to lattice units
-            *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
-       !do concurrent(a=1_int8:ngen)
-       do a=1,ngen
-          call GaugeConf%SetEfield(a,i,LatticeIndex,efield_site(a))
+          LatticeIndex = GetLatticeIndex(MemoryIndex)
+          if(GetProc(LatticeIndex)==ThisProc()) then
+             ! Link
+             afield_site = real(afield(MemoryIndex,:,i),fp) &
+                                ! Translation to lattice units
+                  *GetLatticeSpacing(i)
+             GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(afield_site)
+             
+             ! E-field
+             efield_site = real(efield(MemoryIndex,:,i),fp) &
+                                ! Translation to lattice units
+                  *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+             GaugeConf%Efield(:,i,MemoryIndex) = efield_site
+          end if
        end do
-    end do
     end do
     !..--**  END : Writing fields to configuration **--..
     call GaugeConf%CommunicateBoundary()
@@ -521,7 +604,7 @@ contains ! Module procedures
       ! Indices
       integer(intmpi) :: PositiveProc, NegativeProc
       integer(int64)  :: PositiveLatticeIndex, NegativeLatticeIndex
-      integer(int64)  :: PositiveLocalIndex, NegativeLocalIndex
+      integer(int64)  :: PositiveMemoryIndex, NegativeMemoryIndex
       integer(int64)  :: LatticeSize
 
       LatticeSize = GetLatticeSize()
@@ -539,15 +622,15 @@ contains ! Module procedures
          if(PositiveProc == NegativeProc) then
             ! positive and negative process are the same --> No MPI-communication needed
             if(ThisProc()==PositiveProc) then
-               PositiveLocalIndex = GetLocalIndex(PositiveLatticeIndex)
-               NegativeLocalIndex = GetLocalIndex(NegativeLatticeIndex)
+               PositiveMemoryIndex = GetMemoryIndex(PositiveLatticeIndex)
+               NegativeMemoryIndex = GetMemoryIndex(NegativeLatticeIndex)
                
-               a = field(PositiveLocalIndex)
-               if(PositiveLocalIndex==NegativeLocalIndex) then
-                  field(PositiveLocalIndex) = real(a,fp)
+               a = field(PositiveMemoryIndex)
+               if(PositiveMemoryIndex==NegativeMemoryIndex) then
+                  field(PositiveMemoryIndex) = real(a,fp)
                else
-                  field(PositiveLocalIndex) = a
-                  field(NegativeLocalIndex) = conjg(a)
+                  field(PositiveMemoryIndex) = a
+                  field(NegativeMemoryIndex) = conjg(a)
                end if
             end if
          else 
@@ -557,8 +640,8 @@ contains ! Module procedures
             dest = NegativeProc
             
             if(ThisProc()==PositiveProc) then
-               PositiveLocalIndex = GetLocalIndex(PositiveLatticeIndex)
-               a = field(PositiveLocalIndex)
+               PositiveMemoryIndex = GetMemoryIndex(PositiveLatticeIndex)
+               a = field(PositiveMemoryIndex)
 
                call MPI_Send(&
                     a,                   & ! What to send
@@ -579,8 +662,8 @@ contains ! Module procedures
                     status,              & ! Status
                     mpierr)                ! Error code
                
-               NegativeLocalIndex = GetLocalIndex(NegativeLatticeIndex)
-               field(NegativeLocalIndex) = conjg(a)
+               NegativeMemoryIndex = GetMemoryIndex(NegativeLatticeIndex)
+               field(NegativeMemoryIndex) = conjg(a)
             else
                ! do nothing
             end if
@@ -626,8 +709,7 @@ contains ! Module procedures
   impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
-    use lattice, only: nDim, GetLatticeSpacing,GetNeib,GetLocalIndex,&
-         GetLocalLatticeIndices_allocatable, GetNeib
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib,GetLatticeIndex, GetNeib, GetMemorySize
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -639,15 +721,14 @@ contains ! Module procedures
     complex(fp), dimension(nsun,nsun) :: Mefield, Mefield_neib, derivative, Link_neib
     
     integer(int8)  :: i, a
-    integer(int64) :: is, neib, latticeindex
+    integer(int64) :: MemoryIndex, neib, latticeindex
     integer(int64), allocatable :: LocalLatticeIndices(:)
 
     ! 1. Calculation of local contribution
     local_contribution = 0
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
     !do concurrent (is=1:size(LocalLatticeIndices))
-    do is=1,size(LocalLatticeIndices)
-       LatticeIndex = LocalLatticeIndices(is)
+    do MemoryIndex=1,GetMemorySize()
+       LatticeIndex = GetLatticeIndex(MemoryIndex)
        !do concurrent(i=1_int8:ndim)
        do i=1,ndim
           efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
@@ -823,7 +904,7 @@ contains ! Module procedures
   impure real(fp) function GetEnergy(GaugeConf)
     use precision, only: fp
     use matrixoperations, only: GetTrace
-    use lattice, only: nDim, GetLatticeSpacing, GetLocalLatticeIndices_allocatable
+    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetLatticeIndex
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
     implicit none
@@ -838,22 +919,20 @@ contains ! Module procedures
 
     real(fp) :: PotentialTerm
     integer(int8)  :: i, j
-    integer(int64) :: is, latticeindex
-    integer(int64), allocatable :: LocalLatticeIndices(:)
+    integer(int64) :: MemoryIndex, latticeindex
 
     ! 1. Calculation of local contribution
     local_contribution = 0
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
     !do concurrent (is=1:size(LocalLatticeIndices))
-    do is=1,size(LocalLatticeIndices)
-       LatticeIndex = LocalLatticeIndices(is)
+    do MemoryIndex=1,GetMemorySize()
+       LatticeIndex = GetLatticeIndex(MemoryIndex)
        !do concurrent(i=1_int8:ndim)
        do i=1,ndim
           efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
           
           local_contribution = local_contribution &
                ! Electric energy
-               + sum(efield**2)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)/2
+               + sum(efield**2)/(GetLatticeSpacing(i)*GetLatticeSpacing(0_int8))**2/2
           ! Magnetic energy
           !do concurrent(j=i+1_int8:ndim)
           do j=i+1_int8,ndim
@@ -886,9 +965,9 @@ contains ! Module procedures
   impure subroutine GetTransverseAACorrelator(GaugeConf,Correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: nDim, GetLocalLatticeSize_includingHalo, GetLocalIndex, &
-         GetLocalLatticeIndices_includingHalo_allocatable,&
-         GetLocalLatticeSize, GetLocalLatticeIndices_allocatable
+    use lattice, only: nDim, GetLatticeIndex, GetMemoryIndex, GetProc, GetMemorySize,&
+         GetLocalLatticeSize
+    use mpiinterface, only: ThisProc
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in)  :: GaugeConf
@@ -896,38 +975,31 @@ contains ! Module procedures
     real(fp), allocatable, intent(out) :: Correlator(:)
 
     integer(int8)  :: a, i
-    integer(int64) :: LocalIndex, LatticeIndex, is
-    integer(int64), allocatable :: LocalLatticeIndices_includingHalo(:),LocalLatticeIndices(:)
+    integer(int64) :: MemoryIndex, LatticeIndex
 
     real(fp), allocatable :: field(:,:,:), correlator_a(:)
     
-    call GetLocalLatticeIndices_includingHalo_allocatable(LocalLatticeIndices_includingHalo)
     ! Extracting the gauge field in position space
-    allocate(field(GetLocalLatticeSize_includingHalo(),nDim,nGen))
+    allocate(field(GetMemorySize(),nDim,nGen))
     !forall(&
     !     LocalIndex=1_int64:Size(LocalLatticeIndices_includingHalo),&
     !     i=1_int8:nDim )
-    do LocalIndex=1,size(LocalLatticeIndices_includingHalo)
+    do MemoryIndex=1,GetMemorySize()
        do i=1,ndim
-          field(LocalIndex,i,:)&
+          field(MemoryIndex,i,:)&
                = GaugeConf%GetGaugeField_AlgebraCoordinates(&
-               i,LocalLatticeIndices_includingHalo(LocalIndex))
+               i,GetLatticeIndex(MemoryIndex))
        end do
     end do
     !end forall
-
+    
     ! Computing average over all generators
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
     allocate(correlator(GetLocalLatticeSize()))
     correlator = 0
+    
     do a=1,nGen
        call GetTransverseCorrelator(field(:,:,a),correlator_a)
-
-       do is=1,GetLocalLatticeSize()
-          LatticeIndex = LocalLatticeIndices(is)
-          LocalIndex = GetLocalIndex(LatticeIndex)
-          correlator(is) = correlator(is) + correlator_a(LocalIndex)/nGen
-       end do
+       correlator = correlator + correlator_a/nGen
     end do
     deallocate(correlator_a,field)
   end subroutine GetTransverseAACorrelator
@@ -941,48 +1013,41 @@ contains ! Module procedures
   impure subroutine GetTransverseEECorrelator(GaugeConf,Correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: nDim, GetLocalLatticeSize_includingHalo, GetLocalIndex, &
-         GetLocalLatticeIndices_includingHalo_allocatable,&
-         GetLocalLatticeSize, GetLocalLatticeIndices_allocatable
+    use lattice, only: nDim, GetLatticeIndex, GetMemoryIndex, GetProc, GetMemorySize,&
+         GetLocalLatticeSize
+    use mpiinterface, only: ThisProc
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in)  :: GaugeConf
-    !> Transverse EE-correlator (MPI-distributed)
+    !> Transverse AA-correlator (MPI-distributed)
     real(fp), allocatable, intent(out) :: Correlator(:)
 
     integer(int8)  :: a, i
-    integer(int64) :: LocalIndex, LatticeIndex, is
-    integer(int64), allocatable :: LocalLatticeIndices_includingHalo(:),LocalLatticeIndices(:)
+    integer(int64) :: MemoryIndex, LatticeIndex
 
     real(fp), allocatable :: field(:,:,:), correlator_a(:)
     
-    call GetLocalLatticeIndices_includingHalo_allocatable(LocalLatticeIndices_includingHalo)
     ! Extracting the gauge field in position space
-    allocate(field(GetLocalLatticeSize_includingHalo(),nDim,nGen))
+    allocate(field(GetMemorySize(),nDim,nGen))
     !forall(&
     !     LocalIndex=1_int64:Size(LocalLatticeIndices_includingHalo),&
     !     i=1_int8:nDim )
-    do LocalIndex=1,size(LocalLatticeIndices_includingHalo)
+    do MemoryIndex=1,GetMemorySize()
        do i=1,ndim
-          field(LocalIndex,i,:)&
-               = GaugeConf%GetElectricfield_AlgebraCoordinate([1_int8:ngen],&
-               i,LocalLatticeIndices_includingHalo(LocalIndex))
+          field(MemoryIndex,i,:)&
+               = GaugeConf%GetElectricField_AlgebraCoordinate(&
+               [1_int8:ngen],i,GetLatticeIndex(MemoryIndex))
        end do
     end do
     !end forall
 
     ! Computing average over all generators
-    call GetLocalLatticeIndices_allocatable(LocalLatticeIndices)
     allocate(correlator(GetLocalLatticeSize()))
     correlator = 0
+    
     do a=1,nGen
        call GetTransverseCorrelator(field(:,:,a),correlator_a)
-
-       do is=1,GetLocalLatticeSize()
-          LatticeIndex = LocalLatticeIndices(is)
-          LocalIndex = GetLocalIndex(LatticeIndex)
-          correlator(is) = correlator(is) + correlator_a(LocalIndex)/nGen
-       end do
+       correlator = correlator + correlator_a/nGen
     end do
     deallocate(correlator_a,field)
   end subroutine GetTransverseEECorrelator
@@ -994,9 +1059,10 @@ contains ! Module procedures
   !!@date 17.01.2019
   !!@version 1.0
   impure subroutine GetTransverseCorrelator(x_field,correlator)
-    use lattice, only: nDim, GetVolume, GetGlobalLatticeIndex, GetLocalLatticeSize_includingHalo
+    use lattice, only: nDim, GetVolume, GetLatticeIndex, GetMemorySize, GetLocalLatticeSize, GetProc
     use xpfft,     only: x2p
     use precision, only: fp
+    use mpiinterface, only: ThisProc
     implicit none
     !> Field in position space (e.g. A(x), E(x)), indexed as: field(latticeindex,direction)
     real(fp),              intent(in)  :: x_field(:,:)
@@ -1005,13 +1071,13 @@ contains ! Module procedures
 
 
     integer(int8) :: i
-    integer(int64) :: LatticeIndex, LocalIndex
+    integer(int64) :: LatticeIndex, MemoryIndex, is
 
     complex(fp), allocatable :: p_field(:,:)
     complex(fp) :: field_site(nDim)
 
     ! Allocating fourier transform of input
-    allocate(p_field(GetLocalLatticesize_includingHalo(),nDim))
+    allocate(p_field(GetMemorySize(),nDim))
     p_field = cmplx(x_field,0,fp)
 
     ! Performing fourier transform for all spatial components
@@ -1020,40 +1086,44 @@ contains ! Module procedures
     end do
     
     ! Allocating output
-    allocate(correlator(size(x_field,1)))
+    allocate(correlator(GetLocalLatticeSize()))
     correlator = 0
     !do concurrent(LocalIndex=1:size(correlator))
-    do LocalIndex=1,size(correlator)
-       field_site = p_field(LocalIndex,:)
-       Correlator(LocalIndex) = &
-            GetTransverseField_usingProjector&
-            (field_site,LatticeIndex)/GetVolume()
+    is=0
+    do MemoryIndex=1,GetMemorySize()
+       LatticeIndex = GetLatticeIndex(MemoryIndex)
+       if(GetProc(LatticeIndex)==ThisProc()) then
+          is=is+1
+          field_site = p_field(MemoryIndex,:)
+          Correlator(is) = &
+               GetTransverseField_usingProjector&
+               (field_site,LatticeIndex)/GetVolume()
+       end if
     end do
     deallocate(p_field)
-  contains
-   IMpure real(fp) function GetTransverseField_usingProjector(field,LatticeIndex)
-      use precision, only: fp
-      use lattice, only: nDim, GetMomentum, GetTransverseProjector
-      implicit none
-      !> Field in p-space
-      complex(fp),    intent(in) :: field(nDim)
-      !> Lattice index
-      integer(int64), intent(in) :: LatticeIndex
-
-      integer(int8) :: i,j
-      complex(fp) :: res, momentum(nDim)
-
-      res = 0
-      !do concurrent(i=1:ndim, j=1:ndim)
-      do i=1,ndim
-         do j=1,ndim
-            momentum = GetMomentum(LatticeIndex)
-            res = res + field(i)*GetTransverseProjector(i,j,momentum)*conjg(field(j))
-         end do
-      end do
-      GetTransverseField_usingProjector = real(res,fp)
-    end function GetTransverseField_usingProjector
   end subroutine GetTransverseCorrelator
+  IMpure real(fp) function GetTransverseField_usingProjector(field,LatticeIndex)
+    use precision, only: fp
+    use lattice, only: nDim, GetMomentum, GetTransverseProjector
+    implicit none
+    !> Field in p-space
+    complex(fp),    intent(in) :: field(nDim)
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+
+    integer(int8) :: i,j
+    complex(fp) :: res, momentum(nDim)
+
+    res = 0
+    !do concurrent(i=1:ndim, j=1:ndim)
+    do i=1,ndim
+       do j=1,ndim
+          momentum = GetMomentum(LatticeIndex)
+          res = res + field(i)*GetTransverseProjector(i,j,momentum)*conjg(field(j))
+       end do
+    end do
+    GetTransverseField_usingProjector = real(res,fp)
+  end function GetTransverseField_usingProjector
 
   !>@brief Returns algebra-component of the gauge field
   !!@returns \f$A_{i,\vec{v}}^a\f$
@@ -1157,4 +1227,192 @@ contains ! Module procedures
     GetElectricField_AlgebraMatrix &
          = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraMatrix
+
+  !>@brief Update routine using the Leapfrog algorithm
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 27.02.2019
+  !!@version 1.0
+  impure subroutine Update_Leapfrog(GaugeConf,StepWidth_)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Step width in units of \f$a_0\f$
+    real(fp),                  intent(in), optional :: Stepwidth_
+
+    real(fp) :: Stepwidth
+    
+    ! ..--** START: Optional parameters **--..
+    if(present(Stepwidth_)) then
+       Stepwidth = Stepwidth_
+    else
+       ! Default value
+       Stepwidth = 1._fp ! in units of a0
+    end if
+    ! ..--**  END : Optional parameters **--..
+    
+    if(Stepwidth.gt.0) then
+       call GaugeConf%Update_Links_Leapfrog(Stepwidth)
+       !call GaugeConf%CommunicateBoundary_Links
+       call GaugeConf%Update_Efield_Leapfrog(Stepwidth)
+       call GaugeConf%CommunicateBoundary_Efield
+    else
+       call GaugeConf%Update_Efield_Leapfrog(Stepwidth)
+       call GaugeConf%Update_Links_Leapfrog(Stepwidth)
+       !call GaugeConf%CommunicateBoundary
+       call GaugeConf%CommunicateBoundary_Efield
+    end if
+  end subroutine Update_Leapfrog
+
+  !>@brief Update routine for the links as part of the Leapfrog algorithm
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 27.02.2019
+  !!@version 1.0
+  impure subroutine Update_Links_Leapfrog(GaugeConf,StepWidth)
+    use lattice, only: ndim, GetMemorySize
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Step width in units of \f$a_0\f$
+    real(fp),                  intent(in)    :: StepWidth
+    
+    integer(int8) :: i
+    integer(int64):: MemoryIndex
+
+    complex(fp) :: TimeEvolutionOperator(nSUN,nSUN)
+    real(fp)    :: efield_times_dt(nGen)
+
+    do MemoryIndex=1,GetMemorySize()
+       do i=1,ndim
+          efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth
+          TimeEvolutionOperator = GetGroupExp(efield_times_dt)
+          
+          GaugeConf%Links(:,:,i,MemoryIndex) =&
+               matmul(TimeEvolutionOperator,GaugeConf%Links(:,:,i,MemoryIndex))
+       end do
+    end do
+  end subroutine Update_Links_Leapfrog
+
+  !>@brief Update routine for the electric field as part of the Leapfrog algorithm
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 27.02.2019
+  !!@version 1.0
+  impure subroutine Update_Efield_Leapfrog(GaugeConf,StepWidth)
+    use lattice, only: ndim, GetMemorySize,GetLatticeIndex
+    implicit none
+    !> Gauge link configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Step width in units of \f$a_0\f$
+    real(fp),                  intent(in)    :: StepWidth
+    
+    integer(int8) :: i
+    integer(int64):: MemoryIndex,LatticeIndex
+    
+    do MemoryIndex=1,GetMemorySize()
+       LatticeIndex=GetLatticeIndex(MemoryIndex)
+       do i=1,ndim
+          call Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,latticeindex)
+       end do
+    end do
+    
+  contains
+    pure subroutine Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,latticeindex)
+      use lattice, only: ndim, GetLatticeSpacing, GetMemoryIndex
+      implicit none
+      !> Gauge link configuration
+      type(GaugeConfiguration), intent(inout) :: GaugeConf
+      !> Step width in units of \f$a_0\f$
+      real(fp),                 intent(in)    :: StepWidth
+      !> Direction
+      integer(int8),            intent(in)    :: i
+      !> Lattice index
+      integer(int64),           intent(in)    :: latticeindex
+
+      integer(int8) :: k,a
+      integer(int64) :: MemoryIndex
+      complex(fp) :: staplesum(nsun,nsun), link_times_staplesum(nsun,nsun)
+      
+      staplesum = 0
+      do k=1,ndim
+         if(k /= i) then
+            staplesum = staplesum + &
+                 StepWidth*(GetLatticeSpacing(0)/GetLatticeSpacing(k))**2 &
+                 *(&
+                 GetUStaple(GaugeConf,i,k,latticeindex) + &
+                 GetDStaple(GaugeConf,i,k,latticeindex) &
+                 )
+         end if ! i /= k
+      end do !k
+
+      MemoryIndex = GetMemoryIndex(LatticeIndex)
+      link_times_staplesum = matmul(GaugeConf%Links(:,:,i,MemoryIndex),staplesum)
+
+      forall(a=1:ngen) GaugeConf%efield(a,i,MemoryIndex)&
+           = GaugeConf%efield(a,i,MemoryIndex)&
+           - 2*Aimag(GetTraceWithGenerator(a,link_times_staplesum))
+    end subroutine Update_Efield_Leapfrog_AtSite_Direction
+
+    !>@brief Returns staple
+    !!@details The U-staple is defined as
+    !! \f$ S^{\text{U}}_{ik,x}=U_{k,x+\hat{i}}\cdot U_{i,x+\hat{k}}^\dagger\cdot U_{k,x}^\dagger\f$
+    !!@autho Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 27.02.2019
+    !!@version 1.0
+    pure function GetUStaple(GaugeConf,i,k,latticeindex)
+      use lattice, only: GetNeib, GetMemoryIndex
+      implicit none
+      !> Gauge configuration
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+      !> Direction
+      integer(int8),            intent(in) :: i,k
+      !> Lattice index
+      integer(int64),           intent(in) :: latticeindex
+      !> Upwards staple
+      complex(fp)                          :: GetUStaple(nsun,nsun)
+
+      integer(int64) :: memoryindex,neib_i, neib_k
+
+      memoryindex = GetMemoryIndex(LatticeIndex)
+      neib_i      = GetMemoryIndex(GetNeib(+i,latticeindex))
+      neib_k      = GetMemoryIndex(GetNeib(+k,latticeindex))
+
+      GetUStaple = matmul(matmul(&
+           GaugeConf%links(                :,:,k,neib_i),&
+           conjg(transpose(GaugeConf%links(:,:,i,neib_k)))),&
+           conjg(transpose(GaugeConf%links(:,:,k,MemoryIndex))))
+    end function GetUStaple
+    
+    !>@brief Returns staple
+    !!@details The U-staple is defined as \f$ S^{\text{D}}_{ik,x}=
+    !! U_{k,x+\hat{i}-\hat{k}}^\dagger\cdot U_{i,x-\hat{k}}^\dagger\cdot U_{k,x-\hat{k}}\f$
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 27.02.2019
+    !!@version 1.0
+    pure function GetDStaple(GaugeConf,i,k,latticeindex)
+      use lattice, only: GetNeib, GetMemoryIndex
+      implicit none
+      !> Gauge configuration
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+      !> Direction
+      integer(int8),            intent(in) :: i,k
+      !> Lattice index
+      integer(int64),           intent(in) :: latticeindex
+      !> Downwards staple
+      complex(fp)                          :: GetDStaple(nsun,nsun)
+
+      integer(int64) :: neib_k, neib_ik
+
+      neib_k      = GetMemoryIndex(GetNeib(-k,latticeindex))
+      neib_ik     = GetMemoryIndex(GetNeib(+i,neib_k))
+
+      GetDStaple = matmul(matmul(&
+           conjg(transpose(GaugeConf%links(:,:,k,neib_ik))),&
+           conjg(transpose(GaugeConf%links(:,:,i,neib_k)))),&
+           GaugeConf%links(:,:,k,neib_k))
+    end function GetDStaple
+  end subroutine Update_Efield_Leapfrog
 end module gaugeconfiguration_su3

@@ -20,7 +20,7 @@ module tolerances
   !> Zero-tolerance for single precision
   real(real32), parameter :: tol_zero_real32=1.E-6
   !> Zero-tolerance for double precision
-  real(real64), parameter :: tol_zero_real64=1.E-14
+  real(real64), parameter :: tol_zero_real64=1.E-12
 
   !> Zero-tolerance
   real(fp) :: tol_zero=tol_zero_real64
