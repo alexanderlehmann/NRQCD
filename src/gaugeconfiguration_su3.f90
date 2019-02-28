@@ -1986,6 +1986,9 @@ contains ! Module procedures
        ! Performing gauge transformation on the lnks
        call PerformGaugeTransformation(GaugeConf,GaugeTransform)
     end do GaugeFixingIteration
+    if(ThisProc()==0) write(output_unit,*)&
+         iteration,'iterations in Coulomb gauge fixing performed';&
+         call flush(output_unit)
   contains
     impure logical function IsCoulombGauged(Divergence,Tolerance)
       use mpiinterface, only: intmpi, ThisProc, NumProcs
