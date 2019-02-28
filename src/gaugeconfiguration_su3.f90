@@ -51,11 +51,15 @@ module gaugeconfiguration_su3
      procedure, public :: CommunicateBoundary_Efield
      
      ! Return and setting of member variables
-     procedure, public :: GetLink
-     procedure, private:: SetLink
-     procedure, private:: GetEfield
-     procedure, private:: SetEfield
-
+     procedure, public :: GetLink_G
+     procedure, public :: GetLink_M
+     procedure, private:: SetLink_G
+     procedure, private:: SetLink_M
+     procedure, private:: GetEfield_G
+     procedure, private:: GetEfield_M
+     procedure, private:: SetEfield_G
+     procedure, private:: SetEfield_M
+     
      ! Initialisation routines
      procedure, public :: HotInit
      procedure, public :: ColdInit
@@ -104,7 +108,7 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.02.2019
   !!@version 1.0
- IMpure subroutine Allocate(GaugeConf)
+ pure subroutine Allocate(GaugeConf)
     use lattice, only: nDim, GetMemorySize
     implicit none
     !> Gauge configuration
@@ -122,7 +126,7 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.02.2019
   !!@version 1.0
- IMpure subroutine Deallocate(GaugeConf)
+ pure subroutine Deallocate(GaugeConf)
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -134,9 +138,9 @@ contains ! Module procedures
   !!@returns Link at given index
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 22.02.2019
-  !!@version 1.0
- IMpure function GetLink(GaugeConf,i,LatticeIndex)
+  !!@date 28.02.2019
+  !!@version 1.1
+ pure function GetLink_G(GaugeConf,i,LatticeIndex)
     use matrixoperations, only: GetUnitmatrix
     use lattice, only: GetMemoryIndex
     implicit none
@@ -147,20 +151,40 @@ contains ! Module procedures
     !> Lattice index
     integer(int64), intent(in) :: LatticeIndex
     !> Link variable
-    complex(fp) :: GetLink(nSUN,nSUN)
+    complex(fp) :: GetLink_G(nSUN,nSUN)
+    GetLink_G = GaugeConf%GetLink_M(i,GetMemoryIndex(LatticeIndex))
+  end function GetLink_G
+
+  !>@brief Access routine to links
+  !!@returns Link at given memory index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+ pure function GetLink_M(GaugeConf,i,MemoryIndex)
+    use matrixoperations, only: GetUnitmatrix
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Lattice index
+    integer(int64), intent(in) :: MemoryIndex
+    !> Link variable
+    complex(fp) :: GetLink_M(nSUN,nSUN)
     if(i/=0) then
-       GetLink = GaugeConf%Links(:,:,i,GetMemoryIndex(LatticeIndex))
+       GetLink_M = GaugeConf%Links(:,:,i,MemoryIndex)
     else
-       GetLink = GetUnitmatrix(nSUN)
+       GetLink_M = GetUnitmatrix(nSUN)
     end if
-  end function GetLink
+  end function GetLink_M
 
   !>@brief Setting routine for links
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 22.02.2019
-  !!@version 1.0
- IMpure subroutine SetLink(GaugeConf,i,LatticeIndex,Link)
+  !!@date 28.02.2019
+  !!@version 1.1
+ pure subroutine SetLink_G(GaugeConf,i,LatticeIndex,Link)
     use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
@@ -172,15 +196,33 @@ contains ! Module procedures
     !> Value for link variable
     complex(fp),    intent(in) :: Link(nSUN,nSUN)
     GaugeConf%Links(:,:,i,GetMemoryIndex(LatticeIndex)) = Link
-  end subroutine SetLink
+  end subroutine SetLink_G
+
+  !>@brief Setting routine for links
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+ pure subroutine SetLink_M(GaugeConf,i,MemoryIndex,Link)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Memory index
+    integer(int64), intent(in) :: MemoryIndex
+    !> Value for link variable
+    complex(fp),    intent(in) :: Link(nSUN,nSUN)
+    GaugeConf%Links(:,:,i,MemoryIndex) = Link
+  end subroutine SetLink_M
 
   !>@brief Access routine to the electric field
   !!@returns Efield at given index
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 22.02.2019
+  !!@date 28.02.2019
   !!@version 1.0
- IMpure elemental function GetEfield(GaugeConf,a,i,LatticeIndex)
+ pure elemental real(fp) function GetEfield_G(GaugeConf,a,i,LatticeIndex)
     use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
@@ -191,21 +233,38 @@ contains ! Module procedures
     integer(int8),  intent(in) :: i
     !> Lattice index
     integer(int64), intent(in) :: LatticeIndex
-    !> Efield
-    real(fp) :: GetEfield
+    GetEfield_G = GaugeConf%GetEfield_M(a,i,GetMemoryIndex(LatticeIndex))
+  end function GetEfield_G
+
+  !>@brief Access routine to the electric field
+  !!@returns Efield at given memory index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+ pure elemental real(fp) function GetEfield_M(GaugeConf,a,i,MemoryIndex)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Generator index
+    integer(int8),  intent(in) :: a
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Memory index
+    integer(int64), intent(in) :: MemoryIndex
     if(i/=0) then
-       GetEfield = GaugeConf%Efield(a,i,GetMemoryIndex(LatticeIndex))
+       GetEfield_M = GaugeConf%Efield(a,i,MemoryIndex)
     else
-       GetEfield = 0._fp
+       GetEfield_M = 0._fp
     end if
-  end function GetEfield
+  end function GetEfield_M
 
   !>@brief Setting routine for links
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.02.2019
   !!@version 1.0
- IMpure subroutine SetEfield(GaugeConf,a,i,LatticeIndex,Efield)
+ pure subroutine SetEfield_G(GaugeConf,a,i,LatticeIndex,Efield)
     use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
@@ -219,7 +278,27 @@ contains ! Module procedures
     !> Value for link variable
     real(fp),       intent(in) :: Efield
     GaugeConf%Efield(a,i,GetMemoryIndex(LatticeIndex)) = Efield
-  end subroutine SetEfield
+  end subroutine SetEfield_G
+  
+  !>@brief Setting routine for links
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.02.2019
+  !!@version 1.0
+ pure subroutine SetEfield_M(GaugeConf,a,i,MemoryIndex,Efield)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Generator index
+    integer(int8),  intent(in) :: a
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Memory index
+    integer(int64), intent(in) :: MemoryIndex
+    !> Value for link variable
+    real(fp),       intent(in) :: Efield
+    GaugeConf%Efield(a,i,MemoryIndex) = Efield
+  end subroutine SetEfield_M
 
   !>@brief Communication routine for boundary values
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -265,7 +344,7 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.02.2019
   !!@version 1.0
-  IMpure subroutine ColdInit(GaugeConf)
+  pure subroutine ColdInit(GaugeConf)
     use matrixoperations, only: GetUnitMatrix
     implicit none
     !> Gauge configuration
@@ -284,20 +363,18 @@ contains ! Module procedures
 
   impure subroutine HotInit(GaugeConf)
     use random, only: GetRandomUniformReal
-    use lattice, only: ndim, GetLatticeIndex_M, GetProc_G, GetMemorySize, GetLatticeSpacing
+    use lattice, only: ndim, GetProc_M, GetMemorySize, GetLatticeSpacing
     implicit none
     class(GaugeConfiguration), intent(out) :: GaugeConf
 
-    integer(int64) :: MemoryIndex, LatticeIndex
+    integer(int64) :: MemoryIndex
     integer(int8)  :: i
     real(fp) :: r(ngen)
 
-    
     call GaugeConf%Allocate
     
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
-       if(ThisProc()==GetProc_G(LatticeIndex)) then
+       if(ThisProc()==GetProc_M(MemoryIndex)) then
           do i=1,ndim
              ! Link
              r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)
@@ -325,7 +402,7 @@ contains ! Module procedures
        aa_correlator,ee_correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: GetNorm2Momentum_G,GetMemorySize,GetLatticeIndex_M
+    use lattice, only: GetNorm2Momentum_M,GetMemorySize
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -341,14 +418,14 @@ contains ! Module procedures
     real(fp), optional, allocatable, intent(out) :: ee_correlator(:)
     
     real(fp), allocatable :: Occupation(:)
-    integer(int64) :: LatticeIndex, MemoryIndex
+    integer(int64) :: MemoryIndex
     
     allocate(Occupation(GetMemorySize()))
     !forall(is=1:size(LocalLatticeIndices))
     do MemoryIndex=1,GetMemorySize()
        Occupation(MemoryIndex)&
             = GetBoxOccupation(&
-            GetNorm2Momentum_G(GetLatticeIndex_M(MemoryIndex)),& !|p|
+            GetNorm2Momentum_M(MemoryIndex),& !|p|
             SaturationScale,&
             Amplitude,&
             Coupling)
@@ -563,23 +640,21 @@ contains ! Module procedures
     !do concurrent(&
     !     is=1:size(LocalLatticeIndices),&
     !     i =1:ndim)
-    do MemoryIndex=1,GetMemorySize()
-       do i=1,ndim
-          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
-          if(GetProc_G(LatticeIndex)==ThisProc()) then
-             ! Link
-             afield_site = real(afield(MemoryIndex,:,i),fp) &
+    do concurrent(MemoryIndex=1:GetMemorySize(), i=1:ndim)
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+       if(GetProc_G(LatticeIndex)==ThisProc()) then
+          ! Link
+          afield_site = real(afield(MemoryIndex,:,i),fp) &
                                 ! Translation to lattice units
-                  *GetLatticeSpacing(i)
-             GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(afield_site)
-             
-             ! E-field
-             efield_site = real(efield(MemoryIndex,:,i),fp) &
+               *GetLatticeSpacing(i)
+          GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(afield_site)
+
+          ! E-field
+          efield_site = real(efield(MemoryIndex,:,i),fp) &
                                 ! Translation to lattice units
-                  *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
-             GaugeConf%Efield(:,i,MemoryIndex) = efield_site
-          end if
-       end do
+               *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+          GaugeConf%Efield(:,i,MemoryIndex) = efield_site
+       end if
     end do
     !..--**  END : Writing fields to configuration **--..
     call GaugeConf%CommunicateBoundary()
@@ -681,7 +756,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
- IMpure elemental real(fp) function GetBoxOccupation(Momentum,SaturationScale,Amplitude,Coupling)
+ pure elemental real(fp) function GetBoxOccupation(Momentum,SaturationScale,Amplitude,Coupling)
     use precision, only: fp
     implicit none
     !> Lattice momentum norm
@@ -709,7 +784,7 @@ contains ! Module procedures
   impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
-    use lattice, only: nDim, GetLatticeSpacing,GetNeib_G,GetLatticeIndex_M, GetMemorySize
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib_M,GetLatticeIndex_M, GetMemorySize
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -721,36 +796,31 @@ contains ! Module procedures
     complex(fp), dimension(nsun,nsun) :: Mefield, Mefield_neib, derivative, Link_neib
     
     integer(int8)  :: i, a
-    integer(int64) :: MemoryIndex, neib, latticeindex
-    integer(int64), allocatable :: LocalLatticeIndices(:)
+    integer(int64) :: MemoryIndex, neib
 
     ! 1. Calculation of local contribution
     local_contribution = 0
-    !do concurrent (is=1:size(LocalLatticeIndices))
-    do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
-       !do concurrent(i=1_int8:ndim)
-       do i=1,ndim
-          efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
-          
-          neib = GetNeib_G(-i,LatticeIndex)
-          efield_neib = GaugeConf%GetEfield([1_int8:ngen],i,Neib)
+    
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+       efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
 
-          Mefield = GetAlgebraMatrix(efield)
-          Mefield_neib = GetAlgebraMatrix(efield_neib)
+       neib = GetNeib_M(-i,MemoryIndex)
+       efield_neib = GaugeConf%GetEfield_M([1_int8:ngen],i,Neib)
 
-          Link_neib = GaugeConf%GetLink(i,Neib)
+       Mefield = GetAlgebraMatrix(efield)
+       Mefield_neib = GetAlgebraMatrix(efield_neib)
 
-          derivative = (Mefield &
-               - matmul(matmul(&
-               conjg(transpose(Link_Neib)),&
-               Mefield_neib),&
-               Link_neib))&
-               /GetLatticeSpacing(i)**2/GetLatticeSpacing(0)
-          do concurrent(a=1_int8:ngen)
-             local_contribution = local_contribution &
-                  + 2*Abs(Aimag(GetTraceWithGenerator(a,derivative)))
-          end do
+       Link_neib = GaugeConf%GetLink_M(i,Neib)
+
+       derivative = (Mefield &
+            - matmul(matmul(&
+            conjg(transpose(Link_Neib)),&
+            Mefield_neib),&
+            Link_neib))&
+            /GetLatticeSpacing(i)**2/GetLatticeSpacing(0)
+       do concurrent(a=1_int8:ngen)
+          local_contribution = local_contribution &
+               + 2*Abs(Aimag(GetTraceWithGenerator(a,derivative)))
        end do
     end do
 
@@ -772,7 +842,7 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 23.02.2019
   !!@version 1.0
- IMpure function GetFieldStrengthTensor(GaugeConf,i,j,LatticeIndex)
+ pure function GetFieldStrengthTensor(GaugeConf,i,j,LatticeIndex)
     use lattice, only: GetLatticeSpacing
     use matrixoperations, only: LogU
     !> Gauge configuration
@@ -800,7 +870,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 23.02.2019
   !! @version 1.0
- IMpure function GetSpatialPlaquette(GaugeConf,i,j,LatticeIndex)
+ pure function GetSpatialPlaquette(GaugeConf,i,j,LatticeIndex)
     use lattice, only: GetNeib_G
     implicit none
     !> Gauge configuration
@@ -814,10 +884,10 @@ contains ! Module procedures
 
     complex(fp), dimension(nSUN,nSUN) :: link1,link2,link3,link4
 
-    link1 = GaugeConf%GetLink(i,LatticeIndex)                             ! U_i(x)
-    link2 = GaugeConf%GetLink(j,GetNeib_G(i,LatticeIndex))                  ! U_j(x+î)
-    link3 = conjg(transpose(GaugeConf%GetLink(i,GetNeib_G(j,LatticeIndex))))! U_i(x+ĵ)†
-    link4 = conjg(transpose(GaugeConf%GetLink(j,LatticeIndex)))           ! U_j(x)†
+    link1 = GaugeConf%GetLink_G(i,LatticeIndex)                               ! U_i(x)
+    link2 = GaugeConf%GetLink_G(j,GetNeib_G(i,LatticeIndex))                  ! U_j(x+î)
+    link3 = conjg(transpose(GaugeConf%GetLink_G(i,GetNeib_G(j,LatticeIndex))))! U_i(x+ĵ)†
+    link4 = conjg(transpose(GaugeConf%GetLink_G(j,LatticeIndex)))             ! U_j(x)†
 
     GetSpatialPlaquette = matmul(matmul(matmul(&
          link1,&  ! U_i(x)
@@ -843,7 +913,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 23.02.2019
   !! @version 1.0
- IMpure function GetTemporalPlaquette(GaugeConf,i,j,LatticeIndex)
+ pure function GetTemporalPlaquette(GaugeConf,i,j,LatticeIndex)
     use matrixoperations, only: GetUnitMatrix
     implicit none
     !> Gauge configuration
@@ -858,10 +928,10 @@ contains ! Module procedures
     real(fp) :: efield(ngen)
     
     if(     i==0 .and. j/=0 ) then
-       efield = +GaugeConf%GetEfield([1_int8:ngen],j,LatticeIndex)
+       efield = +GaugeConf%GetEfield_G([1_int8:ngen],j,LatticeIndex)
        GetTemporalPlaquette = GetGroupExp(efield)
     elseif( i/=0 .and. j==0 ) then
-       efield = -GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
+       efield = -GaugeConf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
        GetTemporalPlaquette = GetGroupExp(efield)
     else
        GetTemporalPlaquette = GetUnitMatrix(nSUN)
@@ -878,7 +948,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !! @date 23.02.2019
   !! @version 1.0
- IMpure function GetPlaquette(GaugeConf,i,j,LatticeIndex)
+ pure function GetPlaquette(GaugeConf,i,j,LatticeIndex)
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -919,30 +989,24 @@ contains ! Module procedures
 
     real(fp) :: PotentialTerm
     integer(int8)  :: i, j
-    integer(int64) :: MemoryIndex, latticeindex
+    integer(int64) :: MemoryIndex
 
     ! 1. Calculation of local contribution
     local_contribution = 0
-    !do concurrent (is=1:size(LocalLatticeIndices))
-    do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
-       !do concurrent(i=1_int8:ndim)
-       do i=1,ndim
-          efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
-          
-          local_contribution = local_contribution &
-               ! Electric energy
-               + sum(efield**2)/(GetLatticeSpacing(i)*GetLatticeSpacing(0_int8))**2/2
-          ! Magnetic energy
-          !do concurrent(j=i+1_int8:ndim)
-          do j=i+1_int8,ndim
-             Plaquette = GaugeConf%GetPlaquette(i,j,LatticeIndex)
-             PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
-                  /GetLatticeSpacing(i)/GetLatticeSpacing(j)
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+       efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
 
-             Local_contribution = Local_Contribution &
-                  + 2*nSUN*PotentialTerm
-          end do
+       local_contribution = local_contribution &
+                                ! Electric energy
+            + sum(efield**2)/(GetLatticeSpacing(i)*GetLatticeSpacing(0_int8))**2/2
+       ! Magnetic energy
+       do concurrent(j=i+1_int8:ndim)
+          Plaquette = GaugeConf%GetPlaquette(i,j,GetLatticeIndex_M(MemoryIndex))
+          PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
+               /GetLatticeSpacing(i)/GetLatticeSpacing(j)
+
+          Local_contribution = Local_Contribution &
+               + 2*nSUN*PotentialTerm
        end do
     end do
 
@@ -1102,7 +1166,8 @@ contains ! Module procedures
     end do
     deallocate(p_field)
   end subroutine GetTransverseCorrelator
-  IMpure real(fp) function GetTransverseField_usingProjector(field,LatticeIndex)
+
+  pure real(fp) function GetTransverseField_usingProjector(field,LatticeIndex)
     use precision, only: fp
     use lattice, only: nDim, GetMomentum_G, GetTransverseProjector
     implicit none
@@ -1131,7 +1196,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 25.02.2019
   !!@version 1.0
- IMpure elemental function GetGaugefield_AlgebraCoordinate(GaugeConf,a,i,LatticeIndex)
+ pure elemental function GetGaugefield_AlgebraCoordinate(GaugeConf,a,i,LatticeIndex)
     use precision, only: fp
     use lattice, only: GetLatticeSpacing
     implicit none
@@ -1158,7 +1223,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 25.02.2019
   !!@version 1.0
- IMpure function GetGaugefield_AlgebraCoordinates(GaugeConf,i,latticeindex)
+ pure function GetGaugefield_AlgebraCoordinates(GaugeConf,i,latticeindex)
     use lattice, only: GetLatticeSpacing
     implicit none
     !> Gauge link configuration
@@ -1172,7 +1237,7 @@ contains ! Module procedures
 
     complex(fp) :: Link(nSUN,nSUN)
 
-    Link = GaugeConf%GetLink(i,LatticeIndex)
+    Link = GaugeConf%GetLink_G(i,LatticeIndex)
 
     GetGaugefield_AlgebraCoordinates = GetGroupLog(Link)/GetLatticeSpacing(i)
   end function GetGaugefield_AlgebraCoordinates
@@ -1183,7 +1248,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 25.02.2019
   !!@version 1.0
- IMpure elemental function GetElectricField_AlgebraCoordinate(conf,a,i,latticeindex)
+ pure elemental function GetElectricField_AlgebraCoordinate(conf,a,i,latticeindex)
     use precision, only: fp
     use lattice, only: GetLatticeSpacing
     implicit none
@@ -1199,7 +1264,7 @@ contains ! Module procedures
     real(fp) :: GetElectricField_AlgebraCoordinate
     
     GetElectricField_AlgebraCoordinate &
-         = conf%GetEfield(a,i,latticeindex)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = conf%GetEfield_G(a,i,latticeindex)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraCoordinate
 
   !>@brief Returns electric field
@@ -1208,7 +1273,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 25.02.2019
   !!@version 1.0
- IMpure function GetElectricField_AlgebraMatrix(conf,i,latticeindex)
+ pure function GetElectricField_AlgebraMatrix(conf,i,latticeindex)
     use precision, only: fp
     use lattice, only: GetLatticeSpacing
     implicit none
@@ -1222,7 +1287,7 @@ contains ! Module procedures
     complex(fp) :: GetElectricField_AlgebraMatrix(nSUN,nSUN)
     
     real(fp) :: efield(ngen)
-    efield = conf%GetEfield([1_int8:ngen],i,LatticeIndex)
+    efield = conf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
     
     GetElectricField_AlgebraMatrix &
          = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
@@ -1269,7 +1334,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 27.02.2019
   !!@version 1.0
-  impure subroutine Update_Links_Leapfrog(GaugeConf,StepWidth)
+  pure subroutine Update_Links_Leapfrog(GaugeConf,StepWidth)
     use lattice, only: ndim, GetMemorySize
     implicit none
     !> Gauge configuration
@@ -1299,8 +1364,8 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 27.02.2019
   !!@version 1.0
-  impure subroutine Update_Efield_Leapfrog(GaugeConf,StepWidth)
-    use lattice, only: ndim, GetMemorySize,GetLatticeIndex_M
+  pure subroutine Update_Efield_Leapfrog(GaugeConf,StepWidth)
+    use lattice, only: ndim, GetMemorySize
     implicit none
     !> Gauge link configuration
     class(GaugeConfiguration), intent(inout) :: GaugeConf
@@ -1308,17 +1373,14 @@ contains ! Module procedures
     real(fp),                  intent(in)    :: StepWidth
     
     integer(int8) :: i
-    integer(int64):: MemoryIndex,LatticeIndex
+    integer(int64):: MemoryIndex
     
-    do MemoryIndex=1,GetMemorySize()
-       LatticeIndex=GetLatticeIndex_M(MemoryIndex)
-       do i=1,ndim
-          call Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,latticeindex)
-       end do
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+       call Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,MemoryIndex)
     end do
-    
+
   contains
-    pure subroutine Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,latticeindex)
+    pure subroutine Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,MemoryIndex)
       use lattice, only: ndim, GetLatticeSpacing, GetMemoryIndex
       implicit none
       !> Gauge link configuration
@@ -1327,26 +1389,24 @@ contains ! Module procedures
       real(fp),                 intent(in)    :: StepWidth
       !> Direction
       integer(int8),            intent(in)    :: i
-      !> Lattice index
-      integer(int64),           intent(in)    :: latticeindex
+      !> Memory index
+      integer(int64),           intent(in)    :: MemoryIndex
 
       integer(int8) :: k,a
-      integer(int64) :: MemoryIndex
       complex(fp) :: staplesum(nsun,nsun), link_times_staplesum(nsun,nsun)
       
       staplesum = 0
-      do k=1,ndim
+      do concurrent(k=1:ndim)
          if(k /= i) then
             staplesum = staplesum + &
                  StepWidth*(GetLatticeSpacing(0)/GetLatticeSpacing(k))**2 &
                  *(&
-                 GetUStaple(GaugeConf,i,k,latticeindex) + &
-                 GetDStaple(GaugeConf,i,k,latticeindex) &
+                 GetUStaple(GaugeConf,i,k,MemoryIndex) + &
+                 GetDStaple(GaugeConf,i,k,MemoryIndex) &
                  )
          end if ! i /= k
       end do !k
 
-      MemoryIndex = GetMemoryIndex(LatticeIndex)
       link_times_staplesum = matmul(GaugeConf%Links(:,:,i,MemoryIndex),staplesum)
 
       forall(a=1:ngen) GaugeConf%efield(a,i,MemoryIndex)&
@@ -1361,23 +1421,22 @@ contains ! Module procedures
     !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
     !!@date 27.02.2019
     !!@version 1.0
-    pure function GetUStaple(GaugeConf,i,k,latticeindex)
-      use lattice, only: GetNeib_G, GetMemoryIndex
+    pure function GetUStaple(GaugeConf,i,k,MemoryIndex)
+      use lattice, only: GetNeib_M
       implicit none
       !> Gauge configuration
       type(GaugeConfiguration), intent(in) :: GaugeConf
       !> Direction
       integer(int8),            intent(in) :: i,k
-      !> Lattice index
-      integer(int64),           intent(in) :: latticeindex
+      !> Memory index
+      integer(int64),           intent(in) :: MemoryIndex
       !> Upwards staple
       complex(fp)                          :: GetUStaple(nsun,nsun)
 
-      integer(int64) :: memoryindex,neib_i, neib_k
+      integer(int64) :: neib_i, neib_k
 
-      memoryindex = GetMemoryIndex(LatticeIndex)
-      neib_i      = GetMemoryIndex(GetNeib_G(+i,latticeindex))
-      neib_k      = GetMemoryIndex(GetNeib_G(+k,latticeindex))
+      neib_i = GetNeib_M(+i,MemoryIndex)
+      neib_k = GetNeib_M(+k,MemoryIndex)
 
       GetUStaple = matmul(matmul(&
            GaugeConf%links(                :,:,k,neib_i),&
@@ -1392,22 +1451,22 @@ contains ! Module procedures
     !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
     !!@date 27.02.2019
     !!@version 1.0
-    pure function GetDStaple(GaugeConf,i,k,latticeindex)
-      use lattice, only: GetNeib_G, GetMemoryIndex
+    pure function GetDStaple(GaugeConf,i,k,MemoryIndex)
+      use lattice, only: GetNeib_M
       implicit none
       !> Gauge configuration
       type(GaugeConfiguration), intent(in) :: GaugeConf
       !> Direction
       integer(int8),            intent(in) :: i,k
-      !> Lattice index
-      integer(int64),           intent(in) :: latticeindex
+      !> Memory index
+      integer(int64),           intent(in) :: MemoryIndex
       !> Downwards staple
       complex(fp)                          :: GetDStaple(nsun,nsun)
 
       integer(int64) :: neib_k, neib_ik
 
-      neib_k      = GetMemoryIndex(GetNeib_G(-k,latticeindex))
-      neib_ik     = GetMemoryIndex(GetNeib_G(+i,neib_k))
+      neib_k      = GetNeib_M(-k,MemoryIndex)
+      neib_ik     = GetNeib_M(+i,neib_k)
 
       GetDStaple = matmul(matmul(&
            conjg(transpose(GaugeConf%links(:,:,k,neib_ik))),&

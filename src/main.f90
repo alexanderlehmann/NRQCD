@@ -75,9 +75,6 @@ program simulation
   integer(int64) :: MomentumIndices(ndim)
   
   call InitSimulation
-  
-  call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-       GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
 
   !.................................
   !.... Measuring gluon distribution
@@ -290,29 +287,30 @@ program simulation
 
   call endsimulation
 
-
+1 continue
 
   !.......................
   !.... Energy measurement
   !..
-  !call GaugeConf%HotInit
-  !if(ThisProc()==0) &
-  !     fileID_eg = OpenFile(filename="energy_gauss.txt",st='REPLACE',fm='FORMATTED',act='WRITE')
-  !it=0
-  !time = it*GetLatticeSpacing(0_int8)
-  !gauss = GaugeConf%GetDeviationFromGaussLaw()
-  !energy= GaugeConf%GetEnergy()
-  !if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
+  
+  call GaugeConf%HotInit
+  if(ThisProc()==0) &
+       fileID_eg = OpenFile(filename="energy_gauss.txt",st='REPLACE',fm='FORMATTED',act='WRITE')
+  it=0
+  time = it*GetLatticeSpacing(0_int8)
+  gauss = GaugeConf%GetDeviationFromGaussLaw()
+  energy= GaugeConf%GetEnergy()
+  if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
 
-  !do it=1,TimeSteps
-  !   call GaugeConf%Update
-  !   time = it*GetLatticeSpacing(0_int8)
-  !   gauss = GaugeConf%GetDeviationFromGaussLaw()
-  !   energy= GaugeConf%GetEnergy()
-  !   if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
-  !   if(ThisProc()==0) write(output_unit,*) time
-  !end do
-  !if(ThisProc()==0) call CloseFile(fileID_eg)
+  do it=1,TimeSteps
+     call GaugeConf%Update
+     time = it*GetLatticeSpacing(0_int8)
+     gauss = GaugeConf%GetDeviationFromGaussLaw()
+     energy= GaugeConf%GetEnergy()
+     if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
+     if(ThisProc()==0) write(output_unit,*) time
+  end do
+  if(ThisProc()==0) call CloseFile(fileID_eg)
 
 
   
