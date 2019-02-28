@@ -462,7 +462,7 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.02.2019
   !!@version 1.0
-  impure subroutine TransversePolarisedOccupiedInit(GaugeConf,Occupation,aa_correlator,ee_correlator)
+  impure subroutine TransversePolarisedOccupiedInit_specificSender(GaugeConf,Occupation,aa_correlator,ee_correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
     use tolerances, only: GetZeroTol
@@ -471,7 +471,8 @@ contains ! Module procedures
          GetProc_G, GetVolume, GetPolarisationVectors, GetNorm2Momentum_G, GetMomentum_G,&
          GetLatticeSpacing, GetLatticeIndex_M, GetLocalLatticeSize
     use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
-         GetRandomNormalCmplx_specificProcess, modulename_random=>modulename
+         GetRandomNormalCmplx_specificProcess,&
+         modulename_random=>modulename
     use xpfft, only: p2x, x2p
     implicit none
     !> Gauge configuration
@@ -672,6 +673,254 @@ contains ! Module procedures
     impure subroutine SymmetriseInPspace(field)
       use precision, only: fp
       use lattice, only: nDim, GetProc_G, GetNegativeLatticeIndex, GetLatticeSize
+      use mpiinterface, only: ThisProc, SyncAll, intmpi, GetComplexSendType
+      use mpi
+      implicit none
+      complex(fp), intent(inout) :: field(:)
+
+
+      ! MPI
+      complex(fp) :: a
+      integer(intmpi) :: status(mpi_status_size)
+      integer(intmpi), parameter :: buffersize=1_intmpi
+      integer(intmpi) :: dest, source
+      integer(intmpi) :: tag
+      integer(intmpi) :: mpierr
+
+      ! Indices
+      integer(intmpi) :: PositiveProc, NegativeProc
+      integer(int64)  :: PositiveLatticeIndex, NegativeLatticeIndex
+      integer(int64)  :: PositiveMemoryIndex, NegativeMemoryIndex
+      integer(int64)  :: LatticeSize
+
+      LatticeSize = GetLatticeSize()
+
+      do PositiveLatticeIndex=1,LatticeSize
+         ! Getting negative lattice index, corresponding to -p
+         NegativeLatticeIndex = GetNegativeLatticeIndex(PositiveLatticeIndex)
+
+         ! Getting process numbers for positive and negative momentum
+         PositiveProc = GetProc_g(PositiveLatticeIndex)
+         NegativeProc = GetProc_G(NegativeLatticeIndex)
+
+         ! Setting field such that f(p) = f(-p)*
+
+         if(PositiveProc == NegativeProc) then
+            ! positive and negative process are the same --> No MPI-communication needed
+            if(ThisProc()==PositiveProc) then
+               PositiveMemoryIndex = GetMemoryIndex(PositiveLatticeIndex)
+               NegativeMemoryIndex = GetMemoryIndex(NegativeLatticeIndex)
+               
+               a = field(PositiveMemoryIndex)
+               if(PositiveMemoryIndex==NegativeMemoryIndex) then
+                  field(PositiveMemoryIndex) = real(a,fp)
+               else
+                  field(PositiveMemoryIndex) = a
+                  field(NegativeMemoryIndex) = conjg(a)
+               end if
+            end if
+         else 
+            ! positive and negative process are not the same --> MPI-communication
+            tag  = PositiveLatticeIndex
+            source = PositiveProc
+            dest = NegativeProc
+            
+            if(ThisProc()==PositiveProc) then
+               PositiveMemoryIndex = GetMemoryIndex(PositiveLatticeIndex)
+               a = field(PositiveMemoryIndex)
+
+               call MPI_Send(&
+                    a,                   & ! What to send
+                    buffersize,          & ! How many points to send
+                    GetComplexSendType(),& ! What type to send
+                    dest,                & ! Destination
+                    tag,                 & ! Tag
+                    MPI_COMM_WORLD,      & ! Communicator
+                    mpierr)                ! Error code
+            elseif(ThisProc()==NegativeProc) then
+               call MPI_Recv(&
+                    a,                   & ! What to send
+                    buffersize,          & ! How many points to send
+                    GetComplexSendType(),& ! What type to send
+                    source,              & ! Destination
+                    tag,                 & ! Tag
+                    MPI_COMM_WORLD,      & ! Communicator
+                    status,              & ! Status
+                    mpierr)                ! Error code
+               
+               NegativeMemoryIndex = GetMemoryIndex(NegativeLatticeIndex)
+               field(NegativeMemoryIndex) = conjg(a)
+            else
+               ! do nothing
+            end if
+         end if
+
+         call SyncAll
+      end do
+    end subroutine SymmetriseInPspace
+  end subroutine TransversePolarisedOccupiedInit_SpecificSender
+
+  !>@brief Initialises the configuration as highly occupied, transverse polarised fields
+  !!@details Initialises the configuration according to a given gluon occupation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.02.2019
+  !!@version 1.0
+  impure subroutine TransversePolarisedOccupiedInit(GaugeConf,Occupation,aa_correlator,ee_correlator)
+    use, intrinsic :: iso_fortran_env
+    use precision, only: fp
+    use tolerances, only: GetZeroTol
+    use mpiinterface, only: intmpi, ThisProc, mpistop
+    use lattice, only: nDim, GetMemorySize,&
+         GetProc_M, GetVolume, GetPolarisationVectors, GetNorm2Momentum_M, GetMomentum_M,&
+         GetLatticeSpacing
+    use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
+         GetRandomNormalCmplx,&
+         modulename_random=>modulename
+    use xpfft, only: p2x, x2p
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+    !> Gauge particle occupation
+    real(fp),                  intent(in)  :: Occupation(:)
+    !> AA-Correlator
+    real(fp), optional, allocatable, intent(out) :: aa_correlator(:)
+    !> EE-Correlator
+    real(fp), optional, allocatable, intent(out) :: ee_correlator(:)
+
+    ! Gauge and electric field
+    complex(fp), allocatable :: afield(:,:,:), efield(:,:,:)
+
+    ! Prefactors
+    complex(fp) :: prefactor_afield, prefactor_efield
+
+    ! Number of transverse polarisations
+    integer(int8), parameter :: nPol_transverse = ndim - 1_int8
+    ! Transverse polarisation vectors
+    complex(fp), dimension(nDim,nDim) :: PolarisationVectors
+    ! Random numbers for fluctuations in mode decomposition
+    complex(real64) :: r_afield(npol_transverse), r_efield(npol_transverse)
+    ! Momentum
+    complex(fp), dimension(nDim) :: Momentum(nDim)
+    ! Norm of momentum
+    real(fp) :: MomentumNorm
+
+    ! Lattice
+    integer(int64) :: MemoryIndex, is
+    integer(int8) :: i,a
+
+    ! Link
+    complex(fp) :: Link(nSUN,nSUN)
+    ! E-field
+    real(fp) :: Efield_site(ngen)
+    ! A-field
+    real(fp) :: Afield_site(ngen)
+    character(len=105) :: errormessage
+
+    complex(fp) :: afield_p(ndim),efield_p(ndim)
+    
+    ! Check if random numbers are initialised
+    if(.not.isModuleInitialised_random()) then
+       errormessage = 'Error in TransversePolarisedOccupiedInit of '//modulename&
+               //':'// modulename_random //' is not initialised.'
+       call MPISTOP(errormessage)
+    end if
+    
+    ! ..--** START: Allocations **--..
+    allocate(afield(GetMemorySize(),nGen,nDim))
+    allocate(efield(GetMemorySize(),nGen,nDim))
+    ! ..--**  END : Allocations **--..
+
+    ! ..--** START: Drawing random numbers and setting the field in p-space **--..
+    !
+    !        Note : All processes are doing this simultaneously together
+    !               in order to ensure that the results do not depend on
+    !               the number of used processes
+    !
+    LocalLattice: do MemoryIndex=1,GetMemorySize()
+       if(ThisProc()==GetProc_M(MemoryIndex)) then
+          MomentumNorm = GetNorm2Momentum_M(MemoryIndex)
+          if(MomentumNorm > GetZeroTol()) then
+             Momentum = GetMomentum_M(MemoryIndex)
+             call GetPolarisationVectors(Momentum,PolarisationVectors)
+
+             prefactor_afield = &
+                  sqrt(GetVolume()*Occupation(MemoryIndex)/MomentumNorm/2)
+
+             prefactor_efield = &
+                  cmplx(0,sqrt(GetVolume()*Occupation(MemoryIndex)*MomentumNorm/2),fp)
+
+             generator: do a=1_int8,ngen
+                r_afield = GetRandomNormalCmplx(int(ngen,int64))
+                r_efield = r_afield
+
+                dims: do concurrent(i=1:ndim)
+                   afield(MemoryIndex,a,i) = &
+                        prefactor_afield*(&
+                                ! First transversal polarisation
+                        + r_afield(1)*PolarisationVectors(i,1) &
+                                ! Second transversal polarisation
+                        + r_afield(2)*PolarisationVectors(i,2) )
+
+                   efield(MemoryIndex,a,i) = &
+                        prefactor_efield*(&
+                                ! First transversal polarisation
+                        + r_efield(1)*PolarisationVectors(i,1) &
+                                ! Second transversal polarisation
+                        + r_efield(2)*PolarisationVectors(i,2) )
+                end do dims
+             end do generator ! Generators
+
+          else !p=0
+             afield(MemoryIndex,:,:) = 0
+             efield(MemoryIndex,:,:) = 0
+          end if !p>0
+       end if
+    end do LocalLattice
+    ! ..--**  END : Drawing random numbers and setting the field in p-space **--..
+
+    ! Symmetrisation A(p) = A(-p)* in order to make A(x) real
+    do i=1,ndim
+       do a=1,ngen
+          call SymmetriseInPspace(afield(:,a,i))
+          call SymmetriseInPspace(efield(:,a,i))
+       end do !a
+    end do !i
+    
+    !..--** START: FFT p-->x **--..
+    do i=1,ndim
+       do a=1,ngen
+          call p2x(afield(:,a,i))
+          call p2x(efield(:,a,i))
+       end do !a
+    end do !i
+    !..--**  END : FFT p-->x **--..
+
+    
+    !..--** START: Writing fields to configuration **--..
+    call GaugeConf%Allocate
+    !do concurrent(&
+    !     is=1:size(LocalLatticeIndices),&
+    !     i =1:ndim)
+    do concurrent(MemoryIndex=1:GetMemorySize(), i=1:ndim, ThisProc()== GetProc_M(MemoryIndex))
+       ! Link
+       afield_site = real(afield(MemoryIndex,:,i),fp) &
+                                ! Translation to lattice units
+            *GetLatticeSpacing(i)
+       GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(afield_site)
+
+       ! E-field
+       efield_site = real(efield(MemoryIndex,:,i),fp) &
+                                ! Translation to lattice units
+            *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+       GaugeConf%Efield(:,i,MemoryIndex) = efield_site
+    end do
+    !..--**  END : Writing fields to configuration **--..
+    call GaugeConf%CommunicateBoundary()
+  contains
+    impure subroutine SymmetriseInPspace(field)
+      use precision, only: fp
+      use lattice, only: nDim, GetProc_G, GetNegativeLatticeIndex, GetLatticeSize, GetMemoryIndex
       use mpiinterface, only: ThisProc, SyncAll, intmpi, GetComplexSendType
       use mpi
       implicit none

@@ -4,13 +4,9 @@ program simulation
   use mpiinterface
   
   use lattice
-  use halocomm
-  use xpfft
   use gaugeconfiguration_su3
   use mpi
   use io
-  use mathconstants
-  use tolerances
   implicit none
 
   ! Simulation parameters
@@ -28,7 +24,8 @@ program simulation
   real(fp)   :: TimeRange
   !real(fp)  :: Wilsoncoeffs(nWilsonCoeffs)
 
-  real(fp) :: GaugefixingCoefficient
+  integer(int64) :: GaugeFixingMaxIterations
+  real(fp) :: GaugefixingCoefficient, GaugeFixingTolerance
   integer(int64) :: Number_of_Measurements_of_Gluondistribution
   integer(int64) :: TimePoints_between_Measurement_of_Gluondistribution
   real(fp) :: TimeBetweenGluonMeasurements
@@ -89,15 +86,19 @@ program simulation
        0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
 
   ensemble: do iensemble=1,EnsembleSize
-     if(ThisProc()==0) print*,iensemble
+     if(ThisProc()==0) write(output_unit,*)&
+          int(iensemble,int8),'of',&
+          int(EnsembleSize,int8),'configurations';&
+          call flush(output_unit)
 
      call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling &
-          !,aa_correlator_opt,ee_correlator_opt)
-          )
+          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
      idistmeas = 0
      gaugeconf_gaugefixed = GaugeConf
-     call gaugeconf_gaugefixed%CoulombGaugeFixing
+     call gaugeconf_gaugefixed%CoulombGaugefixing(&
+                Tolerance_    =GaugeFixingTolerance,&
+                alpha_        =GaugefixingCoefficient,&
+                MaxIterations_=GaugefixingMaxIterations)
      call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
      call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
      
@@ -107,12 +108,18 @@ program simulation
      TimeEvolution: do it=1,TimeSteps
 
         if(modulo(it,TimePoints_between_Measurement_of_Gluondistribution)==0) then
-           if(ThisProc()==0) print*,'it=',it,'of',TimeSteps
+           if(ThisProc()==0) write(output_unit,*)&
+                it,'of',&
+                TimeSteps,'time steps';&
+                call flush(output_unit)
            
            idistmeas = it/TimePoints_between_Measurement_of_Gluondistribution
 
            gaugeconf_gaugefixed = GaugeConf
-           call gaugeconf_gaugefixed%CoulombGaugeFixing
+           call gaugeconf_gaugefixed%CoulombGaugefixing(&
+                Tolerance_    =GaugeFixingTolerance,&
+                alpha_        =GaugefixingCoefficient,&
+                MaxIterations_=GaugefixingMaxIterations)
            call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
            call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
            
@@ -385,6 +392,17 @@ contains
     Number_of_Measurements_of_Gluondistribution = aint(TimeRange/TimeBetweenGluonMeasurements,int64)
     TimePoints_between_Measurement_of_Gluondistribution&
          = int(TimeBetweenGluonMeasurements/LatticeSpacings(0))
+    
+    ! Maximum number of iterations for coulomb gauge fixing
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(I7)') GaugefixingMaxIterations
+    ! Tolerance for coulomb gauge fixing
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(E15.7)') GaugefixingTolerance
+    ! Tolerance for coulomb gauge fixing
+    arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+    read(arg,'(F5.7)') GaugefixingCoefficient
+    
     !..--** Module initialisations **--..
     call InitModule_MPIinterface
     call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
