@@ -27,7 +27,7 @@ module lattice
        GetNegativeLatticeIndex,&
        GetProc_G, GetProc_M,&
        GetLatticeIndex, GetLatticeIndex_M, GetMemoryIndex,&
-       GetNeib_G, GetNeib_M,&
+       GetNeib_M,&
        GetMomentum_G, GetMomentum_M,&
        GetNorm2Momentum_G, GetNorm2Momentum_M,&
        GetProc_fromGeneralIndex,&
@@ -242,8 +242,9 @@ contains
 
     allocate(neib_m(-nDim:+nDim,MemorySize))
     neib_m = huge(MemoryIndex)
-    forall(MemoryIndex=1:MemorySize, i=-nDim:+nDim,&
-         any(LocalLatticeIndices==GetNeib_G(i,GetLatticeIndex_M(MemoryIndex))))
+    forall(MemoryIndex=1:MemorySize, i=-nDim:+nDim&
+         !,any(LocalLatticeIndices==GetNeib_G(i,GetLatticeIndex_M(MemoryIndex)))
+         )
        neib_m(i,MemoryIndex) = GetMemoryIndex(GetNeib_G(i,GetLatticeIndex_M(MemoryIndex)))
     end forall
   end subroutine InitNeib_M
@@ -254,7 +255,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 28.02.2019
   !!@version 1.0
-  pure integer(int64) function GetNeib_M(i,MemoryIndex)
+  pure elemental integer(int64) function GetNeib_M(i,MemoryIndex)
     implicit none
     !> Direction
     integer(int8),  intent(in) :: i
@@ -531,7 +532,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
- pure integer(int64) function GetNeib_G(i,LatticeIndex)
+ pure elemental integer(int64) function GetNeib_G(i,LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Direction

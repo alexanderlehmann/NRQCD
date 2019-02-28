@@ -73,10 +73,15 @@ module gaugeconfiguration_su3
      procedure, public :: GetEnergy
 
      ! Field strength tensor and plaquettes
-     procedure, public :: GetFieldStrengthTensor
-     procedure, public :: GetPlaquette
-     procedure, private :: GetSpatialPlaquette
-     procedure, private :: GetTemporalPlaquette
+     procedure, public :: GetFieldStrengthTensor_G
+     procedure, public :: GetPlaquette_G
+     procedure, private :: GetSpatialPlaquette_G
+     procedure, private :: GetTemporalPlaquette_G
+     
+     procedure, public :: GetFieldStrengthTensor_M
+     procedure, public :: GetPlaquette_M
+     procedure, private :: GetSpatialPlaquette_M
+     procedure, private :: GetTemporalPlaquette_M
 
      ! Return of semi-physical fields
      procedure, public :: GetGaugefield_AlgebraCoordinate
@@ -96,6 +101,14 @@ module gaugeconfiguration_su3
      procedure, private :: Update_Leapfrog
      procedure, private :: Update_Efield_Leapfrog
      procedure, private :: Update_Links_Leapfrog
+     
+     ! Gauge fixing
+     procedure, public :: CoulombGaugefixing
+     procedure, private :: CoulombGaugefixing_Links
+
+     ! Utility routines for gaugixing
+     procedure, private :: GetDivergenceOfGaugefield_M
+     
   end type GaugeConfiguration
 
 
@@ -141,7 +154,6 @@ contains ! Module procedures
   !!@date 28.02.2019
   !!@version 1.1
  pure function GetLink_G(GaugeConf,i,LatticeIndex)
-    use matrixoperations, only: GetUnitmatrix
     use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
@@ -168,7 +180,7 @@ contains ! Module procedures
     class(GaugeConfiguration), intent(in) :: GaugeConf
     !> Direction
     integer(int8),  intent(in) :: i
-    !> Lattice index
+    !> Memory index
     integer(int64), intent(in) :: MemoryIndex
     !> Link variable
     complex(fp) :: GetLink_M(nSUN,nSUN)
@@ -252,11 +264,7 @@ contains ! Module procedures
     integer(int8),  intent(in) :: i
     !> Memory index
     integer(int64), intent(in) :: MemoryIndex
-    if(i/=0) then
-       GetEfield_M = GaugeConf%Efield(a,i,MemoryIndex)
-    else
-       GetEfield_M = 0._fp
-    end if
+    GetEfield_M = GaugeConf%Efield(a,i,MemoryIndex)
   end function GetEfield_M
 
   !>@brief Setting routine for links
@@ -361,6 +369,11 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
+  !>@brief Initialises the links and efield with random entries (still unitary links)
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
   impure subroutine HotInit(GaugeConf)
     use random, only: GetRandomUniformReal
     use lattice, only: ndim, GetProc_M, GetMemorySize, GetLatticeSpacing
@@ -782,9 +795,9 @@ contains ! Module procedures
   !!@date 22.02.2019
   !!@version 1.0
   impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
-    use mpiinterface, only: intmpi, GetRealSendType
+    use mpiinterface, only: intmpi, GetRealSendType, ThisProc
     use mpi
-    use lattice, only: nDim, GetLatticeSpacing,GetNeib_M,GetLatticeIndex_M, GetMemorySize
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib_M,GetLatticeIndex_M, GetMemorySize, GetProc_M
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -801,7 +814,7 @@ contains ! Module procedures
     ! 1. Calculation of local contribution
     local_contribution = 0
     
-    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
        efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
 
        neib = GetNeib_M(-i,MemoryIndex)
@@ -842,9 +855,8 @@ contains ! Module procedures
   !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 23.02.2019
   !!@version 1.0
- pure function GetFieldStrengthTensor(GaugeConf,i,j,LatticeIndex)
-    use lattice, only: GetLatticeSpacing
-    use matrixoperations, only: LogU
+ pure function GetFieldStrengthTensor_G(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetMemoryIndex
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
     !> Direction
@@ -852,15 +864,74 @@ contains ! Module procedures
     !> Lattice index
     integer(int64),            intent(in) :: LatticeIndex
     !> Field strength tensor
-    complex(fp) :: GetFieldStrengthTensor(nSUN,nSUN)
+    complex(fp) :: GetFieldStrengthTensor_G(nSUN,nSUN)
+
+    complex(fp) :: Plaquette(nSUN,nSUN)
+    
+    GetFieldStrengthTensor_G = GaugeConf%GetFieldStrengthTensor_M(i,j,GetMemoryIndex(LatticeIndex))
+  end function GetFieldStrengthTensor_G
+
+  !>@brief Returns field strength tensor
+  !!@details: Field strength tensor in physical units \f$g F_{ij}(\vec{v})^aT^a\f$
+  !!in order \f$O(a_i^2,a_j^2,a_i\cdot a_j)\f$
+  !!@returns Spatial field strength tensor \f$F_{i,j,\vec{v}}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+ pure function GetFieldStrengthTensor_M(GaugeConf,i,j,MemoryIndex)
+    use lattice, only: GetLatticeSpacing
+    use matrixoperations, only: LogU
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Memory index
+    integer(int64),            intent(in) :: MemoryIndex
+    !> Field strength tensor
+    complex(fp) :: GetFieldStrengthTensor_M(nSUN,nSUN)
 
     complex(fp) :: Plaquette(nSUN,nSUN)
 
-    Plaquette = GaugeConf%GetPlaquette(i,j,LatticeIndex)
+    Plaquette = GaugeConf%GetPlaquette_M(i,j,MemoryIndex)
     
-    GetFieldStrengthTensor = &
+    GetFieldStrengthTensor_M = &
          LogU(Plaquette)/GetLatticeSpacing(i)/GetLatticeSpacing(j)/cmplx(0,1,fp)
-  end function GetFieldStrengthTensor
+  end function GetFieldStrengthTensor_M
+  
+  !> @brief Returns spatial plaquette \f$U_{ij,\vec{v}} =U_{i,\vec{v}}\cdot U_{j,\vec{v}+\hat{i}}
+  !! \cdot U_{i,\vec{v}+\hat{j}}^\dagger\cdot U_{j,\vec{v}}^\dagger\f$
+  !! @returns Spatial plaquette
+  !! \f$U_{i,j,v}=U_{i,v}\cdot U_{j,v+\hat{i}}\cdot U_{i,v+\hat{j}}^\dagger\cdot U_{j,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 28.02.2019
+  !! @version 1.0
+ pure function GetSpatialPlaquette_M(GaugeConf,i,j,MemoryIndex)
+    use lattice, only: GetNeib_M
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Spatial direction
+    integer(int8),             intent(in) :: i,j
+    !> Memory index
+    integer(int64),            intent(in) :: MemoryIndex
+    !> Spatial plaquette
+    complex(fp) :: GetSpatialPlaquette_M(nSUN,nSUN)
+
+    complex(fp), dimension(nSUN,nSUN) :: link1,link2,link3,link4
+
+    link1 = GaugeConf%GetLink_M(i,MemoryIndex)                               ! U_i(x)
+    link2 = GaugeConf%GetLink_M(j,GetNeib_M(i,MemoryIndex))                  ! U_j(x+î)
+    link3 = conjg(transpose(GaugeConf%GetLink_M(i,GetNeib_M(j,MemoryIndex))))! U_i(x+ĵ)†
+    link4 = conjg(transpose(GaugeConf%GetLink_M(j,MemoryIndex)))             ! U_j(x)†
+
+    GetSpatialPlaquette_M = matmul(matmul(matmul(&
+         link1,&  ! U_i(x)
+         link2),& ! U_j(x+î)
+         link3),& ! U_i(x+ĵ)†
+         link4)   ! U_j(x)†
+  end function GetSpatialPlaquette_M
 
   !> @brief Returns spatial plaquette \f$U_{ij,\vec{v}} =U_{i,\vec{v}}\cdot U_{j,\vec{v}+\hat{i}}
   !! \cdot U_{i,\vec{v}+\hat{j}}^\dagger\cdot U_{j,\vec{v}}^\dagger\f$
@@ -868,10 +939,10 @@ contains ! Module procedures
   !! \f$U_{i,j,v}=U_{i,v}\cdot U_{j,v+\hat{i}}\cdot U_{i,v+\hat{j}}^\dagger\cdot U_{j,v}^\dagger\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 23.02.2019
+  !! @date 28.02.2019
   !! @version 1.0
- pure function GetSpatialPlaquette(GaugeConf,i,j,LatticeIndex)
-    use lattice, only: GetNeib_G
+  pure function GetSpatialPlaquette_G(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -880,21 +951,9 @@ contains ! Module procedures
     !> Lattice index
     integer(int64),            intent(in) :: LatticeIndex
     !> Spatial plaquette
-    complex(fp) :: GetSpatialPlaquette(nSUN,nSUN)
-
-    complex(fp), dimension(nSUN,nSUN) :: link1,link2,link3,link4
-
-    link1 = GaugeConf%GetLink_G(i,LatticeIndex)                               ! U_i(x)
-    link2 = GaugeConf%GetLink_G(j,GetNeib_G(i,LatticeIndex))                  ! U_j(x+î)
-    link3 = conjg(transpose(GaugeConf%GetLink_G(i,GetNeib_G(j,LatticeIndex))))! U_i(x+ĵ)†
-    link4 = conjg(transpose(GaugeConf%GetLink_G(j,LatticeIndex)))             ! U_j(x)†
-
-    GetSpatialPlaquette = matmul(matmul(matmul(&
-         link1,&  ! U_i(x)
-         link2),& ! U_j(x+î)
-         link3),& ! U_i(x+ĵ)†
-         link4)   ! U_j(x)†
-  end function GetSpatialPlaquette
+    complex(fp) :: GetSpatialPlaquette_G(nSUN,nSUN)
+    GetSpatialPlaquette_G=GaugeConf%GetSpatialPlaquette_M(i,j,GetMemoryIndex(LatticeIndex))
+  end function GetSpatialPlaquette_G
 
   !> @brief Returns temporal plaquette
   !! @details The temporal plaquette is computed via the chromo-electric field
@@ -911,10 +970,52 @@ contains ! Module procedures
   !! = U_{j,v+\hat{0}}\cdot U_{j,v}^\dagger\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 23.02.2019
+  !! @date 28.02.2019
   !! @version 1.0
- pure function GetTemporalPlaquette(GaugeConf,i,j,LatticeIndex)
+ pure function GetTemporalPlaquette_M(GaugeConf,i,j,MemoryIndex)
     use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Memory index
+    integer(int64),            intent(in) :: MemoryIndex
+    !> Temporal plaquette
+    complex(fp) :: GetTemporalPlaquette_M(nSUN,nSUN)
+
+    real(fp) :: efield(ngen)
+    
+    if(     i==0 .and. j/=0 ) then
+       efield = +GaugeConf%GetEfield_M([1_int8:ngen],j,MemoryIndex)
+       GetTemporalPlaquette_M = GetGroupExp(efield)
+    elseif( i/=0 .and. j==0 ) then
+       efield = -GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
+       GetTemporalPlaquette_M = GetGroupExp(efield)
+    else
+       GetTemporalPlaquette_M = GetUnitMatrix(nSUN)
+    end if
+  end function GetTemporalPlaquette_M
+
+  !> @brief Returns temporal plaquette
+  !! @details The temporal plaquette is computed via the chromo-electric field
+  !! due to the knowledge of the evolution scheme. Using that
+  !! \f$U_{i,\vec{v}}(t+a_t) =\exp\left(i \tilde{E}_{C,i,\vec{v}}(t)^aT^a\right)
+  !! \cdot U_{i,\vec{v}}(t)\f$
+  !! one can exactly compute the temporal plaquette with
+  !! \f$U_{0j,\vec{v}}(t)=U_{j,\vec{v}}(t+a_t)
+  !! \cdot U_{j,\vec{v}}(t)^\dagger
+  !! =\exp\left(i \tilde{E}_{C,i,\vec{v}}(t)^aT^a\right)\f$
+  !! @returns Temporal plaquette
+  !! \f$U_{0,j,v}=U_{0,v}\cdot U_{j,v+\hat{0}}
+  !! \cdot U_{0,v+\hat{j}}^\dagger\cdot U_{j,v}^\dagger
+  !! = U_{j,v+\hat{0}}\cdot U_{j,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 28.02.2019
+  !! @version 1.0
+  pure function GetTemporalPlaquette_G(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -923,20 +1024,9 @@ contains ! Module procedures
     !> Lattice index
     integer(int64),            intent(in) :: LatticeIndex
     !> Temporal plaquette
-    complex(fp) :: GetTemporalPlaquette(nSUN,nSUN)
-
-    real(fp) :: efield(ngen)
-    
-    if(     i==0 .and. j/=0 ) then
-       efield = +GaugeConf%GetEfield_G([1_int8:ngen],j,LatticeIndex)
-       GetTemporalPlaquette = GetGroupExp(efield)
-    elseif( i/=0 .and. j==0 ) then
-       efield = -GaugeConf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
-       GetTemporalPlaquette = GetGroupExp(efield)
-    else
-       GetTemporalPlaquette = GetUnitMatrix(nSUN)
-    end if
-  end function GetTemporalPlaquette
+    complex(fp) :: GetTemporalPlaquette_G(nSUN,nSUN)
+    GetTemporalPlaquette_G = GaugeConf%GetTemporalPlaquette_M(i,j,GetMemoryIndex(LatticeIndex))
+  end function GetTemporalPlaquette_G
   
   !> @brief Returns plaquette \f$U_{jk,\vec{v}}
   !! =U_{j,\vec{v}}\cdot U_{k,\vec{v}+\hat{j}}
@@ -946,9 +1036,37 @@ contains ! Module procedures
   !! \cdot U_{j,v+\hat{k}}^\dagger\cdot U_{k,v}^\dagger\f$
   !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !! @date 23.02.2019
+  !! @date 28.02.2019
   !! @version 1.0
- pure function GetPlaquette(GaugeConf,i,j,LatticeIndex)
+ pure function GetPlaquette_M(GaugeConf,i,j,MemoryIndex)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Direction
+    integer(int8),             intent(in) :: i,j
+    !> Memory index
+    integer(int64),            intent(in) :: MemoryIndex
+    !> Temporal plaquette
+    complex(fp) :: GetPlaquette_M(nSUN,nSUN)
+    if(i==0 .or. j==0) then
+       GetPlaquette_M = GaugeConf%GetTemporalPlaquette_M(i,j,MemoryIndex)
+    else
+       GetPlaquette_M = GaugeConf%GetSpatialPlaquette_M(i,j,MemoryIndex)
+    end if
+  end function GetPlaquette_M
+
+  !> @brief Returns plaquette \f$U_{jk,\vec{v}}
+  !! =U_{j,\vec{v}}\cdot U_{k,\vec{v}+\hat{j}}
+  !! \cdot U_{j,\vec{v}+\hat{k}}^\dagger\cdot U_{k,\vec{v}}^\dagger\f$
+  !! @returns Plaquette
+  !! \f$U_{j,k,v}=U_{j,v}\cdot U_{k,v+\hat{j}}
+  !! \cdot U_{j,v+\hat{k}}^\dagger\cdot U_{k,v}^\dagger\f$
+  !! @author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !! @date 28.02.2019
+  !! @version 1.0
+  pure function GetPlaquette_G(GaugeConf,i,j,LatticeIndex)
+    use lattice, only: GetMemoryIndex
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -957,13 +1075,9 @@ contains ! Module procedures
     !> Lattice index
     integer(int64),            intent(in) :: LatticeIndex
     !> Temporal plaquette
-    complex(fp) :: GetPlaquette(nSUN,nSUN)
-    if(i==0 .or. j==0) then
-       GetPlaquette = GaugeConf%GetTemporalPlaquette(i,j,LatticeIndex)
-    else
-       GetPlaquette = GaugeConf%GetSpatialPlaquette(i,j,LatticeIndex)
-    end if
-  end function GetPlaquette
+    complex(fp) :: GetPlaquette_G(nSUN,nSUN)
+    GetPlaquette_G = GaugeConf%GetPlaquette_M(i,j,GetMemoryIndex(LatticeIndex))
+  end function GetPlaquette_G
 
   !>@brief Energy functional
   !!@returns Energy functional
@@ -974,8 +1088,8 @@ contains ! Module procedures
   impure real(fp) function GetEnergy(GaugeConf)
     use precision, only: fp
     use matrixoperations, only: GetTrace
-    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetLatticeIndex_M
-    use mpiinterface, only: intmpi, GetRealSendType
+    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetProc_M
+    use mpiinterface, only: intmpi, GetRealSendType, ThisProc
     use mpi
     implicit none
     !> Gauge configuration
@@ -993,7 +1107,7 @@ contains ! Module procedures
 
     ! 1. Calculation of local contribution
     local_contribution = 0
-    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
        efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
 
        local_contribution = local_contribution &
@@ -1001,7 +1115,7 @@ contains ! Module procedures
             + sum(efield**2)/(GetLatticeSpacing(i)*GetLatticeSpacing(0_int8))**2/2
        ! Magnetic energy
        do concurrent(j=i+1_int8:ndim)
-          Plaquette = GaugeConf%GetPlaquette(i,j,GetLatticeIndex_M(MemoryIndex))
+          Plaquette = GaugeConf%GetPlaquette_M(i,j,MemoryIndex)
           PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
                /GetLatticeSpacing(i)/GetLatticeSpacing(j)
 
@@ -1348,14 +1462,12 @@ contains ! Module procedures
     complex(fp) :: TimeEvolutionOperator(nSUN,nSUN)
     real(fp)    :: efield_times_dt(nGen)
 
-    do MemoryIndex=1,GetMemorySize()
-       do i=1,ndim
-          efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth
-          TimeEvolutionOperator = GetGroupExp(efield_times_dt)
-          
-          GaugeConf%Links(:,:,i,MemoryIndex) =&
-               matmul(TimeEvolutionOperator,GaugeConf%Links(:,:,i,MemoryIndex))
-       end do
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+       efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth
+       TimeEvolutionOperator = GetGroupExp(efield_times_dt)
+
+       GaugeConf%Links(:,:,i,MemoryIndex) =&
+            matmul(TimeEvolutionOperator,GaugeConf%Links(:,:,i,MemoryIndex))
     end do
   end subroutine Update_Links_Leapfrog
 
@@ -1365,7 +1477,8 @@ contains ! Module procedures
   !!@date 27.02.2019
   !!@version 1.0
   pure subroutine Update_Efield_Leapfrog(GaugeConf,StepWidth)
-    use lattice, only: ndim, GetMemorySize
+    use mpiinterface, only: ThisProc
+    use lattice, only: ndim, GetMemorySize, GetProc_M
     implicit none
     !> Gauge link configuration
     class(GaugeConfiguration), intent(inout) :: GaugeConf
@@ -1375,7 +1488,7 @@ contains ! Module procedures
     integer(int8) :: i
     integer(int64):: MemoryIndex
     
-    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim)
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
        call Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,MemoryIndex)
     end do
 
@@ -1465,8 +1578,8 @@ contains ! Module procedures
 
       integer(int64) :: neib_k, neib_ik
 
-      neib_k      = GetNeib_M(-k,MemoryIndex)
-      neib_ik     = GetNeib_M(+i,neib_k)
+      neib_k  = GetNeib_M(-k,MemoryIndex)
+      neib_ik = GetNeib_M(+i,neib_k)
 
       GetDStaple = matmul(matmul(&
            conjg(transpose(GaugeConf%links(:,:,k,neib_ik))),&
@@ -1474,4 +1587,257 @@ contains ! Module procedures
            GaugeConf%links(:,:,k,neib_k))
     end function GetDStaple
   end subroutine Update_Efield_Leapfrog
+
+
+  !>@brief Performs gauge-fixing to Coulomb gauge
+  !!@details Exactly Davies' algorithm. See <a href="https://doi.org/10.1103/PhysRevD.37.1581">
+  !! Fourier acceleration in lattice gauge theories. I. Landau gauge fixing</a>
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  impure subroutine CoulombGaugefixing(GaugeConf,Tolerance_,alpha_,MaxIterations_)
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Tolerance for gauge fixing
+    real(fp),                  intent(in), optional :: Tolerance_
+    !> Alpha (slope) in Coulomb gauge fixing
+    real(fp),                  intent(in), optional :: alpha_
+    !> Maximum number of gauge fixing iteration steps
+    integer(int64),            intent(in), optional :: MaxIterations_
+
+    real(fp) :: Tolerance, alpha
+    integer(int64) :: MaxIterations
+
+    type(GaugeConfiguration) :: UpdatedConf
+
+    ! ..--** START: Optional parameters **--..
+    if(present(Tolerance_)) then
+       Tolerance = Tolerance_
+    else
+       ! Default value
+       Tolerance = 1.E-8
+    end if
+
+    if(present(alpha_)) then
+       alpha = alpha_
+    else
+       ! Default value from
+       ! Davies et al. in https://doi.org/10.1103/PhysRevD.37.1581
+       alpha = 0.08_real64
+    end if
+
+    if(present(MaxIterations_)) then
+       MaxIterations = MaxIterations_
+    else
+       ! Default value
+       MaxIterations = 100
+    end if
+    ! ..--**  END : Optional parameters **--..
+
+    call GaugeConf%CoulombGaugefixing_Links(Tolerance,Alpha,MaxIterations)
+  end subroutine CoulombGaugefixing
+
+  !>@brief Performs gauge-fixing to Coulomb gauge for the link variables
+  !!@details Exactly Davies' algorithm. See <a href="https://doi.org/10.1103/PhysRevD.37.1581">
+  !! Fourier acceleration in lattice gauge theories. I. Landau gauge fixing</a>
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  impure subroutine CoulombGaugefixing_Links(GaugeConf,Tolerance,Alpha,MaxIterations)
+    use lattice, only: GetMaxNorm2Momentum, GetNorm2Momentum_M, nDim, GetNeib_M,&
+         GetProc_M, GetMemorySize
+    use xpfft, only: x2p, p2x
+    use tolerances, only: GetZeroTol
+    use mpiinterface, only: ThisProc
+    use halocomm, only: MPI_CommunicateBoundary => CommunicateBoundary
+    use matrixoperations, only: ExpAH
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(inout) :: GaugeConf
+    !> Tolerance for gauge fixing
+    real(fp),                  intent(in)    :: Tolerance
+    !> Alpha (slope) in Coulomb gauge fixing
+    real(fp),                  intent(in)    :: alpha
+    !> Maximum number of gauge fixing iteration steps
+    integer(int64),            intent(in)    :: MaxIterations
+
+    ! Divergence term
+    complex(fp), allocatable :: Divergence(:,:,:)
+    ! Gauge transformation
+    complex(fp), allocatable :: GaugeTransform(:,:,:)
+    ! FFT-Inout
+    complex(fp), allocatable :: fft_inout(:)
+
+    ! Indices
+    integer(int8) :: i,j
+    integer(int64) :: MemoryIndex, iteration
+
+    ! Acceleration step
+    real(fp) :: p, pmax
+
+    !..--** START: Allocation **--..
+    allocate(Divergence(nsun,nsun,GetMemorySize()))
+    allocate(GaugeTransform(nsun,nsun,GetMemorySize()))
+    allocate(fft_inout(GetMemorySize()))
+    !..--**  END : Allocation **--..
+
+    GaugeFixingIteration: do iteration=1,MaxIterations
+
+       ! Computing divergence
+       Divergence=0
+       forall(MemoryIndex=1:GetMemorySize(),ThisProc()==GetProc_M(MemoryIndex))
+          Divergence(:,:,MemoryIndex) = GaugeConf%GetDivergenceOfGaugeField_M(MemoryIndex)
+       end forall
+
+       ! Checking if Coulomb gauge condition is fulfilled
+       if(isCoulombGauged(Divergence,Tolerance)) exit GaugeFixingIteration
+
+       ! ..--** START: Constructing the gauge transformation **--..
+       
+       ! ..--** START: Fourier Acceleration **--..
+       do j=1,nsun
+          do i=1,nsun
+             fft_inout = Divergence(i,j,:)
+             call x2p(fft_inout)
+             Divergence(i,j,:) = fft_inout
+          end do
+       end do
+
+       ! Acceleration step
+       pmax = GetMaxNorm2Momentum()
+       do concurrent(MemoryIndex=1:GetMemorySize(),&
+            GetNorm2Momentum_M(MemoryIndex)>GetZeroTol() &
+            .and. ThisProc()==GetProc_M(MemoryIndex))
+          Divergence(:,:,MemoryIndex) = &
+               Divergence(:,:,MemoryIndex)&
+               * (pmax/GetNorm2Momentum_M(MemoryIndex))**2
+       end do
+       
+       ! FFT p-->x
+       do j=1,nsun
+          do i=1,nsun
+             fft_inout = Divergence(i,j,:)
+             call p2x(fft_inout)
+             Divergence(i,j,:) = fft_inout
+          end do
+       end do
+       ! ..--**  END : Fourier Acceleration **--..
+
+       Divergence = alpha*Divergence
+
+       ! Algebra --> Group
+       do concurrent(MemoryIndex=1:GetMemorySize(),ThisProc()==GetProc_M(MemoryIndex))
+          gaugetransform(:,:,MemoryIndex) = ExpAH(Divergence(:,:,MemoryIndex))
+       end do
+       ! ..--**  END : Constructing the gauge transformation **--..
+
+       ! Communicating boundary values of gauge transform
+       call MPI_CommunicateBoundary(GaugeTransform)
+
+       ! Performing gauge transformation on the lnks
+       call PerformGaugeTransformation(GaugeConf,GaugeTransform)
+    end do GaugeFixingIteration
+  contains
+    impure logical function IsCoulombGauged(Divergence,Tolerance)
+      use mpiinterface, only: intmpi, ThisProc, NumProcs
+      use lattice, only: GetProc_M
+      use matrixoperations, only: FrobeniusNorm
+      use mpi
+      implicit none
+      complex(fp), intent(in) :: Divergence(:,:,:)
+      real(fp),    intent(in) :: Tolerance
+
+      real(fp), allocatable :: Deviation(:)
+
+      integer(int64) :: MemoryIndex
+      logical :: IsCoulombGauged_local
+      logical, allocatable :: IsCoulombGauged_allProcs(:)
+      integer(intmpi) :: mpierr
+
+      allocate(deviation(size(Divergence,rank(Divergence))))
+
+      deviation = -1 ! Default value, important for mask in local check
+      forall(MemoryIndex=1:size(deviation),ThisProc()==GetProc_M(MemoryIndex))
+         Deviation(MemoryIndex) = FrobeniusNorm(Divergence(:,:,MemoryIndex))/nsun**2
+      end forall
+
+      ! Local check
+      IsCoulombGauged_local = .true.
+      do concurrent(MemoryIndex=1:size(deviation),&
+           ThisProc()==GetProc_M(MemoryIndex).and.deviation(MemoryIndex)>Tolerance)
+         IsCoulombGauged_local = .false.
+      end do
+      deallocate(deviation)
+
+      ! Gathering information about local check from the other processes
+      allocate(IsCoulombGauged_allProcs(NumProcs()))
+      call MPI_ALLGATHER(&
+           IsCoulombGauged_local,&
+           1_intmpi, MPI_LOGICAL,&
+           IsCoulombGauged_allProcs,&
+           1_intmpi, MPI_LOGICAL,&
+           MPI_COMM_WORLD,mpierr)
+      
+      ! Coulomb gauge condition fulfilled on all local lattices?
+      if(all(IsCoulombGauged_allProcs)) then
+         ! yes :)
+         IsCoulombGauged = .true.
+      else
+         ! no  :(
+         IsCoulombGauged = .false.
+      end if
+      deallocate(IsCoulombGauged_allProcs)
+    end function IsCoulombGauged
+
+    impure subroutine PerformGaugeTransformation(GaugeConf,GaugeTransformation)
+      use lattice, only: GetMemorySize, nDim, GetProc_M, GetNeib_M
+      use mpiinterface, only: ThisProc
+      implicit none
+      type(GaugeConfiguration), intent(inout) :: GaugeConf
+      complex(fp),              intent(in)    :: GaugeTransformation(:,:,:)
+
+      integer(int64) :: MemoryIndex
+      integer(int8)  :: i
+
+      do concurrent(MemoryIndex=1:GetMemorySize(), i=1:nDim, ThisProc()==GetProc_M(MemoryIndex))
+         GaugeConf%Links(:,:,i,MemoryIndex) = matmul(matmul(&
+              GaugeTransformation(:,:,MemoryIndex),&
+              GaugeConf%Links(:,:,i,MemoryIndex)),&
+              conjg(transpose(GaugeTransformation(:,:,GetNeib_M(+i,MemoryIndex)))))
+      end do
+
+      call GaugeConf%CommunicateBoundary_Links
+    end subroutine PerformGaugeTransformation
+  end subroutine CoulombGaugefixing_Links
+
+
+  pure function GetDivergenceOfGaugeField_M(GaugeConf,MemoryIndex)
+    use lattice, only: nDim, GetNeib_M
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(in) :: GaugeConf
+    !> Memory index
+    integer(int64),            intent(in) :: MemoryIndex
+    !> Laplace operator on links
+    complex(fp) :: GetDivergenceOfGaugefield_M(nSUN,nSUN)
+
+    integer(int8) :: i
+    complex(fp) :: diff(nSUN,nSUN)
+
+    GetDivergenceOfGaugeField_M = 0
+
+    do concurrent(i=1:ndim)
+       diff = &
+            - GaugeConf%Links(:,:,i,MemoryIndex) &
+            + GaugeConf%Links(:,:,i,GetNeib_M(-i,MemoryIndex))
+
+       ! Skew-hermitisation
+       diff = (diff - conjg(transpose(diff)))/2
+
+       GetDivergenceOfGaugefield_M = GetDivergenceOfGaugefield_M + diff
+    end do
+  end function GetDivergenceOfGaugeField_M
 end module gaugeconfiguration_su3
