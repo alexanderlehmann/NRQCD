@@ -11,10 +11,6 @@
 module gaugeconfiguration_su3
   use, intrinsic :: iso_fortran_env
   use precision, only: fp
-
-
-  use mpiinterface
-
   
   use su3
 
@@ -375,6 +371,7 @@ contains ! Module procedures
   !!@date 28.02.2019
   !!@version 1.0
   impure subroutine HotInit(GaugeConf)
+    use mpiinterface, only: ThisProc
     use random, only: GetRandomUniformReal
     use lattice, only: ndim, GetProc_M, GetMemorySize, GetLatticeSpacing
     implicit none
