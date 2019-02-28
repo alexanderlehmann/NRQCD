@@ -128,7 +128,7 @@ contains
   !!@version 1.0
   impure subroutine InitSendRecvLists(Neibs,HaloProcs,NeibPoints,SendList,RecvList)
     use, intrinsic :: iso_fortran_env
-    use lattice, only: GetLatticeIndex, GetMemorySize, GetProc
+    use lattice, only: GetLatticeIndex_M, GetMemorySize, GetProc_G
     use mpiinterface, only: NumProcs, ThisProc, MPISTOP
     use arrayoperations, only: RemoveDuplicates, Sort
     use mpi
@@ -160,7 +160,7 @@ contains
     !HaloProcs_includingThisProc = GetProc(LocalLatticeIndices)
     allocate(HaloProcs_includingThisProc(GetMemorySize()))
     do MemoryIndex=1,GetMemorySize()
-       HaloProcs_includingThisProc(MemoryIndex) = GetProc(GetLatticeIndex(MemoryIndex))
+       HaloProcs_includingThisProc(MemoryIndex) = GetProc_G(GetLatticeIndex_M(MemoryIndex))
     end do
     
     call RemoveDuplicates(HaloProcs_includingThisProc,PointsPerProc_includingThisProc)
@@ -187,8 +187,8 @@ contains
           ! Assign global lattice indices of halo to the process which sends them
           neibpoint=0
           do MemoryIndex=1,GetMemorySize()
-             LatticeIndex = GetLatticeIndex(MemoryIndex)
-             if(GetProc(LatticeIndex)==HaloProcs(neib)) then
+             LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+             if(GetProc_G(LatticeIndex)==HaloProcs(neib)) then
                 neibpoint = neibpoint + 1_int64
                 RecvList(neibpoint,neib) = LatticeIndex
              end if

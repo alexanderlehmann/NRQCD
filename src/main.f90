@@ -1,8 +1,8 @@
 program simulation
   use, intrinsic :: iso_fortran_env
   use precision
-  use mpiinterface, only: ThisProc, NumProcs, MPIstop, intmpi, syncall
-  use lattice, only: ndim
+  use mpiinterface
+  
   use lattice
   use halocomm
   use xpfft
@@ -155,10 +155,10 @@ program simulation
         tag = (0+NumProcs())*src
         if(ThisProc()==src) then
            do MemoryIndex=1,GetMemorySize()
-              LatticeIndex = GetLatticeIndex(MemoryIndex)
-              if(ThisProc()==GetProc(LatticeIndex)) then
+              LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+              if(ThisProc()==GetProc_G(LatticeIndex)) then
                  is = is + 1
-                 Momenta(is) = GetNorm2Momentum(LatticeIndex)
+                 Momenta(is) = GetNorm2Momentum_G(LatticeIndex)
               end if
            end do
            call mpi_isend(&
@@ -264,8 +264,8 @@ program simulation
   
   Momentum = 2*pi*MomentumIndices/GetLatticeExtension([1_int8:nDim])
   do MemoryIndex=1,GetMemorySize()
-     LatticeIndex = GetLatticeIndex(MemoryIndex)
-     if(ThisProc()==GetProc(LatticeIndex)) then
+     LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+     if(ThisProc()==GetProc_G(LatticeIndex)) then
         data(MemoryIndex) &
              != Exp(Cmplx(0,sum(Momentum*(GetLatticePosition(LatticeIndex)-1)),fp))
              = sin(sum(Momentum*(GetLatticePosition(LatticeIndex)-1)))
@@ -276,7 +276,7 @@ program simulation
 
   do LatticeIndex=1,GetLatticeSize()
 
-     if(ThisProc()==GetProc(LatticeIndex)) then
+     if(ThisProc()==GetProc_G(LatticeIndex)) then
         MemoryIndex = GetMemoryIndex(LatticeIndex)
 
         if(abs(data(MemoryIndex)).gt.GetZeroTol()) &

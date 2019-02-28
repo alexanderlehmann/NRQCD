@@ -284,7 +284,7 @@ contains ! Module procedures
 
   impure subroutine HotInit(GaugeConf)
     use random, only: GetRandomUniformReal
-    use lattice, only: ndim, GetLatticeIndex, GetProc, GetMemorySize, GetLatticeSpacing
+    use lattice, only: ndim, GetLatticeIndex_M, GetProc_G, GetMemorySize, GetLatticeSpacing
     implicit none
     class(GaugeConfiguration), intent(out) :: GaugeConf
 
@@ -296,8 +296,8 @@ contains ! Module procedures
     call GaugeConf%Allocate
     
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex(MemoryIndex)
-       if(ThisProc()==GetProc(LatticeIndex)) then
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+       if(ThisProc()==GetProc_G(LatticeIndex)) then
           do i=1,ndim
              ! Link
              r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)
@@ -325,7 +325,7 @@ contains ! Module procedures
        aa_correlator,ee_correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: GetNorm2Momentum,GetMemorySize,GetLatticeIndex
+    use lattice, only: GetNorm2Momentum_G,GetMemorySize,GetLatticeIndex_M
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -348,7 +348,7 @@ contains ! Module procedures
     do MemoryIndex=1,GetMemorySize()
        Occupation(MemoryIndex)&
             = GetBoxOccupation(&
-            GetNorm2Momentum(GetLatticeIndex(MemoryIndex)),& !|p|
+            GetNorm2Momentum_G(GetLatticeIndex_M(MemoryIndex)),& !|p|
             SaturationScale,&
             Amplitude,&
             Coupling)
@@ -381,8 +381,8 @@ contains ! Module procedures
     use tolerances, only: GetZeroTol
     use mpiinterface, only: intmpi, ThisProc, mpistop, SyncAll
     use lattice, only: nDim, GetMemorySize, GetMemoryIndex, GetLatticeSize,&
-         GetProc, GetVolume, GetPolarisationVectors, GetNorm2Momentum, GetMomentum,&
-         GetLatticeSpacing, GetLatticeIndex, GetLocalLatticeSize
+         GetProc_G, GetVolume, GetPolarisationVectors, GetNorm2Momentum_G, GetMomentum_G,&
+         GetLatticeSpacing, GetLatticeIndex_M, GetLocalLatticeSize
     use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
          GetRandomNormalCmplx_specificProcess, modulename_random=>modulename
     use xpfft, only: p2x, x2p
@@ -449,14 +449,14 @@ contains ! Module procedures
     !               the number of used processes
     !
     GlobalLattice: do LatticeIndex=1,GetLatticeSize()
-       RecvProc = GetProc(LatticeIndex)
+       RecvProc = GetProc_G(LatticeIndex)
 
        if(ThisProc()==RecvProc .or. ThisProc()==SendProc) then
 
-          MomentumNorm = GetNorm2Momentum(LatticeIndex)
+          MomentumNorm = GetNorm2Momentum_G(LatticeIndex)
           if(MomentumNorm > GetZeroTol()) then
              if(ThisProc()==RecvProc) then
-                Momentum = GetMomentum(LatticeIndex)
+                Momentum = GetMomentum_G(LatticeIndex)
                 call GetPolarisationVectors(Momentum,PolarisationVectors)
 
                 MemoryIndex = GetMemoryIndex(LatticeIndex)
@@ -517,8 +517,8 @@ contains ! Module procedures
        allocate(aa_correlator(GetLocalLatticeSize()))
        is=0
        do MemoryIndex=1,GetMemorySize()
-          LatticeIndex = GetLatticeIndex(MemoryIndex)
-          if(GetProc(LatticeIndex)==ThisProc()) then
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(GetProc_G(LatticeIndex)==ThisProc()) then
              is = is+1
              aa_correlator(is) = 0
              do a=1,ngen
@@ -534,8 +534,8 @@ contains ! Module procedures
        allocate(ee_correlator(GetLocalLatticeSize()))
        is=0
        do MemoryIndex=1,GetMemorySize()
-          LatticeIndex = GetLatticeIndex(MemoryIndex)
-          if(GetProc(LatticeIndex)==ThisProc()) then
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(GetProc_G(LatticeIndex)==ThisProc()) then
              is = is+1
              ee_correlator(is) = 0
              do a=1,ngen
@@ -565,8 +565,8 @@ contains ! Module procedures
     !     i =1:ndim)
     do MemoryIndex=1,GetMemorySize()
        do i=1,ndim
-          LatticeIndex = GetLatticeIndex(MemoryIndex)
-          if(GetProc(LatticeIndex)==ThisProc()) then
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(GetProc_G(LatticeIndex)==ThisProc()) then
              ! Link
              afield_site = real(afield(MemoryIndex,:,i),fp) &
                                 ! Translation to lattice units
@@ -586,7 +586,7 @@ contains ! Module procedures
   contains
     impure subroutine SymmetriseInPspace(field)
       use precision, only: fp
-      use lattice, only: nDim, GetProc, GetNegativeLatticeIndex, GetLatticeSize
+      use lattice, only: nDim, GetProc_G, GetNegativeLatticeIndex, GetLatticeSize
       use mpiinterface, only: ThisProc, SyncAll, intmpi, GetComplexSendType
       use mpi
       implicit none
@@ -614,8 +614,8 @@ contains ! Module procedures
          NegativeLatticeIndex = GetNegativeLatticeIndex(PositiveLatticeIndex)
 
          ! Getting process numbers for positive and negative momentum
-         PositiveProc = GetProc(PositiveLatticeIndex)
-         NegativeProc = GetProc(NegativeLatticeIndex)
+         PositiveProc = GetProc_g(PositiveLatticeIndex)
+         NegativeProc = GetProc_G(NegativeLatticeIndex)
 
          ! Setting field such that f(p) = f(-p)*
 
@@ -709,7 +709,7 @@ contains ! Module procedures
   impure real(fp) function GetDeviationFromGaussLaw(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
-    use lattice, only: nDim, GetLatticeSpacing,GetNeib,GetLatticeIndex, GetNeib, GetMemorySize
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib_G,GetLatticeIndex_M, GetMemorySize
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -728,12 +728,12 @@ contains ! Module procedures
     local_contribution = 0
     !do concurrent (is=1:size(LocalLatticeIndices))
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex(MemoryIndex)
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
        !do concurrent(i=1_int8:ndim)
        do i=1,ndim
           efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
           
-          neib = GetNeib(-i,LatticeIndex)
+          neib = GetNeib_G(-i,LatticeIndex)
           efield_neib = GaugeConf%GetEfield([1_int8:ngen],i,Neib)
 
           Mefield = GetAlgebraMatrix(efield)
@@ -801,7 +801,7 @@ contains ! Module procedures
   !! @date 23.02.2019
   !! @version 1.0
  IMpure function GetSpatialPlaquette(GaugeConf,i,j,LatticeIndex)
-    use lattice, only: GetNeib
+    use lattice, only: GetNeib_G
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(in) :: GaugeConf
@@ -815,8 +815,8 @@ contains ! Module procedures
     complex(fp), dimension(nSUN,nSUN) :: link1,link2,link3,link4
 
     link1 = GaugeConf%GetLink(i,LatticeIndex)                             ! U_i(x)
-    link2 = GaugeConf%GetLink(j,GetNeib(i,LatticeIndex))                  ! U_j(x+î)
-    link3 = conjg(transpose(GaugeConf%GetLink(i,GetNeib(j,LatticeIndex))))! U_i(x+ĵ)†
+    link2 = GaugeConf%GetLink(j,GetNeib_G(i,LatticeIndex))                  ! U_j(x+î)
+    link3 = conjg(transpose(GaugeConf%GetLink(i,GetNeib_G(j,LatticeIndex))))! U_i(x+ĵ)†
     link4 = conjg(transpose(GaugeConf%GetLink(j,LatticeIndex)))           ! U_j(x)†
 
     GetSpatialPlaquette = matmul(matmul(matmul(&
@@ -904,7 +904,7 @@ contains ! Module procedures
   impure real(fp) function GetEnergy(GaugeConf)
     use precision, only: fp
     use matrixoperations, only: GetTrace
-    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetLatticeIndex
+    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetLatticeIndex_M
     use mpiinterface, only: intmpi, GetRealSendType
     use mpi
     implicit none
@@ -925,7 +925,7 @@ contains ! Module procedures
     local_contribution = 0
     !do concurrent (is=1:size(LocalLatticeIndices))
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex(MemoryIndex)
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
        !do concurrent(i=1_int8:ndim)
        do i=1,ndim
           efield = GaugeConf%GetEfield([1_int8:ngen],i,LatticeIndex)
@@ -965,7 +965,7 @@ contains ! Module procedures
   impure subroutine GetTransverseAACorrelator(GaugeConf,Correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: nDim, GetLatticeIndex, GetMemoryIndex, GetProc, GetMemorySize,&
+    use lattice, only: nDim, GetLatticeIndex_M, GetMemoryIndex, GetProc_G, GetMemorySize,&
          GetLocalLatticeSize
     use mpiinterface, only: ThisProc
     implicit none
@@ -988,7 +988,7 @@ contains ! Module procedures
        do i=1,ndim
           field(MemoryIndex,i,:)&
                = GaugeConf%GetGaugeField_AlgebraCoordinates(&
-               i,GetLatticeIndex(MemoryIndex))
+               i,GetLatticeIndex_M(MemoryIndex))
        end do
     end do
     !end forall
@@ -1013,7 +1013,7 @@ contains ! Module procedures
   impure subroutine GetTransverseEECorrelator(GaugeConf,Correlator)
     use, intrinsic :: iso_fortran_env
     use precision, only: fp
-    use lattice, only: nDim, GetLatticeIndex, GetMemoryIndex, GetProc, GetMemorySize,&
+    use lattice, only: nDim, GetLatticeIndex_M, GetMemoryIndex, GetProc_G, GetMemorySize,&
          GetLocalLatticeSize
     use mpiinterface, only: ThisProc
     implicit none
@@ -1036,7 +1036,7 @@ contains ! Module procedures
        do i=1,ndim
           field(MemoryIndex,i,:)&
                = GaugeConf%GetElectricField_AlgebraCoordinate(&
-               [1_int8:ngen],i,GetLatticeIndex(MemoryIndex))
+               [1_int8:ngen],i,GetLatticeIndex_M(MemoryIndex))
        end do
     end do
     !end forall
@@ -1059,7 +1059,7 @@ contains ! Module procedures
   !!@date 17.01.2019
   !!@version 1.0
   impure subroutine GetTransverseCorrelator(x_field,correlator)
-    use lattice, only: nDim, GetVolume, GetLatticeIndex, GetMemorySize, GetLocalLatticeSize, GetProc
+    use lattice, only: nDim, GetVolume, GetLatticeIndex_M, GetMemorySize, GetLocalLatticeSize, GetProc_G
     use xpfft,     only: x2p
     use precision, only: fp
     use mpiinterface, only: ThisProc
@@ -1091,8 +1091,8 @@ contains ! Module procedures
     !do concurrent(LocalIndex=1:size(correlator))
     is=0
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex = GetLatticeIndex(MemoryIndex)
-       if(GetProc(LatticeIndex)==ThisProc()) then
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+       if(GetProc_G(LatticeIndex)==ThisProc()) then
           is=is+1
           field_site = p_field(MemoryIndex,:)
           Correlator(is) = &
@@ -1104,7 +1104,7 @@ contains ! Module procedures
   end subroutine GetTransverseCorrelator
   IMpure real(fp) function GetTransverseField_usingProjector(field,LatticeIndex)
     use precision, only: fp
-    use lattice, only: nDim, GetMomentum, GetTransverseProjector
+    use lattice, only: nDim, GetMomentum_G, GetTransverseProjector
     implicit none
     !> Field in p-space
     complex(fp),    intent(in) :: field(nDim)
@@ -1118,7 +1118,7 @@ contains ! Module procedures
     !do concurrent(i=1:ndim, j=1:ndim)
     do i=1,ndim
        do j=1,ndim
-          momentum = GetMomentum(LatticeIndex)
+          momentum = GetMomentum_G(LatticeIndex)
           res = res + field(i)*GetTransverseProjector(i,j,momentum)*conjg(field(j))
        end do
     end do
@@ -1300,7 +1300,7 @@ contains ! Module procedures
   !!@date 27.02.2019
   !!@version 1.0
   impure subroutine Update_Efield_Leapfrog(GaugeConf,StepWidth)
-    use lattice, only: ndim, GetMemorySize,GetLatticeIndex
+    use lattice, only: ndim, GetMemorySize,GetLatticeIndex_M
     implicit none
     !> Gauge link configuration
     class(GaugeConfiguration), intent(inout) :: GaugeConf
@@ -1311,7 +1311,7 @@ contains ! Module procedures
     integer(int64):: MemoryIndex,LatticeIndex
     
     do MemoryIndex=1,GetMemorySize()
-       LatticeIndex=GetLatticeIndex(MemoryIndex)
+       LatticeIndex=GetLatticeIndex_M(MemoryIndex)
        do i=1,ndim
           call Update_Efield_Leapfrog_atSite_Direction(GaugeConf,StepWidth,i,latticeindex)
        end do
@@ -1362,7 +1362,7 @@ contains ! Module procedures
     !!@date 27.02.2019
     !!@version 1.0
     pure function GetUStaple(GaugeConf,i,k,latticeindex)
-      use lattice, only: GetNeib, GetMemoryIndex
+      use lattice, only: GetNeib_G, GetMemoryIndex
       implicit none
       !> Gauge configuration
       type(GaugeConfiguration), intent(in) :: GaugeConf
@@ -1376,8 +1376,8 @@ contains ! Module procedures
       integer(int64) :: memoryindex,neib_i, neib_k
 
       memoryindex = GetMemoryIndex(LatticeIndex)
-      neib_i      = GetMemoryIndex(GetNeib(+i,latticeindex))
-      neib_k      = GetMemoryIndex(GetNeib(+k,latticeindex))
+      neib_i      = GetMemoryIndex(GetNeib_G(+i,latticeindex))
+      neib_k      = GetMemoryIndex(GetNeib_G(+k,latticeindex))
 
       GetUStaple = matmul(matmul(&
            GaugeConf%links(                :,:,k,neib_i),&
@@ -1393,7 +1393,7 @@ contains ! Module procedures
     !!@date 27.02.2019
     !!@version 1.0
     pure function GetDStaple(GaugeConf,i,k,latticeindex)
-      use lattice, only: GetNeib, GetMemoryIndex
+      use lattice, only: GetNeib_G, GetMemoryIndex
       implicit none
       !> Gauge configuration
       type(GaugeConfiguration), intent(in) :: GaugeConf
@@ -1406,8 +1406,8 @@ contains ! Module procedures
 
       integer(int64) :: neib_k, neib_ik
 
-      neib_k      = GetMemoryIndex(GetNeib(-k,latticeindex))
-      neib_ik     = GetMemoryIndex(GetNeib(+i,neib_k))
+      neib_k      = GetMemoryIndex(GetNeib_G(-k,latticeindex))
+      neib_ik     = GetMemoryIndex(GetNeib_G(+i,neib_k))
 
       GetDStaple = matmul(matmul(&
            conjg(transpose(GaugeConf%links(:,:,k,neib_ik))),&

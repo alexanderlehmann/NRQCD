@@ -24,21 +24,20 @@ module lattice
        !GetLocalLatticeIndices,&
        !GetLocalLatticeIndices_allocatable,&
        GetLatticePosition,&
-       GetLatticeIndex,&
        GetNegativeLatticeIndex,&
-       GetProc,&
+       GetProc_G, GetProc_M,&
+       GetLatticeIndex, GetLatticeIndex_M, GetMemoryIndex,&
+       GetNeib_G, GetNeib_M,&
+       GetMomentum_G, GetMomentum_M,&
+       GetNorm2Momentum_G, GetNorm2Momentum_M,&
        GetProc_fromGeneralIndex,&
        GetLatticeExtension,&
        GetLatticeSize,&
        InitLatticeIndices,&
-       GetMemoryIndex, &
        GetMemorySize,&
        GetLocalLatticeSize,&
        GetLatticeSpacing,&
        GetVolume,&
-       GetNeib,&
-       GetMomentum,&
-       GetNorm2Momentum,&
        GetMaxNorm2Momentum,&
        GetPolarisationVectors,&
        GetTransverseProjector
@@ -82,6 +81,8 @@ module lattice
   integer(int64), allocatable :: LocalUpperLatticeBoundaries_IncludingHalo(:,:)
   !> local lattice indices
   integer(int64), allocatable :: LocalLatticeIndices(:)
+  !> memory indices of neighbouring lattice sites
+  integer(int64), allocatable :: neib_m(:,:)
   !> local lattice extensions
   integer(int64) :: LocalLatticeExtensions(ndim)
   !> local lattice extensions including halo
@@ -93,16 +94,11 @@ module lattice
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
-  interface GetMomentum
+  interface GetMomentum_G
      module procedure GetMomentum_BackwardDerivative
      !module procedure GetMomentum_CentralDerivative
      !module procedure GetMomentum_ForwardDerivative
-  end interface GetMomentum
-
-  interface GetLatticeIndex
-     module procedure GetLatticeIndex_fromPosition
-     module procedure GetLatticeIndex_fromMemoryIndex
-  end interface GetLatticeIndex
+  end interface GetMomentum_G
 contains
   !>@brief Returns, if module is initialised
   !!@returns module's initialisation status
@@ -220,6 +216,8 @@ contains
        
        LocalLatticeSize = product(LocalLatticeExtensions)
        
+       call InitNeib_m(Neib_m)
+       
        ! Find maximum momentum
        MaxNorm2Momentum = FindMaxNorm2Momentum()
 
@@ -227,6 +225,43 @@ contains
        IsInitialised = .TRUE.
     end if
   end subroutine InitModule
+
+  !>@brief Initialising the local neighbour indices including the ghost region
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  pure subroutine InitNeib_m(neib_m)
+    use mpiinterface, only: ThisProc
+    implicit none
+    !> Neighbouring index field for memory indices
+    integer(int64), allocatable, intent(out) :: neib_m(:,:)
+    
+    integer(int8)  :: i
+    integer(int64) :: MemoryIndex
+
+    allocate(neib_m(-nDim:+nDim,MemorySize))
+    neib_m = huge(MemoryIndex)
+    forall(MemoryIndex=1:MemorySize, i=-nDim:+nDim,&
+         any(LocalLatticeIndices==GetNeib_G(i,GetLatticeIndex_M(MemoryIndex))))
+       neib_m(i,MemoryIndex) = GetMemoryIndex(GetNeib_G(i,GetLatticeIndex_M(MemoryIndex)))
+    end forall
+  end subroutine InitNeib_M
+
+  !>@brief Neighbour index routine
+  !!@returns Memory index of lattice neighbour in i'th direction
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  pure integer(int64) function GetNeib_M(i,MemoryIndex)
+    implicit none
+    !> Direction
+    integer(int8),  intent(in) :: i
+    !> Memory index
+    integer(int64), intent(in) :: MemoryIndex
+    GetNeib_M = Neib_M(i,MemoryIndex)
+  end function GetNeib_M
   
   !>@brief Checks previous necessary initialisations
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -400,9 +435,9 @@ contains
     
     currentMax = 0
     do MemoryIndex=1,MemorySize
-       LatticeIndex = GetLatticeIndex(MemoryIndex)
-       if(GetProc(LatticeIndex)==ThisProc()) then
-          norm2momentum = GetNorm2Momentum(LatticeIndex)
+       LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+       if(GetProc_G(LatticeIndex)==ThisProc()) then
+          norm2momentum = GetNorm2Momentum_G(LatticeIndex)
           if(norm2momentum.gt.currentMax) currentMax = norm2Momentum
        end if
     end do
@@ -441,15 +476,15 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
- pure integer(int64) function GetLatticeIndex_fromPosition(Position)
+ pure integer(int64) function GetLatticeIndex(Position)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> position vector
     integer(int64), intent(in) :: Position(ndim)
 
-    GetLatticeIndex_fromPosition &
-         = GetIndex_FromPosition(Position,LatticeExtensions)
-  end function GetLatticeIndex_fromPosition
+    GetLatticeIndex &
+         = GetIndex_fromPosition(Position,LatticeExtensions)
+  end function GetLatticeIndex
 
   !>@brief Returns the lattice index corresponding to \f$-j\f$
   !!@returns lattice index
@@ -496,7 +531,7 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
- pure integer(int64) function GetNeib(i,LatticeIndex)
+ pure integer(int64) function GetNeib_G(i,LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Direction
@@ -506,9 +541,9 @@ contains
 
     integer(int64) :: LatticePosition(ndim)
 
-    GetNeib &
+    GetNeib_G &
          = GetNeib_FromIndex(i,LatticeIndex,LatticeExtensions)
-  end function GetNeib
+  end function GetNeib_G
 
   !>@brief Returns local lattice indices without halo
   !!@returns local lattice indices without halo
@@ -623,15 +658,30 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 19.02.2019
   !!@version 1.1
- pure elemental integer(intmpi) function GetProc(LatticeIndex)
+ pure elemental integer(intmpi) function GetProc_G(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: intmpi
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
-    GetProc = GetProc_fromGeneralIndex(LatticeIndex,&
+    GetProc_G = GetProc_fromGeneralIndex(LatticeIndex,&
          LocalLowerLatticeBoundaries,LocalUpperLatticeBoundaries,LatticeExtensions)
-  end function GetProc
+  end function GetProc_G
+
+  !>@brief Returns MPI-process-rank corresponding to memory index
+  !!@returns MPI-process-rank corresponding to memory index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  pure elemental integer(intmpi) function GetProc_M(MemoryIndex)
+    use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: intmpi
+    implicit none
+    !> lattice index
+    integer(int64), intent(in) :: MemoryIndex
+    GetProc_M = GetProc_G(GetLatticeIndex_M(MemoryIndex))
+  end function GetProc_M
 
   !>@brief General function, returning MPI-process-rank corresponding to given index
   !!@returns MPI-process-rank corresponding to index
@@ -714,13 +764,13 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
- pure elemental integer(int64) function GetLatticeIndex_fromMemoryIndex(MemoryIndex)
+ pure elemental integer(int64) function GetLatticeIndex_M(MemoryIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> Local index
     integer(int64), intent(in) :: MemoryIndex
-    GetLatticeIndex_fromMemoryIndex = LocalLatticeIndices(MemoryIndex)
-  end function GetLatticeIndex_fromMemoryIndex
+    GetLatticeIndex_M = LocalLatticeIndices(MemoryIndex)
+  end function GetLatticeIndex_M
 
   ! ..--** Generic Index Functions **--..
   !>@brief Returns  index of neighbouring point in i'th direction
@@ -910,6 +960,7 @@ contains
   !!@version 1.0
  pure function GetMomentum_CentralDerivative(LatticeIndex)
     use, intrinsic :: iso_fortran_env
+    use precision, only: fp
     use mathconstants, only: pi
     implicit none
     !> Lattice index
@@ -925,21 +976,54 @@ contains
          /LatticeSpacings(1:ndim)
   end function GetMomentum_CentralDerivative
 
+  !>@brief Momentum from memory index
+  !!@returns Momentum from memory index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 28.02.2019
+  !!@version 1.0
+  pure function GetMomentum_M(MemoryIndex)
+    use, intrinsic :: iso_fortran_env
+    use precision, only: fp
+    implicit none
+    !> Memory Index
+    integer(int64), intent(in)  :: MemoryIndex
+    !> Momentum
+    complex(fp) :: GetMomentum_M(nDim)
+
+    GetMomentum_M = GetMomentum_G(GetLatticeIndex_M(MemoryIndex))
+  end function GetMomentum_M
+
+   !>@brief 2-Norm of lattice momentum from memory index
+  !!@returns 2-Norm of lattice momentum
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 17.02.2019
+  !!@version 1.0
+  pure real(fp) function GetNorm2Momentum_M(MemoryIndex)
+    use, intrinsic :: iso_fortran_env
+    use precision, only: fp
+    implicit none
+    !> Memory Index
+    integer(int64), intent(in) :: MemoryIndex
+    GetNorm2Momentum_M = GetNorm2Momentum_G(GetLatticeIndex_M(MemoryIndex))
+  end function GetNorm2Momentum_M
+  
   !>@brief 2-Norm of lattice momentum
   !!@returns 2-Norm of lattice momentum
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 17.02.2019
   !!@version 1.0
- pure real(fp) function GetNorm2Momentum(LatticeIndex)
+ pure real(fp) function GetNorm2Momentum_G(LatticeIndex)
     use, intrinsic :: iso_fortran_env
     implicit none
     !> lattice index
     integer(int64), intent(in) :: LatticeIndex
     complex(fp) :: Momentum(ndim)
-    Momentum = GetMomentum(LatticeIndex)
-    GetNorm2Momentum = norm2(abs(Momentum))
-  end function GetNorm2Momentum
+    Momentum = GetMomentum_G(LatticeIndex)
+    GetNorm2Momentum_G = norm2(abs(Momentum))
+  end function GetNorm2Momentum_G
 
   !>@brief
   !! Returns biggest mometum norm on the lattice

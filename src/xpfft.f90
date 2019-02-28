@@ -85,8 +85,8 @@ contains
   impure subroutine InitModule
     use, intrinsic :: iso_fortran_env
     use lattice, only: nDim, GetLatticeExtension,&
-         GetProc, GetProc_fromGeneralIndex, InitLatticeIndices,&
-         GetLatticeSpacing, GetVolume, GetMemorySize, GetLocalLatticeSize, GetLatticeIndex
+         GetProc_G, GetProc_fromGeneralIndex, InitLatticeIndices,&
+         GetLatticeSpacing, GetVolume, GetMemorySize, GetLocalLatticeSize, GetLatticeIndex_M
     use mpiinterface, only: ThisProc, NumProcs, mpistop
     use mpi
     use arrayoperations, only: RemoveDuplicates, Sort
@@ -227,8 +227,8 @@ contains
        !forall(LocalIndex=1:size(LocalLatticeIndices))
        is=0
        do MemoryIndex=1,GetMemorySize()
-          LatticeIndex = GetLatticeIndex(MemoryIndex)
-          if(ThisProc()==GetProc(LatticeIndex)) then
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(ThisProc()==GetProc_G(LatticeIndex)) then
              is = is+1
              xp_MPIWorld_Procs(is) = GetProc_fromGeneralIndex(&
                   LatticeIndex,&
@@ -258,8 +258,8 @@ contains
           commpoint=0
           is=0
           do MemoryIndex=1,GetMemorySize()
-             LatticeIndex = GetLatticeIndex(MemoryIndex)
-             if(GetProc(LatticeIndex)==ThisProc()) then
+             LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+             if(GetProc_G(LatticeIndex)==ThisProc()) then
                 is = is + 1
                 if(GetProc_fromGeneralIndex(&
                      LatticeIndex,&
@@ -291,7 +291,7 @@ contains
 
           if(allocated(xp_MKL_Procs)) deallocate(xp_MKL_Procs)
           allocate(xp_MKL_Procs(size(xp_MKL_indices)))
-          xp_MKL_Procs = GetProc(xp_MKL_indices)
+          xp_MKL_Procs = GetProc_G(xp_MKL_indices)
 
           call RemoveDuplicates(xp_MKL_Procs,PointsPerProc_includingThisProc)
           call Sort(xp_MKL_Procs)
@@ -312,7 +312,7 @@ contains
 
              commpoint=0
              do MKLMemoryIndex=1,size(xp_MKL_indices)
-                if(GetProc(xp_MKL_indices(MKLMemoryIndex))==xp_MKL_Procs(proc)) then
+                if(GetProc_G(xp_MKL_indices(MKLMemoryIndex))==xp_MKL_Procs(proc)) then
                    commpoint = commpoint + 1_int64
                    xp_MKL_SendRecvList(commpoint,proc) = xp_MKL_indices(MKLMemoryIndex)
                 end if
