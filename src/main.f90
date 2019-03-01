@@ -92,15 +92,17 @@ program simulation
           call flush(output_unit)
 
      call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling,&
+          aa_correlator_opt,ee_correlator_opt&
+          )
      idistmeas = 0
-     gaugeconf_gaugefixed = GaugeConf
-     call gaugeconf_gaugefixed%CoulombGaugefixing(&
-                Tolerance_    =GaugeFixingTolerance,&
-                alpha_        =GaugefixingCoefficient,&
-                MaxIterations_=GaugefixingMaxIterations)
-     call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
-     call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
+     !gaugeconf_gaugefixed = GaugeConf
+     !call gaugeconf_gaugefixed%CoulombGaugefixing(&
+     !           Tolerance_    =GaugeFixingTolerance,&
+     !           alpha_        =GaugefixingCoefficient,&
+     !           MaxIterations_=GaugefixingMaxIterations)
+     !call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
+     !call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
      
      AA_correlator_ensemble(:,idistmeas,iensemble) = aa_correlator_opt
      EE_correlator_ensemble(:,idistmeas,iensemble) = ee_correlator_opt

@@ -773,11 +773,12 @@ contains ! Module procedures
     use mpiinterface, only: intmpi, ThisProc, mpistop
     use lattice, only: nDim, GetMemorySize,&
          GetProc_M, GetVolume, GetPolarisationVectors, GetNorm2Momentum_M, GetMomentum_M,&
-         GetLatticeSpacing
+         GetLatticeSpacing, GetLatticeSize, GetLocalLatticeSize, GetLatticeIndex_M, GetProc_G
     use random, only: IsModuleInitialised_random=>IsModuleInitialised,&
          GetRandomNormalCmplx,&
          modulename_random=>modulename
     use xpfft, only: p2x, x2p
+    use mathconstants, only: pi
     implicit none
     !> Gauge configuration
     class(GaugeConfiguration), intent(out) :: GaugeConf
@@ -806,8 +807,8 @@ contains ! Module procedures
     real(fp) :: MomentumNorm
 
     ! Lattice
-    integer(int64) :: MemoryIndex, is
-    integer(int8) :: i,a
+    integer(int64) :: MemoryIndex, is, LatticeIndex
+    integer(int8) :: i,a,pol
 
     ! Link
     complex(fp) :: Link(nSUN,nSUN)
@@ -818,6 +819,8 @@ contains ! Module procedures
     character(len=105) :: errormessage
 
     complex(fp) :: afield_p(ndim),efield_p(ndim)
+
+    complex(fp), allocatable :: r(:,:,:)
     
     ! Check if random numbers are initialised
     if(.not.isModuleInitialised_random()) then
@@ -831,61 +834,105 @@ contains ! Module procedures
     allocate(efield(GetMemorySize(),nGen,nDim))
     ! ..--**  END : Allocations **--..
 
+    ! Drawing random numbers in x-space
+    allocate(r(GetMemorySize(),nGen,nPol_transverse))
+    
+    do MemoryIndex=1,GetMemorysize()
+       if(GetProc_M(MemoryIndex)==ThisProc()) then
+          do pol=1,nPol_transverse
+             r(MemoryIndex,:,pol) = real(GetRandomNormalCmplx(int(ngen,int64)),fp)
+          end do
+       end if
+    end do
+    
+    do pol=1,nPol_transverse
+       do a=1,nGen
+          call x2p(r(:,a,pol))
+       end do
+    end do
+    
     ! ..--** START: Drawing random numbers and setting the field in p-space **--..
     !
     !        Note : All processes are doing this simultaneously together
     !               in order to ensure that the results do not depend on
     !               the number of used processes
     !
-    LocalLattice: do MemoryIndex=1,GetMemorySize()
-       if(ThisProc()==GetProc_M(MemoryIndex)) then
-          MomentumNorm = GetNorm2Momentum_M(MemoryIndex)
-          if(MomentumNorm > GetZeroTol()) then
-             Momentum = GetMomentum_M(MemoryIndex)
-             call GetPolarisationVectors(Momentum,PolarisationVectors)
+    afield=0
+    efield=0
+    
+    do concurrent(&
+         MemoryIndex=1:GetMemorySize(),a=1:nGen,i=1:nDim,&
+         ThisProc()==GetProc_M(MemoryIndex) .and. GetNorm2Momentum_M(MemoryIndex)>GetZeroTol())
 
-             prefactor_afield = &
-                  sqrt(GetVolume()*Occupation(MemoryIndex)/MomentumNorm/2)
+       MomentumNorm = GetNorm2Momentum_M(MemoryIndex)
+       Momentum = GetMomentum_M(MemoryIndex)
+       call GetPolarisationVectors(Momentum,PolarisationVectors)
+       prefactor_afield = &
+            sqrt(Occupation(MemoryIndex)/MomentumNorm)
+       prefactor_efield = &
+            cmplx(0,sqrt(Occupation(MemoryIndex)*MomentumNorm),fp)
 
-             prefactor_efield = &
-                  cmplx(0,sqrt(GetVolume()*Occupation(MemoryIndex)*MomentumNorm/2),fp)
+       r_afield = r(MemoryIndex,a,:)
+       r_efield = r_afield
 
-             generator: do a=1_int8,ngen
-                r_afield = GetRandomNormalCmplx(int(ngen,int64))
-                r_efield = r_afield
-
-                dims: do concurrent(i=1:ndim)
-                   afield(MemoryIndex,a,i) = &
-                        prefactor_afield*(&
+       afield(MemoryIndex,a,i) = &
+            prefactor_afield*(&
                                 ! First transversal polarisation
-                        + r_afield(1)*PolarisationVectors(i,1) &
+            + r_afield(1)*PolarisationVectors(i,1) &
                                 ! Second transversal polarisation
-                        + r_afield(2)*PolarisationVectors(i,2) )
+            + r_afield(2)*PolarisationVectors(i,2) )
 
-                   efield(MemoryIndex,a,i) = &
-                        prefactor_efield*(&
+       efield(MemoryIndex,a,i) = &
+            prefactor_efield*(&
                                 ! First transversal polarisation
-                        + r_efield(1)*PolarisationVectors(i,1) &
+            + r_efield(1)*PolarisationVectors(i,1) &
                                 ! Second transversal polarisation
-                        + r_efield(2)*PolarisationVectors(i,2) )
-                end do dims
-             end do generator ! Generators
-
-          else !p=0
-             afield(MemoryIndex,:,:) = 0
-             efield(MemoryIndex,:,:) = 0
-          end if !p>0
-       end if
-    end do LocalLattice
+            + r_efield(2)*PolarisationVectors(i,2) )
+    end do
     ! ..--**  END : Drawing random numbers and setting the field in p-space **--..
 
     ! Symmetrisation A(p) = A(-p)* in order to make A(x) real
-    do i=1,ndim
-       do a=1,ngen
-          call SymmetriseInPspace(afield(:,a,i))
-          call SymmetriseInPspace(efield(:,a,i))
-       end do !a
-    end do !i
+    !do i=1,ndim
+    !   do a=1,ngen
+    !      call SymmetriseInPspace(afield(:,a,i))
+    !      call SymmetriseInPspace(efield(:,a,i))
+    !   end do !a
+    !end do !i
+
+    if(present(aa_correlator)) then
+       allocate(aa_correlator(GetLocalLatticeSize()))
+       is=0
+       do MemoryIndex=1,GetMemorySize()
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(GetProc_G(LatticeIndex)==ThisProc()) then
+             is = is+1
+             aa_correlator(is) = 0
+             do a=1,ngen
+                afield_p = afield(MemoryIndex,a,:)
+                aa_correlator(is) = aa_correlator(is) &
+                     + GetTransverseField_usingProjector(afield_p,LatticeIndex)&
+                     /GetVolume()/nGen
+             end do
+          end if
+       end do
+    end if
+    if(present(ee_correlator)) then
+       allocate(ee_correlator(GetLocalLatticeSize()))
+       is=0
+       do MemoryIndex=1,GetMemorySize()
+          LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+          if(GetProc_G(LatticeIndex)==ThisProc()) then
+             is = is+1
+             ee_correlator(is) = 0
+             do a=1,ngen
+                efield_p = efield(MemoryIndex,a,:)
+                ee_correlator(is) = ee_correlator(is) &
+                     + GetTransverseField_usingProjector(efield_p,LatticeIndex)&
+                     /GetVolume()/nGen
+             end do
+          end if
+       end do
+    end if
     
     !..--** START: FFT p-->x **--..
     do i=1,ndim
