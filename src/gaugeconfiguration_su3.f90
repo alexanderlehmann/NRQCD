@@ -944,6 +944,7 @@ contains ! Module procedures
       LatticeSize = GetLatticeSize()
 
       do PositiveLatticeIndex=1,LatticeSize
+         !if(ThisProc()==0) write(output_unit,*) PositiveLatticeIndex; call flush(output_unit)
          ! Getting negative lattice index, corresponding to -p
          NegativeLatticeIndex = GetNegativeLatticeIndex(PositiveLatticeIndex)
 
@@ -1937,6 +1938,7 @@ contains ! Module procedures
        forall(MemoryIndex=1:GetMemorySize(),ThisProc()==GetProc_M(MemoryIndex))
           Divergence(:,:,MemoryIndex) = GaugeConf%GetDivergenceOfGaugeField_M(MemoryIndex)
        end forall
+       call MPI_CommunicateBoundary(Divergence)
 
        ! Checking if Coulomb gauge condition is fulfilled
        if(isCoulombGauged(Divergence,Tolerance)) exit GaugeFixingIteration
@@ -1954,9 +1956,9 @@ contains ! Module procedures
 
        ! Acceleration step
        pmax = GetMaxNorm2Momentum()
-       do concurrent(MemoryIndex=1:GetMemorySize(),&
-            GetNorm2Momentum_M(MemoryIndex)>GetZeroTol() &
-            .and. ThisProc()==GetProc_M(MemoryIndex))
+       do concurrent(MemoryIndex=1:GetMemorySize(),      & !Indices
+            GetNorm2Momentum_M(MemoryIndex)>GetZeroTol() & !|p|>0
+            .and. ThisProc()==GetProc_M(MemoryIndex))      !only this process' lattice indices
           Divergence(:,:,MemoryIndex) = &
                Divergence(:,:,MemoryIndex)&
                * (pmax/GetNorm2Momentum_M(MemoryIndex))**2
@@ -2061,7 +2063,6 @@ contains ! Module procedures
       call GaugeConf%CommunicateBoundary_Links
     end subroutine PerformGaugeTransformation
   end subroutine CoulombGaugefixing_Links
-
 
   pure function GetDivergenceOfGaugeField_M(GaugeConf,MemoryIndex)
     use lattice, only: nDim, GetNeib_M
