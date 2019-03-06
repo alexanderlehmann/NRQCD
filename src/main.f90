@@ -74,11 +74,13 @@ program simulation
 
   type(GaugeConfiguration) :: gaugeconf_gaugefixed
   
-  call InitSimulation
+  !goto 1
 
   !.................................
   !.... Measuring gluon distribution
   !..
+  
+  call InitSimulation
   
   allocate(AA_correlator_ensemble(GetLocalLatticeSize(),&
        0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
@@ -87,22 +89,22 @@ program simulation
 
   ensemble: do iensemble=1,EnsembleSize
      if(ThisProc()==0) write(output_unit,*)&
-          int(iensemble,int8),'of',&
-          int(EnsembleSize,int8),'configurations';&
+          int(iensemble,int16),'of',&
+          int(EnsembleSize,int16),'configurations';&
           call flush(output_unit)
 
      call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling,&
-          aa_correlator_opt,ee_correlator_opt&
+          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling&
+          !,aa_correlator_opt,ee_correlator_opt&
           )
      idistmeas = 0
-     !gaugeconf_gaugefixed = GaugeConf
-     !call gaugeconf_gaugefixed%CoulombGaugefixing(&
-     !           Tolerance_    =GaugeFixingTolerance,&
-     !           alpha_        =GaugefixingCoefficient,&
-     !           MaxIterations_=GaugefixingMaxIterations)
-     !call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
-     !call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
+     gaugeconf_gaugefixed = GaugeConf
+     call gaugeconf_gaugefixed%CoulombGaugefixing(&
+                Tolerance_    =GaugeFixingTolerance,&
+                alpha_        =GaugefixingCoefficient,&
+                MaxIterations_=GaugefixingMaxIterations)
+     call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
+     call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
      
      AA_correlator_ensemble(:,idistmeas,iensemble) = aa_correlator_opt
      EE_correlator_ensemble(:,idistmeas,iensemble) = ee_correlator_opt
@@ -288,10 +290,11 @@ program simulation
   call endsimulation
 
 1 continue
-
   !.......................
   !.... Energy measurement
   !..
+
+  call InitSimulation
   
   call GaugeConf%TransversePolarisedOccupiedInit_Box(&
        GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling &
