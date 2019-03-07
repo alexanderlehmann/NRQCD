@@ -52,11 +52,25 @@ contains
     type(GaugeConfiguration) :: GaugeConf
     type(NRQCDField)         :: HeavyField
 
-
     ! Counting
     integer :: i
+
+    ! Norm
+    real(fp) :: norm_quark, norm_antiq
     
     call InitSimulation
+
+    
+    call HeavyField%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
+
+    norm_quark = HeavyField%GetNorm_Quark()
+    norm_antiq = HeavyField%GetNorm_AntiQ()
+
+    if(ThisProc()==0) then
+       write(output_unit,*) norm_quark, norm_antiq
+       call flush(output_unit)
+    end if
+    
     
     call EndSimulation
   contains

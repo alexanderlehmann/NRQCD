@@ -14,7 +14,7 @@ matrixoperations.o : matrixoperations.f90 precision.o
 mkl_cdft.o : mkl_cdft.f90 mkl_dfti.o 
 mkl_dfti.o : mkl_dfti.f90 
 mpiinterface.o : mpiinterface.f90 precision.o 
-nrqcd.o : nrqcd.f90 halocomm.o lattice.o su2.o su3.o gaugeconfiguration_su3.o precision.o 
+nrqcd.o : nrqcd.f90 matrixoperations.o mpiinterface.o halocomm.o lattice.o su2.o su3.o gaugeconfiguration_su3.o precision.o 
 precision.o : precision.f90 
 random.o : random.f90 mpiinterface.o mathconstants.o ranlxd_generator.o 
 ranlxd_generator.o : ranlxd_generator.f90 
