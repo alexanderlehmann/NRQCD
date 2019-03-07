@@ -57,6 +57,7 @@ module gaugeconfiguration_su3
      procedure, private:: SetEfield_M
      
      ! Initialisation routines
+     procedure, public :: SemicoldInit
      procedure, public :: HotInit
      procedure, public :: ColdInit
      procedure, public :: TransversePolarisedOccupiedInit_Box
@@ -365,6 +366,53 @@ contains ! Module procedures
        GaugeConf%Links(:,:,i,MemoryIndex) = GetUnitMatrix(nSUN)
     end forall
   end subroutine ColdInit
+
+  !>@brief Initialises the links with unit matrices on almost all lattice sites
+  !! and electric field with zeroes
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !!and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 06.03.2019
+  !!@version 1.0
+  impure subroutine SemiColdInit(GaugeConf)
+    use lattice, only: GetProc_G, GetMemoryIndex
+    use matrixoperations, only: GetUnitMatrix
+    use mpiinterface, only: ThisProc
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+
+    integer(int64) :: MemoryIndex, LatticeIndex
+    integer(int8)  :: i
+
+    real(fp) :: afield(ngen)
+    complex(fp) :: link(nsun,nsun)
+
+
+    real(fp) :: retr_plaquette
+    complex(fp) :: plaquette(nsun,nsun)
+    
+    call GaugeConf%ColdInit
+
+    i = 1
+    LatticeIndex = 1
+
+    if(GetProc_G(LatticeIndex)==ThisProc()) then
+       afield = 0
+       afield(1) = 0.1_fp
+       afield(2) = 0.2_fp
+       afield(3) = 1.3_fp
+       afield(4) = 2.4_fp
+       afield(5) = 3.1_fp
+       afield(6) = -1.1_fp
+       afield(7) = -2.1_fp
+       afield(8) = -0.1_fp
+       link = GetGroupExp(afield)
+       GaugeConf%Links(:,:,i,GetMemoryIndex(LatticeIndex)) = link
+       !call GaugeConf%SetLink_G(i,LatticeIndex,link)
+    end if
+
+    call GaugeConf%CommunicateBoundary
+  end subroutine SemiColdInit
 
   !>@brief Initialises the links and efield with random entries (still unitary links)
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -1798,7 +1846,7 @@ contains ! Module procedures
     else
        ! Default value from
        ! Davies et al. in https://doi.org/10.1103/PhysRevD.37.1581
-       alpha = 0.08_real64
+       alpha = 0.08_fp
     end if
 
     if(present(MaxIterations_)) then

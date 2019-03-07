@@ -1,4 +1,4 @@
-## FC = the compiler to use
+ ## FC = the compiler to use
 FC=mpiifort
 
 PROGRAM = run.exe
@@ -15,6 +15,9 @@ FFLAGS = -O3
 # Inter-file inlining optimization
 FFLAGS += -ipo
 
+# Suppressing warning about too long routine names
+FFLAGS += -diag-disable 5462 -diag-disable 6536
+
 # Turning on preprocessor
 #FFLAGS += -fpp
 
@@ -25,7 +28,7 @@ FFLAGS += -ipo
 
 #### Debugging options
 # Checking everything
-#FFLAGS += -diag-disable 5462 -diag-disable 6536 -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
+#FFLAGS += -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
 
 # Robust debug result
 #FFLAGS = -init=snan -traceback -warn interfaces -fp-speculation safe -traceback -check uninit -check bounds -ftrapuv -g
