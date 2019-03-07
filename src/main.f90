@@ -1,3 +1,16 @@
+!-------------------------------------------------------------------------
+! PROGRAMS for Lattice-NRQCD
+!-------------------------------------------------------------------------
+!
+! MODULE: programs
+!>@brief Program/mains
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+!! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+!!@date 07.03.2019
+!!@version 1.0
+! REVISION HISTORY:
+! 07 03 2019 - Initial Version
+!-------------------------------------------------------------------------
 module programs
   PUBLIC
 
