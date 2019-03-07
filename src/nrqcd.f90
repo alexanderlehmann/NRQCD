@@ -33,7 +33,7 @@ module nrqcd
   !> Number of degrees of freedom per site
   integer(int8), parameter, public :: nDof = nSpins*nColours
   !> Number of Wilson coefficients
-  integer(int8), parameter, public :: nWilsonCoeffs = 4
+  integer(int8), parameter, public :: nWilsonCoefficients = 4
 
   !>@brief Heavy quark, described by NRQCD, containing quark- and antiquark-propagators
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)

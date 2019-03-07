@@ -2,12 +2,167 @@ module programs
   PUBLIC
 
 contains
+  !>@brief Program for measuring the heavy quarkonium correlator
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 07.03.2019
+  !!@version 1.0
+  impure subroutine MeasureHeavyQuarkoniumCorrelators
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+
+    use nrqcd
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: TimeSteps
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: GluonSaturationScale !qs
+    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
+    real(fp) :: GluonCoupling
+    real(fp) :: CoMTime
+    real(fp) :: TimeRange
+    real(fp) :: HeavyQuarkmass
+    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
+    
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf
+    type(NRQCDField)         :: HeavyField
+
+
+    ! Counting
+    integer :: i
+    
+    call InitSimulation
+    
+    call EndSimulation
+  contains
+
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+
+      real(fp) :: c_re, c_im
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! Center of mass time T
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') CoMTime
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonSaturationScale
+
+      ! Initial gluon distribution (box): Amplitude
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonOccupationAmplitude
+
+      ! Coupling (only relevant in initialisation)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonCoupling
+
+      ! Heavy quark mass
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') HeavyQuarkmass
+      
+      ! Wilson coefficents
+      do i=1,nWilsonCoefficients
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_re
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_im
+
+         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
+      end do
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
+      use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule
+      implicit none
+
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      STOP "Simulation completed"
+    end subroutine EndSimulation
+  end subroutine MeasureHeavyQuarkoniumCorrelators
+  
   !>@brief Program for measuring the time-evolution of the energy and gauss law deviation
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 07.03.2019
   !!@version 1.0
-  impure subroutine EnergyAndGaussLawDeviationMeasurement
+  impure subroutine MeasureEnergyAndGaussLawDeviation
     use, intrinsic :: iso_fortran_env
     use precision
     use mpiinterface
@@ -20,8 +175,8 @@ contains
     implicit none
 
     ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)!(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)!(0:ndim)
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
     integer(int64) :: TimeSteps
     integer(int64) :: RandomNumberSeed
 
@@ -35,11 +190,8 @@ contains
     type(GaugeConfiguration) :: GaugeConf
 
     ! Monitoring variables
-    integer(int64) :: it, idistmeas
+    integer(int64) :: it
     real(fp) :: time
-
-    ! Indices
-    integer(int64) :: MemoryIndex, LatticeIndex, i, is
     
     ! Observable output (Gauss, Energy)
     integer(int8) :: fileID_eg
@@ -161,14 +313,14 @@ contains
 
       STOP "Simulation completed"
     end subroutine EndSimulation
-  end subroutine EnergyAndGaussLawDeviationMeasurement
+  end subroutine MeasureEnergyAndGaussLawDeviation
 
   !>@brief Program for measuring the gluon distribution function
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 07.03.2019
   !!@version 1.0
-  impure subroutine GluondistributionMeasurement
+  impure subroutine MeasureGluondistribution
     use, intrinsic :: iso_fortran_env
     use precision
     use mpiinterface
@@ -181,8 +333,8 @@ contains
     implicit none
 
     ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)!(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)!(0:ndim)
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
     integer(int64) :: TimeSteps
     integer(int64) :: RandomNumberSeed
 
@@ -583,13 +735,13 @@ contains
       use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
       use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule
       implicit none
-
+      
       call FinalizeModule_xpFFT
       call FinalizeModule_MPIinterface
 
       STOP "Simulation completed"
     end subroutine EndSimulation
-  end subroutine GluondistributionMeasurement
+  end subroutine MeasureGluondistribution
 end module programs
 
 
@@ -609,10 +761,12 @@ program simulation
 
   select case(mode)
   case(1)
-     call GluondistributionMeasurement
+     call MeasureGluondistribution
   case(2)
-     call EnergyAndGaussLawDeviationMeasurement
+     call MeasureEnergyAndGaussLawDeviation
+  case(3)
+     call MeasureHeavyQuarkoniumCorrelators
   case default
-     call MPIStop('Invalid mode selected')
+     call MPIStop('Invalid simulation mode selected')
   end select
 end program simulation
