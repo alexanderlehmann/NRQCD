@@ -45,7 +45,7 @@ src/doxygen_objdb_*.tmp
 src/intel
 
 # Start-script
-src/start.sh
+src/*.sh
 
 # Ignore temporaries
 src/\#*#

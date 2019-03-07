@@ -216,19 +216,13 @@ contains
          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
     if(ThisProc()==0) &
          fileID_eg = OpenFile(filename="energy_gauss.txt",st='REPLACE',fm='FORMATTED',act='WRITE')
-    it=0
-    time = it*GetLatticeSpacing(0_int8)
-    gauss = GaugeConf%GetDeviationFromGaussLaw()
-    energy= GaugeConf%GetEnergy()
-    if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
-
-    do it=1,TimeSteps
-       call GaugeConf%Update
+    do it=0,TimeSteps
        time = it*GetLatticeSpacing(0_int8)
        gauss = GaugeConf%GetDeviationFromGaussLaw()
        energy= GaugeConf%GetEnergy()
        if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
        if(ThisProc()==0) write(output_unit,*) time
+       call GaugeConf%Update
     end do
     if(ThisProc()==0) call CloseFile(fileID_eg)
 
@@ -414,19 +408,7 @@ contains
             GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling&
        !,aa_correlator_opt,ee_correlator_opt&
             )
-       idistmeas = 0
-       gaugeconf_gaugefixed = GaugeConf
-       call gaugeconf_gaugefixed%CoulombGaugefixing(&
-            Tolerance_    =GaugeFixingTolerance,&
-            alpha_        =GaugefixingCoefficient,&
-            MaxIterations_=GaugefixingMaxIterations)
-       call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
-       call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
-
-       AA_correlator_ensemble(:,idistmeas,iensemble) = aa_correlator_opt
-       EE_correlator_ensemble(:,idistmeas,iensemble) = ee_correlator_opt
-
-       TimeEvolution: do it=1,TimeSteps
+       TimeEvolution: do it=0,TimeSteps
 
           if(modulo(it,TimePoints_between_Measurement_of_Gluondistribution)==0) then
              if(ThisProc()==0) write(output_unit,*)&

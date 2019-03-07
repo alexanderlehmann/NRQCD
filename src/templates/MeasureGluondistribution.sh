@@ -12,10 +12,10 @@ ay=1.0
 az=1.0
 
 CoMTime=0.
-TimeRange=1.
+TimeRange=100.
 TimeSpacing=0.1
 
-Ensemblesize=1
+Ensemblesize=10
 
 # Initialisation of gluon field
 RandomSeed=1
@@ -27,8 +27,6 @@ TimeBetweenGluonMeasurement=1.
 GaugefixingMaxSteps=10000
 GaugefixingTolerance=1.E-8
 GaugefixingCoefficient=0.08
-# Quarks
-Mass=5.
 
 mpiexec -n $processes \
 	$exename \
