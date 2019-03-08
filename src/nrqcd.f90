@@ -103,7 +103,15 @@ contains ! Module procedures
   !!@date 08.03.2019
   !!@version 1.0
   impure subroutine InitPETScSolver
+#include <petsc/finclude/petscksp.h>
+    use petscksp
     implicit none
+
+    PetscErrorCode PETScierr
+
+    call PETScInitialize(PETSC_NULL_CHARACTER,PETScierr)
+
+    write(output_unit,*) PETScierr
   end subroutine InitPETScSolver
 
 
@@ -113,7 +121,13 @@ contains ! Module procedures
   !!@date 08.03.2019
   !!@version 1.0
   impure subroutine FinalizePETScSolver
+#include <petsc/finclude/petscksp.h>
+    use petscksp
     implicit none
+
+    PetscErrorCode PETScierr
+    
+    call PETScFinalize(PETScierr)
   end subroutine FinalizePETScSolver
   
   !>@brief Checks previous necessary initialisations

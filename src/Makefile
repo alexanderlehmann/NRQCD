@@ -7,6 +7,7 @@ MKLROOT=intel/mkl
 PETSC_DIR=/home/lehmann/software/petsc
 PETSC_ARCH=${PETSC_DIR}/arch-linux2-c-debug
 PETSC_LIB=${PETSC_ARCH}/lib/libpetsc.so
+
 #### Compiler options
 
 #### Optimization
@@ -69,7 +70,7 @@ FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
 ## Int64 aka 8-byte-integer
 LIBS = -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_cdft_core.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_ilp64.a -Wl,--end-group -lpthread -lm -ldl
 
-#LIBS += ${PETSC_LIB}
+LIBS += ${PETSC_LIB}
 
 #### Suffix-rules:
 ## Begin by throwing away all old suffix-

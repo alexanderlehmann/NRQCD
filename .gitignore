@@ -44,6 +44,9 @@ src/doxygen_objdb_*.tmp
 # Intel link
 src/intel
 
+# PETSc
+src/petsc
+
 # Start-script
 src/*.sh
 
