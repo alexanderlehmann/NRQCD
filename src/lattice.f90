@@ -132,12 +132,9 @@ contains
     integer(int64) :: latticeindex
 
     integer(intmpi) :: proc
-    
-    character(len=100) :: errormessage
 
     if(isInitialised) then
-       errormessage = 'Error in init of '//modulename//': already initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
        call CheckObligatoryInitialisations
 
@@ -274,11 +271,9 @@ contains
     use mpiinterface, only: IsMPIinterfaceInitialised => IsModuleInitialised, mpiname => modulename,&
          mpistop
     implicit none
-    character(len=70) :: errormessage
     
     if(.not.IsMPIinterfaceInitialised()) then
-       errormessage = 'Error in init of '//modulename//': '//mpiname//' is not initialised.'
-       call mpistop(errormessage)
+       call mpistop('Error in init of '//modulename//': '//mpiname//' is not initialised.')
     end if
   end subroutine CheckObligatoryInitialisations
 
@@ -432,8 +427,6 @@ contains
 
     integer(intmpi) :: mpierr, sendtype
     
-    character(len=100) :: errormessage
-    
     currentMax = 0
     do MemoryIndex=1,MemorySize
        LatticeIndex = GetLatticeIndex_M(MemoryIndex)
@@ -454,9 +447,8 @@ contains
     case(real128)
        sendtype = MPI_REAL16
     case default
-       errormessage = 'Error in FindMaxNorm2Momentum of '//modulename&
-            //': unsupported floating point precision.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in FindMaxNorm2Momentum of '//modulename&
+            //': unsupported floating point precision.')
     end select
     
     call mpi_allgather(&

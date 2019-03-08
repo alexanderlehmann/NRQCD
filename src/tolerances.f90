@@ -36,16 +36,14 @@ contains
     use mpiinterface, only: mpistop
     implicit none
 
-    character(len=105) :: errormessage
     select case(fp)
     case(real32)
        tol_zero = tol_zero_real32
     case(real64)
        tol_zero = tol_zero_real64
     case default
-       errormessage = 'Error in initialisation of '//modulename&
-               //': unsupported floating point precision.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in initialisation of '//modulename&
+               //': unsupported floating point precision.')
     end select
 
     isInitialised = .TRUE.

@@ -4,9 +4,9 @@ FC=mpiifort
 PROGRAM = run.exe
 
 MKLROOT=intel/mkl
-#PETSC_DIR=/home/lehmann/software/petsc
-#PETSC_ARCH=${PETSC_DIR}/arch-linux2-c-debug
-#PETSC_LIB=${PETSC_ARCH}/lib/libpetsc.so
+PETSC_DIR=/home/lehmann/software/petsc
+PETSC_ARCH=${PETSC_DIR}/arch-linux2-c-debug
+PETSC_LIB=${PETSC_ARCH}/lib/libpetsc.so
 #### Compiler options
 
 #### Optimization
@@ -19,10 +19,10 @@ FFLAGS += -ipo
 FFLAGS += -diag-disable 5462 -diag-disable 6536
 
 # Turning on preprocessor
-#FFLAGS += -fpp
+FFLAGS += -fpp
 
 # Include files
-#FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
+FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
 
 #FFLAGS += -g -traceback
 

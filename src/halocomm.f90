@@ -59,7 +59,9 @@ module halocomm
      module procedure CommunicateBoundary_complex_rank3
      module procedure CommunicateBoundary_complex_rank4
   end interface CommunicateBoundary
-contains
+  
+contains ! Module procedures
+  
   !>@brief Initialises module
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -73,11 +75,8 @@ contains
          MPI_COMPLEX8, MPI_COMPLEX16, MPI_COMPLEX32
     implicit none
 
-    character(len=100) :: errormessage
-
     if(isInitialised) then
-       errormessage = 'Error in init of '//modulename//': already initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
        
        call CheckObligatoryInitialisations
@@ -100,11 +99,9 @@ contains
     use lattice, only: IsLatticeInitialised => IsModuleInitialised, latticename => modulename
     use mpiinterface, only: mpistop
     implicit none
-    character(len=70) :: errormessage
     
     if(.not.IsLatticeInitialised()) then
-       errormessage = 'Error in init of '//modulename//': '//latticename//' is not initialised.'
-       call mpistop(errormessage)
+       call mpistop('Error in init of '//modulename//': '//latticename//' is not initialised.')
     end if
   end subroutine CheckObligatoryInitialisations
   

@@ -71,11 +71,8 @@ contains
     implicit none
     integer(intmpi) :: mpierr
 
-    character(len=100) :: errormessage
-
     if(isInitialised) then
-       errormessage = 'Error in init of '//modulename//': already initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
        call MPI_INIT(mpierr)
        if(mpierr /= MPI_SUCCESS) then
@@ -106,9 +103,8 @@ contains
           realsendtype_fp    = MPI_REAL16
           complexsendtype_fp = MPI_COMPLEX32
        case default
-          errormessage = 'Error in initialisation of '//modulename&
-               //': unsupported floating point precision.'
-          call MPISTOP(errormessage)
+          call MPISTOP('Error in initialisation of '//modulename&
+               //': unsupported floating point precision.')
        end select
     
        ! DONE
@@ -125,14 +121,12 @@ contains
   impure subroutine FinalizeModule
     implicit none
     integer(intmpi) :: mpierr
-    character(len=70) :: errormessage
     
     if(IsInitialised) then
        call MPI_FINALIZE(mpierr)
        IsInitialised = .FALSE.
     else
-       errormessage = 'Error in finalization of '//modulename//': is not initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in finalization of '//modulename//': is not initialised.')
     end if
   end subroutine FinalizeModule
 

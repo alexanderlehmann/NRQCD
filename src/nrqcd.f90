@@ -28,7 +28,13 @@ module nrqcd
 
   PRIVATE
 
-  public NRQCDField
+  public NRQCDField, InitModule, FinalizeModule
+
+  !> Module name
+  character(len=5), parameter, public ::  modulename='nrqcd'
+  
+  !> Contains information, whether module is initialised
+  logical :: IsInitialised = .false.
 
   !> Number of degrees of freedom per site
   integer(int8), parameter, public :: nDof = nSpins*nColours
@@ -65,6 +71,90 @@ module nrqcd
   end type NRQCDField
 
 contains ! Module procedures
+
+  !>@brief Initialises module
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 08.03.2019
+  !!@version 1.0
+  impure subroutine InitModule
+    use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: mpistop
+
+    implicit none
+    
+    if(isInitialised) then
+       call MPISTOP('Error in init of '//modulename//': already initialised.')
+    else
+       
+       call CheckObligatoryInitialisations
+
+       ! Initialise PETSc-solver
+       call InitPETScSolver
+       
+       ! DONE
+       IsInitialised = .TRUE.
+    end if
+  end subroutine InitModule
+
+  !>@brief Initialises PETSc-solver
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 08.03.2019
+  !!@version 1.0
+  impure subroutine InitPETScSolver
+    implicit none
+  end subroutine InitPETScSolver
+
+
+  !>@brief Finalizes PETSc-solver
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 08.03.2019
+  !!@version 1.0
+  impure subroutine FinalizePETScSolver
+    implicit none
+  end subroutine FinalizePETScSolver
+  
+  !>@brief Checks previous necessary initialisations
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 08.03.2019
+  !!@version 1.0
+  impure subroutine CheckObligatoryInitialisations
+    use, intrinsic :: iso_fortran_env
+    use Lattice,  only: IsLatticeInitialised  => IsModuleInitialised, LatticeName  => modulename
+    use HaloComm, only: IsHaloCommInitialised => IsModuleInitialised, HaloCommName => modulename
+    use mpiinterface, only: mpistop
+    implicit none
+
+    if(.not.IsLatticeInitialised()) then
+       call mpistop('Error in init of '//modulename//': '//LatticeName//' is not initialised.')
+    end if
+    
+    if(.not.IsHaloCommInitialised()) then
+       call mpistop('Error in init of '//modulename//': '//HaloCommName//' is not initialised.')
+    end if
+  end subroutine CheckObligatoryInitialisations
+
+  !>@brief Finalizes module
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 08.03.2019
+  !!@version 1.0
+  impure subroutine FinalizeModule
+    use mpiinterface, only: mpistop
+    implicit none
+
+    if(isInitialised) then
+       ! Clean up solver
+       call FinalizePETScSolver
+
+       IsInitialised = .FALSE.
+    else
+       call MPISTOP('Error in finalization of '//modulename//': is not initialised.')
+    end if
+  end subroutine FinalizeModule
   
   !>@brief Allocation of NRQCD heavy quark
   !!@details Allocates quark and antiquark propagator
@@ -302,7 +392,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 07.03.2019
   !!@version 1.0
-  impure real(real64) function GetNorm_Propagator(propagator)
+  impure real(fp) function GetNorm_Propagator(propagator)
     use mpi
     use matrixoperations, only: GetTrace
     use mpiinterface, only: intmpi, ThisProc, GetRealSendType

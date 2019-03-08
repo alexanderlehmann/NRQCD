@@ -99,8 +99,6 @@ contains
     integer(int64) :: lengths(ndim), status, extension
 
     integer(intmpi) :: proc,xp_MPIWORLD_ncomms,xp_MKL_ncomms
-    
-    character(len=100) :: errormessage
 
     integer(int64),  allocatable :: firstindices(:), extensions(:)
     integer(int64) :: LatticeExtensions(ndim), MKLMemoryIndex, MemoryIndex, commpoint, LatticeIndex,is
@@ -111,8 +109,7 @@ contains
     integer(int64) :: localfftsize
     
     if(isInitialised) then
-       errormessage = 'Error in init of '//modulename//': already initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
        call CheckObligatoryInitialisations
 
@@ -353,11 +350,9 @@ contains
     use lattice, only: IsLatticeInitialised => IsModuleInitialised, latticename => modulename
     use mpiinterface, only: mpistop
     implicit none
-    character(len=70) :: errormessage
     
     if(.not.IsLatticeInitialised()) then
-       errormessage = 'Error in init of '//modulename//': '//latticename//' is not initialised.'
-       call mpistop(errormessage)
+       call mpistop('Error in init of '//modulename//': '//latticename//' is not initialised.')
     end if
   end subroutine CheckObligatoryInitialisations
   
@@ -369,7 +364,6 @@ contains
   impure subroutine FinalizeModule
     use mpiinterface, only: mpistop,thisproc
     implicit none
-    character(len=70) :: errormessage
     
     integer(int64) :: status
     
@@ -396,8 +390,7 @@ contains
        
        IsInitialised = .FALSE.
     else
-       errormessage = 'Error in finalization of '//modulename//': is not initialised.'
-       call MPISTOP(errormessage)
+       call MPISTOP('Error in finalization of '//modulename//': is not initialised.')
     end if
   end subroutine FinalizeModule
   
