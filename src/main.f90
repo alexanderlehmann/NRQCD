@@ -95,7 +95,7 @@ contains
       use random,             only: InitModule_Random             => InitModule
       use xpfft,              only: InitModule_xpFFT              => InitModule
       use tolerances,         only: InitModule_tolerances         => InitModule
-      use nrqcd,              only: InitModule_NRQCD              => InitModule
+      use PETScInterface,     only: InitModule_PETScInterface     => InitModule
       implicit none
 
       integer(int64) :: arg_count
@@ -164,7 +164,7 @@ contains
       call InitModule_xpFFT
       call InitModule_Random(RandomNumberSeed + ThisProc())
       call InitModule_tolerances
-      call InitModule_NRQCD
+      call InitModule_PETScInterface
 
       call SyncAll
     end subroutine InitSimulation
@@ -175,12 +175,12 @@ contains
     !!@date 15.02.2019
     !!@version 1.0
     subroutine EndSimulation
-      use mpiinterface, only: FinalizeModule_MPIinterface => FinalizeModule
-      use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule
-      use nrqcd,        only: FinalizeModule_NRQCD        => FinalizeModule
+      use mpiinterface,   only: FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      use PETScInterface, only: FinalizeModule_PETScInterface => FinalizeModule
       implicit none
 
-      call FinalizeModule_NRQCD
+      call FinalizeModule_PETScInterface
       call FinalizeModule_xpFFT
       call FinalizeModule_MPIinterface
 

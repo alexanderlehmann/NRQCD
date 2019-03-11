@@ -36,6 +36,9 @@ module lattice
        InitLatticeIndices,&
        GetMemorySize,&
        GetLocalLatticeSize,&
+       GetLocalLowerLatticeBoundary,&
+       GetLocalUpperLatticeBoundary,&
+       GetIndex_fromPosition,&
        GetLatticeSpacing,&
        GetVolume,&
        GetMaxNorm2Momentum,&
@@ -605,6 +608,48 @@ contains
     integer(int8), intent(in) :: i
     GetLatticeExtension = LatticeExtensions(i)
   end function GetLatticeExtension
+
+  !>@brief Returns i'th lower lattice boundaries
+  !!@returns i'th lower lattice boundaries
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date  11.03.2019
+  !!@version 1.0
+  pure elemental integer(int64) function GetLocalLowerLatticeBoundary(i,proc)
+    use mpiinterface, only: intmpi, thisproc
+    implicit none
+    !> Direction
+    integer(int8),   intent(in) :: i
+    !> MPI-process rank
+    integer(intmpi), intent(in), optional :: proc
+
+    if(present(proc)) then
+       GetLocalLowerLatticeBoundary = LocalLowerLatticeBoundaries(i,proc+1_intmpi)
+    else
+       GetLocalLowerLatticeBoundary = LocalLowerLatticeBoundaries(i,ThisProc()+1_intmpi)
+    end if
+  end function GetLocalLowerLatticeBoundary
+
+  !>@brief Returns i'th upper lattice boundaries
+  !!@returns i'th upper lattice boundaries
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date  11.03.2019
+  !!@version 1.0
+  pure elemental integer(int64) function GetLocalUpperLatticeBoundary(i,proc)
+    use mpiinterface, only: intmpi, thisproc
+    implicit none
+    !> Direction
+    integer(int8),   intent(in) :: i
+    !> MPI-process rank
+    integer(intmpi), intent(in), optional :: proc
+
+    if(present(proc)) then
+       GetLocalUpperLatticeBoundary = LocalUpperLatticeBoundaries(i,proc+1_intmpi)
+    else
+       GetLocalUpperLatticeBoundary = LocalUpperLatticeBoundaries(i,ThisProc()+1_intmpi)
+    end if
+  end function GetLocalUpperLatticeBoundary
   
   !>@brief Returns lattice size
   !!@returns Number of points on the whole lattice
