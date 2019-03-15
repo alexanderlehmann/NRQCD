@@ -63,6 +63,9 @@ contains
     
     call HeavyField%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
 
+    call HeavyField%Destructor
+    call mpistop
+    
     norm_quark = HeavyField%GetNorm_Quark()
     norm_antiq = HeavyField%GetNorm_AntiQ()
 
@@ -95,7 +98,7 @@ contains
       use random,             only: InitModule_Random             => InitModule
       use xpfft,              only: InitModule_xpFFT              => InitModule
       use tolerances,         only: InitModule_tolerances         => InitModule
-      use PETScInterface,     only: InitModule_PETScInterface     => InitModule
+      use NRQCD,              only: InitModule_NRQCD              => InitModule
       implicit none
 
       integer(int64) :: arg_count
@@ -164,7 +167,7 @@ contains
       call InitModule_xpFFT
       call InitModule_Random(RandomNumberSeed + ThisProc())
       call InitModule_tolerances
-      call InitModule_PETScInterface
+      call InitModule_NRQCD
 
       call SyncAll
     end subroutine InitSimulation
@@ -177,10 +180,10 @@ contains
     subroutine EndSimulation
       use mpiinterface,   only: FinalizeModule_MPIinterface   => FinalizeModule
       use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      use PETScInterface, only: FinalizeModule_PETScInterface => FinalizeModule
+      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
       implicit none
 
-      call FinalizeModule_PETScInterface
+      call FinalizeModule_NRQCD
       call FinalizeModule_xpFFT
       call FinalizeModule_MPIinterface
 

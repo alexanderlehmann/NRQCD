@@ -27,7 +27,7 @@ module lattice
        GetNegativeLatticeIndex,&
        GetProc_G, GetProc_M,&
        GetLatticeIndex, GetLatticeIndex_M, GetMemoryIndex,&
-       GetNeib_M,&
+       GetNeib_M, GetNeib_G,&
        GetMomentum_G, GetMomentum_M,&
        GetNorm2Momentum_G, GetNorm2Momentum_M,&
        GetProc_fromGeneralIndex,&
@@ -746,13 +746,37 @@ contains
     
     Position = GetPosition_fromIndex(Index,Extensions)
 
+    GetProc_fromGeneralIndex = GetProc_fromGeneralPosition(Position,&
+         LowerBoundaries,UpperBoundaries)
+  end function GetProc_fromGeneralIndex
+
+  !>@brief General function, returning MPI-process-rank corresponding to given position
+  !!@returns MPI-process-rank corresponding to index
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 19.02.2019
+  !!@version 1.0
+ pure integer(intmpi) function GetProc_fromGeneralPosition(&
+       Position,LowerBoundaries,UpperBoundaries)
+    use, intrinsic :: iso_fortran_env
+    use mpiinterface, only: intmpi
+    implicit none
+    !> Position
+    integer(int64), intent(in) :: Position(ndim)
+    !> Lower boundaries
+    integer(int64), intent(in) :: LowerBoundaries(:,:)
+    !> Upper boundaries
+    integer(int64), intent(in) :: UpperBoundaries(:,:)
+    
+    integer(intmpi) :: proc
+    
     do concurrent(proc=1:size(LowerBoundaries,2))
        if(all(LowerBoundaries(:,proc)<=Position)&
             .and.all(UpperBoundaries(:,proc)>=Position))then
-          GetProc_fromGeneralIndex=proc-1
+          GetProc_fromGeneralPosition=proc-1
        end if
     end do
-  end function GetProc_fromGeneralIndex
+  end function GetProc_fromGeneralPosition
 
   !>@brief Deconstructs lattice index into position indices
   !!@returns position indices
