@@ -49,35 +49,92 @@ contains
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf
-    type(NRQCDField)         :: HeavyField
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1
+    type(NRQCDField)         :: HeavyField, HeavyField_atT1
 
     ! Counting
     integer :: i
 
-    ! Norm
+    ! CMS coordinates
+    real(fp) :: t,s,t1,t2
+    integer(int64) :: is, it
+
+    ! Output
     real(fp) :: norm_quark, norm_antiq
+    complex(fp) :: mesoncorrelator
+    integer(int8) :: FileID_Norm, FileID_Correlator
+    
     
     call InitSimulation
-
     
-    call HeavyField%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
-
-    call HeavyField%Destructor
-    call mpistop
-    
-    norm_quark = HeavyField%GetNorm_Quark()
-    norm_antiq = HeavyField%GetNorm_AntiQ()
-
     if(ThisProc()==0) then
-       write(output_unit,*) norm_quark, norm_antiq
-       call flush(output_unit)
+       fileID_Correlator = OpenFile(filename="Correlator_3s1.txt",&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Norm = OpenFile(filename="Norm.txt",&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
     end if
     
+    ! Determination of CMS coordinates
+    t  = CoMTime   ! fixed
+    s  = TimeRange ! varies
+    t1 = t-s/2     ! varies
+    t2 = t+s/2     ! varies
     
+    ! Initial value for gauge field at t=0
+    call GaugeConf_atT1%ColdInit
+
+    ! Evolving gauge configuration to t1 (possibly negative)
+    TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
+    do it=1,TimeSteps
+       if(ThisProc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
+       call GaugeConf_atT1%Update(sign(+1._real64,t1))
+    end do
+
+    ! Initial value for heavy field at t1
+    call HeavyField_atT1%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
+    svalues: do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
+       s = is*LatticeSpacings(0)
+
+       if(ThisProc()==0) write(output_unit,*) 's=',real(s,real32),'step',int(is,int16),'max=',&
+            int(nint(+TimeRange/LatticeSpacings(0)),int16)
+
+       ! Setting links for time-evolution at t1
+       GaugeConf = GaugeConf_atT1
+
+       ! Initialising quark-pair at t1 ...
+       HeavyField = HeavyField_atT1
+
+       ! ... and evolving to t2
+       TimeSteps = abs(is)
+       dtstep_in_s: do it=1,TimeSteps
+          if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
+          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,real(sign(+1,is),fp))
+          call GaugeConf%Update
+       end do dtstep_in_s
+
+       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+       norm_quark = HeavyField%GetNorm_Quark()
+       norm_antiq = HeavyField%GetNorm_AntiQ()
+
+       if(ThisProc()==0) then
+          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
+               s,real(mesoncorrelator,real64),aimag(mesoncorrelator)
+          write(FileID_Norm,'(3(SP,E19.12,1X))')&
+             s,norm_quark,norm_antiq
+       end if
+
+       call GaugeConf_atT1%Update
+    end do svalues
+
+    ! Closing files
+    if(ThisProc()==0) then
+       call CloseFile(FileID_Correlator)
+       call CloseFile(FileID_Norm)
+    end if
+    
+    call HeavyField%Destructor
     call EndSimulation
   contains
-
     !>@brief Initialisation of the simulation
     !!@details
     !! MPI\n
@@ -106,6 +163,7 @@ contains
       integer(int8) :: i
 
       real(fp) :: c_re, c_im
+      real(fp) :: kspTol
       
       !..--** Reading simulation parameters **--..
       arg_count = 1
@@ -146,6 +204,10 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') GluonCoupling
 
+      ! Tolerance for iterative PETSc solver
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') kspTol
+      
       ! Heavy quark mass
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') HeavyQuarkmass
@@ -167,7 +229,7 @@ contains
       call InitModule_xpFFT
       call InitModule_Random(RandomNumberSeed + ThisProc())
       call InitModule_tolerances
-      call InitModule_NRQCD
+      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
 
       call SyncAll
     end subroutine InitSimulation

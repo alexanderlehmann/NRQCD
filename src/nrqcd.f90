@@ -60,15 +60,6 @@ module nrqcd
 
      !> Heavy antiquark-propagator
      complex(fp), allocatable, private :: AntiQprop(:,:,:)
-
-     !> PETSc system matrix
-     Mat :: SystMat
-     !> Solution vector
-     Vec :: x
-     !> RHS vector
-     Vec :: rhs
-     !> Solver context
-     KSP :: ksp
    contains ! Member functions
      ! Allocation and deallocation
      procedure, private :: Allocate
@@ -90,9 +81,27 @@ module nrqcd
      ! Norm
      procedure, public :: GetNorm_Quark
      procedure, public :: GetNorm_AntiQ
-     
+
+     ! Update methods
+     generic, public :: Update => Update_CrankNicholson
+     procedure, private :: Update_CrankNicholson
+
+     ! Mesoncorrelators
+     procedure, public :: GetMesoncorrelator_3S1_ZeroMomentum
   end type NRQCDField
 
+
+  ! ** PETSc variables **
+  !> Preconditioner
+  PC  :: PreCondMat
+  !> PETSc system matrix
+  Mat :: SystMat, SystMat_herm
+  !> Solution vector
+  Vec :: PETScX
+  !> RHS vector
+  Vec :: PETScRHS
+  !> Solver context
+  KSP :: ksp
   !> Local PETSc indices
   PetscInt, allocatable :: LocalSpatialPETScIndices(:)
   !> Non-zero entries per row
@@ -127,11 +136,19 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 13.03.2019
   !!@version 1.0
-  impure subroutine InitModule
+  impure subroutine InitModule(Mass,WilsonCoeffs,StepWidth,kspTol)
     use, intrinsic :: iso_fortran_env
     use mpiinterface, only: mpistop
     implicit none
-
+    !> Bare heavy quark mass
+    real(fp), intent(in) :: Mass
+    !> Wilson coefficients
+    complex(fp), intent(in) :: WilsonCoeffs(nWilsonCoefficients)
+    !> Step width in units of \f$a_0\f$
+    real(fp), intent(in) :: StepWidth
+    !> Tolerance for iterative solver
+    real(fp), intent(in) :: kspTol
+    
     if(isInitialised) then
        call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
@@ -139,7 +156,7 @@ contains ! Module procedures
        call CheckObligatoryInitialisations
 
        ! Initialise PETSc-solver
-       call InitPETScSolver
+       call InitPETScSolver(Mass,WilsonCoeffs,StepWidth,kspTol)
        
        ! DONE
        IsInitialised = .TRUE.
@@ -180,11 +197,6 @@ contains ! Module procedures
 
     allocate(to%QuarkProp,source=from%QuarkProp)
     allocate(to%AntiQProp,source=from%AntiQProp)
-
-    to%ksp     = from%ksp
-    to%SystMat = from%SystMat
-    to%x       = from%x
-    to%rhs     = from%rhs
   end subroutine assign
   
   !>@brief Constructor
@@ -193,60 +205,17 @@ contains ! Module procedures
   !!@date 13.03.2019
   !!@version 1.0
   impure function NRQCDField_Constructor()
-    use mpiinterface, only: intmpi,ThisProc, NumProcs,SyncAll,mpistop
+    use mpiinterface, only: ThisProc, NumProcs,SyncAll,mpistop
+
     implicit none
     
     type(NRQCDField) :: NRQCDField_Constructor
 
-    PetscMPIInt :: PETScIerr
+    PetscMPIInt :: Petscerr
+
+    integer(int8) :: i
     
     call NRQCDField_Constructor%Allocate
-
-    ! PETSc variables for linear solver
-    ! 1. System matrix
-    call MatCreateAIJ(PETSC_COMM_WORLD,&
-         LocalSystMatSize,LocalSystMatSize,&
-         SystMatSize,SystMatSize,&
-         0_int64,d_nnz,0_int64,o_nnz,&
-         NRQCDField_Constructor%SystMat,&
-         PETScIerr)
-    if(PETScIerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': MatCreateAIJ failed.',&
-            errorcode = PETScIerr)
-    end if
-
-    ! 2. Solution vector
-    call VecCreateMPI(PETSC_COMM_WORLD,&
-         LocalSystMatSize,SystMatsize,&
-         NRQCDField_Constructor%x,PETScIerr)
-    if(PETScIerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': VecCreateMPI for x failed.',&
-            errorcode = PETScIerr)
-    end if
-
-    ! 3. RHS vector
-    call VecCreateMPI(PETSC_COMM_WORLD,&
-         LocalSystMatSize,SystMatsize,&
-         NRQCDField_Constructor%rhs,PETScIerr)
-    if(PETScIerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': VecCreateMPI for rhs failed.',&
-            errorcode = PETScIerr)
-    end if
-
-    ! 4. KSP-solver object
-    call KSPCreate(PETSC_COMM_WORLD,NRQCDField_Constructor%ksp,PETScIerr)
-    if(PETScIerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': KSPCreate failed.',&
-            errorcode = PETScIerr)
-    end if
   end function NRQCDField_Constructor
 
   
@@ -258,13 +227,6 @@ contains ! Module procedures
   impure subroutine Destructor(object)
     implicit none
     class(NRQCDField), intent(inout) :: object
-    
-    PetscErrorCode :: PETScIerr
-    
-    call VecDestroy(object%x,PETScIerr)
-    call VecDestroy(object%rhs,PETScIerr)
-    call MatDestroy(object%SystMat,PETScIerr)
-    call KSPDestroy(object%ksp,PETScIerr)
     
     call Object%Deallocate
   end subroutine Destructor
@@ -547,20 +509,28 @@ contains ! Module procedures
 
   end function GetNorm_Propagator
 
-
   ! **PETSc**
   !>@brief Initialises PETSc-solver
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 11.03.2019
   !!@version 1.0
-  impure subroutine InitPETScSolver
+  impure subroutine InitPETScSolver(Mass,WilsonCoeffs,StepWidth,kspTol)
     use mpiinterface, only: intmpi,mpistop,thisproc,numprocs
     use lattice, only: GetLatticeSize, GetLocalLatticeSize, GetMemorySize, GetNeib_G, GetProc_G
     use arrayoperations, only: RemoveDuplicates
     implicit none
-
-    PetscErrorCode :: PETScierr
+    !> Bare heavy quark mass
+    real(fp), intent(in) :: Mass
+    !> Wilson coefficients
+    complex(fp), intent(in) :: WilsonCoeffs(nWilsonCoefficients)
+    !> Step width in units of \f$a_0\f$
+    real(fp), intent(in) :: StepWidth
+    !> Tolerance for iterative solver
+    real(fp), intent(in) :: kspTol
+    
+    PetscErrorCode :: Petscerr
+    PetscReal :: Tol
 
     integer(int64) :: SpatialRow, SpatialCol, LatticeIndex, i
     
@@ -568,13 +538,13 @@ contains ! Module procedures
     
     integer(int64) :: dofMinRow,dofMaxRow
     
-    call PETScInitialize(PETSC_NULL_CHARACTER,PETScierr)
+    call PETScInitialize(PETSC_NULL_CHARACTER,Petscerr)
 
-    if(PETScIerr /= 0) then
+    if(Petscerr /= 0) then
        call MPIStop(&
             errormessage = 'Error in initialization of '//&
             modulename//': Initialisation of PETSc failed.',&
-            errorcode = PETScIerr)
+            errorcode = Petscerr)
     end if
 
     call InitLocalSpatialPETScIndices(LocalSpatialPETScIndices)
@@ -585,8 +555,8 @@ contains ! Module procedures
 
     LocalSpatialMinRow = 1+ ThisProc()   *GetLocalLatticeSize()
     LocalSpatialMaxRow =   (ThisProc()+1)*GetLocalLatticeSize()
-    LocalMinRow = 1 + ThisProc()   *GetLocalLatticeSize()*nDof
-    LocalMaxRow =    (ThisProc()+1)*GetLocalLatticeSize()*nDof
+    LocalMinRow = 1 + (LocalSpatialMinRow-1)*nDof
+    LocalMaxRow = (ThisProc()+1)*GetLocalLatticeSize()*nDof
     
     ! Determine where the rows and columns belong to and thus the diagonal and off-diagonal entries
     
@@ -641,8 +611,8 @@ contains ! Module procedures
        
        !3. Computing number of non-zeros entries in diagonal and off-diagonal section
        dofMinRow = 1 + ndof*(SpatialRow-1)
-       dofMaxRow = ndof*SpatialRow-1
-       do concurrent(i=1:size(neibs))
+       dofMaxRow = ndof*SpatialRow
+       do i=1,size(neibs)
           if(GetProc_G(neibs(i))==ThisProc()) then
              d_nnz(dofMinRow:dofMaxRow) = d_nnz(dofMinRow:dofMaxRow) + nDof
           else
@@ -650,6 +620,100 @@ contains ! Module procedures
           end if
        end do
     end do
+
+    ! PETSc variables for linear solver
+    ! 1. KSP-solver object
+    call KSPCreate(PETSC_COMM_WORLD,ksp,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': KSPCreate failed.',&
+            errorcode = Petscerr)
+    end if
+    call KSPSetType(ksp,KSPGMRES,Petscerr)
+    
+    ! 2. System matrix
+    call MatCreateAIJ(PETSC_COMM_WORLD,&
+         LocalSystMatSize,LocalSystMatSize,&
+         SystMatSize,SystMatSize,&
+         PETSC_NULL_INTEGER,d_nnz,PETSC_NULL_INTEGER,o_nnz,&
+         SystMat,&
+         Petscerr)
+    call MatCreateAIJ(PETSC_COMM_WORLD,&
+         LocalSystMatSize,LocalSystMatSize,&
+         SystMatSize,SystMatSize,&
+         PETSC_NULL_INTEGER,d_nnz,PETSC_NULL_INTEGER,o_nnz,&
+         SystMat_herm,&
+         Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': MatCreateAIJ failed.',&
+            errorcode = Petscerr)
+    end if
+    call ResetSystemMatrix(SystMat)
+    ! 3. Pre-conditioner
+    call KSPSetOperators(ksp,SystMat,SystMat,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': KSPSetOperators failed.',&
+            errorcode = Petscerr)
+    end if
+    call PCCreate(PETSC_COMM_WORLD,PreCondMat,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': PCCreate failed.',&
+            errorcode = Petscerr)
+    end if
+    call PCSetType(PreCondMat,PCJACOBI,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': PCSetType to PCJACOBI failed.',&
+            errorcode = Petscerr)
+    end if
+    
+    ! 4. Set Tolerance
+    Tol = kspTol
+    call KSPSetTolerances(ksp,Tol,&
+         PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': KSPSetTOLERANCES failed.',&
+            errorcode = Petscerr)
+    end if
+    call KSPSetUp(ksp,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': KSPSetUP failed.',&
+            errorcode = Petscerr)
+    end if
+
+    ! 5. Solution vector
+    call VecCreateMPI(PETSC_COMM_WORLD,&
+         LocalSystMatSize,SystMatsize,&
+         PETScX,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': VecCreateMPI for x failed.',&
+            errorcode = Petscerr)
+    end if
+
+    ! 6. RHS vector
+    call VecCreateMPI(PETSC_COMM_WORLD,&
+         LocalSystMatSize,SystMatsize,&
+         PETScRHS,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': VecCreateMPI for rhs failed.',&
+            errorcode = Petscerr)
+    end if
   end subroutine InitPETScSolver
 
   !>@brief Finalizes PETSc-solver
@@ -661,16 +725,23 @@ contains ! Module procedures
     use mpiinterface, only: mpistop
     implicit none
 
-    PetscErrorCode PETScierr
+    PetscErrorCode Petscerr
+    
+    call VecDestroy(PETScX,Petscerr)
+    call VecDestroy(PETScRHS,Petscerr)
+
+    call MatDestroy(SystMat,Petscerr)
+    !call PCDestroy(PreCondMat,Petscerr)
+    call KSPDestroy(ksp,Petscerr)
     
     deallocate(LocalSpatialPETScIndices)
-    call PETScFinalize(PETScierr)
+    call PETScFinalize(Petscerr)
 
-    if(PETScIerr /= 0) then
+    if(Petscerr /= 0) then
        call MPIStop(&
             errormessage = 'Error in finalization of '//&
             modulename//': Finalization of PETSc failed.',&
-            errorcode = PETScIerr)
+            errorcode = Petscerr)
     end if
   end subroutine FinalizePETScSolver
 
@@ -794,6 +865,407 @@ contains ! Module procedures
          value = SpatialPETScIndex)       ! What to look for
   end function GetMemoryIndex_PETSc
 
+  !>@brief Adds submatrix to system matrix at spatial PETSc row and column indices
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine AddMatrixToSystem(SpatialRow,SpatialCol,SubMat,SystMat)
+    use mpiinterface, only: MPIStop
+    implicit none
+    !> Spatial row index
+    PetscInt, intent(in) :: SpatialRow
+    !> Spatial column index
+    PetscInt, intent(in) :: SpatialCol
+    !> Submatrix
+    complex(fp), intent(in) :: submat(nDof,nDof)
+    !> System matrix
+    Mat, intent(inout) :: SystMat
+    
+    PetscErrorCode :: PETScErr
 
+    PetscInt :: Cols(nDof), Rows(nDof)
+    PetscInt, parameter :: nRow=nDof, nCol=nDof
+    PetscScalar :: v(nRow*nCol)
+
+    Rows = [1_int8:nDof] + nDof*(SpatialRow-1) - 1 ! -1 for C indexing
+    Cols = [1_int8:nDof] + nDof*(SpatialCol-1) - 1 ! -1 for C indexing
+    v = reshape(SubMat,[nDof**2])
+    
+    call MatSetValuesBlocked(SystMat,nRow,Rows,nCol,Cols,v,ADD_VALUES,PETScErr)
+    if(PETScErr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in '//&
+            modulename//': MatSetValuesBlocked failed.',&
+            errorcode = PETScErr)
+    end if
+  end subroutine AddMatrixToSystem
+
+  !>@brief Resets system matrix to zero
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine ResetSystemMatrix(SystMat,PETScErr)
+    implicit none
+    !> System matrix
+    Mat, intent(inout) :: SystMat
+    !> PETSc error code
+    PetscErrorCode, optional :: PETScErr
+
+    PetscErrorCode :: PETScErr_
+    call MatZeroEntries(SystMat,PETScErr_)
+    if(present(PETScErr)) PETScErr = PETScErr_
+  end subroutine ResetSystemMatrix
   
+  !>@brief Performs update step using Crank-Nicholson scheme
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine Update_CrankNicholson(HeavyField,GaugeConf,Mass,WilsonCoeffs,StepWidth)
+    use mpiinterface, only: mpistop, ThisProc
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField),           intent(inout) :: HeavyField
+    !> Gauge configuration
+    type(SU3GaugeConfiguration), intent(in)    :: GaugeConf
+    !> Bare mass of heavy quark field
+    real(fp),                    intent(in)    :: Mass
+    !> Wilson coefficients
+    complex(fp),                 intent(in)    :: WilsonCoeffs(nWilsonCoefficients)
+    !> Step width in units of \f$a_0\f$
+    real(fp), optional,          intent(in)    :: StepWidth
+
+    real(fp) :: dt
+
+    complex(fp) :: wilsonCoeffs_conjg(nWilsonCoefficients)
+    real(fp)    :: mass_negative
+
+    integer(int8) :: i
+    PetscErrorCode :: PETScErr
+    
+    ! ..--** START: Optional parameters **--..
+    if(present(StepWidth)) then
+       dt = StepWidth
+    else
+       ! Default value
+       dt = 1._real64 ! in units of a0
+    end if
+    ! ..--**  END : Optional parameters **--..
+    
+    ! Quark propagator
+    call BuildSystemMatrix(SystMat_herm,GaugeConf,+Mass,WilsonCoeffs,dt)
+    call MatHermitianTranspose(SystMat_herm,MAT_INITIAL_MATRIX,SystMat,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in Update_CrankNicholson of '//&
+            modulename//': MatHermitianTranspose failed.',&
+            errorcode = Petscerr)
+    end if
+    
+    call KSPSetOperators(ksp,SystMat,SystMat_herm,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in Update_CrankNicholson of '//&
+            modulename//': KSPSetOperators failed.',&
+            errorcode = Petscerr)
+    end if
+       
+    !call KSPGetPC(ksp,PreCondMat,PetscErr)
+    
+    do i=1,nDof
+       call LoadPropagatorIntoPETSc(HeavyField%QuarkProp,i,PETScX)
+       ! Perform half explicit step
+       call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in Update_CrankNicholson of '//&
+               modulename//': MatMult failed.',&
+               errorcode = Petscerr)
+       end if
+       
+       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in Update_CrankNicholson of '//&
+               modulename//': KSPSolve failed.',&
+               errorcode = Petscerr)
+       end if
+
+       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
+
+       ! DEBUG
+       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScRHS)
+    end do
+    
+    ! Anti quark propagator
+    wilsonCoeffs_conjg = conjg(WilsonCoeffs)
+    mass_negative = -Mass
+    call BuildSystemMatrix(SystMat_herm,GaugeConf,-Mass,WilsonCoeffs_conjg,dt)
+    call MatHermitianTranspose(SystMat_herm,MAT_INITIAL_MATRIX,SystMat,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in Update_CrankNicholson of '//&
+            modulename//': MatHermitianTranspose failed.',&
+            errorcode = Petscerr)
+    end if
+    
+    call KSPSetOperators(ksp,SystMat,SystMat_herm,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in Update_CrankNicholson of '//&
+            modulename//': KSPSetOperators failed.',&
+            errorcode = Petscerr)
+    end if
+    !call KSPGetPC(ksp,PreCondMat,PetscErr)
+    
+    do i=1,nDof
+       call LoadPropagatorIntoPETSc(HeavyField%AntiQProp,i,PETScX)
+       
+       ! Perform half explicit step
+       call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in Update_CrankNicholson of '//&
+               modulename//': MatMult failed.',&
+               errorcode = Petscerr)
+       end if
+
+       ! Solve linear system
+       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in Update_CrankNicholson of '//&
+               modulename//': KSPSolve failed.',&
+               errorcode = Petscerr)
+       end if
+
+       call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScX)
+
+       ! DEBUG
+       call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScRHS)
+    end do
+    
+    !call HeavyField%CommunicateBoundary
+
+    if(ThisProc()==0) &
+         write(output_unit,*) HeavyField%QuarkProp(1,1,1)
+  end subroutine Update_CrankNicholson
+  
+  !>@brief Builds system matrix
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine BuildSystemMatrix(SystMat,GaugeConf,Mass,WilsonCoeffs,StepWidth)
+    use mpiinterface, only: SyncAll
+    use matrixoperations, only: GetUnitMatrix
+    use lattice, only: nDim,GetLatticeSpacing,GetNeib_G
+
+    use mpiinterface, only: ThisProc, MPIStop
+    implicit none
+    !> System matrix
+    Mat, intent(inout) :: SystMat
+    !> Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeConf
+    !> Bare heavy field mass
+    real(fp), intent(in)    :: Mass
+    !> Wilson coefficients
+    complex(fp), intent(in) :: WilsonCoeffs(nWilsonCoefficients)
+    !> Step width in units of \f$a_0\f$
+    real(fp),    intent(in) :: StepWidth
+
+    PetscInt :: row, col
+    PetscErrorCode :: PETScErr
+
+    complex(fp) :: submatrix(nDof,nDof)
+    integer(int8) :: i
+    integer(int64) :: neib_p, neib_m
+    complex(fp), dimension(nDof,nDof) :: link
+    
+    call ResetSystemMatrix(SystMat)
+
+    ! O(dt^0)
+    submatrix = GetUnitMatrix(nDof)
+    do row=LocalSpatialMinRow,LocalSpatialMaxRow
+       call AddMatrixToSystem(row,row,submatrix,SystMat)
+    end do
+    
+    ! O(dt^1)
+    ! .. c1
+    do row=LocalSpatialMinRow,LocalSpatialMaxRow
+       do i=1,nDim
+          ! + delta_{x,y}/(ai**2)/m
+          col = row
+          
+          submatrix = + cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
+               *WilsonCoeffs(1)/2/mass/GetLatticeSpacing(i)**2 &
+               *GetUnitMatrix(nDof)
+          call AddMatrixToSystem(row,col,submatrix,SystMat)
+          
+          ! - delta_{x+î,y}U(x,i)/(ai**2)/2m
+          neib_p = GetNeib_G(+i,GetLatticeIndex_PETSc(row))
+          col = GetSpatialPETScIndex_G(neib_p)
+          link = GetLinkCS_G(GaugeConf,i,GetLatticeIndex_PETSc(row))
+          submatrix = cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
+               *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
+               *Link
+          call AddMatrixToSystem(row,col,submatrix,SystMat)
+          
+          ! - delta_{x-î,y}U(x-î,i)†/(ai**2)/2m
+          neib_m = GetNeib_G(-i,GetLatticeIndex_PETSc(row))
+          col = GetSpatialPETScIndex_G(neib_m)
+          link = GetLinkCS_G(GaugeConf,i,neib_m)
+          submatrix = cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
+               *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
+               *Link
+          call AddMatrixToSystem(row,col,submatrix,SystMat)
+       end do
+    end do
+    
+1   continue
+    call SyncAll
+    call MatAssemblyBegin(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
+    call MatAssemblyEnd(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
+    call SyncAll
+  end subroutine BuildSystemMatrix
+
+  !>@brief Loads propagator into PETSc-vectors
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine LoadPropagatorIntoPETSc(Propagator,PropagatorCol,PETScVec)
+    use mpiinterface, only: SyncAll, MPIStop
+    use lattice, only: GetLocalLatticeSize
+    implicit none
+    !> Propagator
+    complex(fp),   intent(in) :: Propagator(:,:,:)
+    !> Column of propagator to be read
+    integer(int8), intent(in) :: PropagatorCol
+    !> PETSc vector
+    Vec, intent(inout) :: PETScVec
+
+    PetscErrorCode :: PETScErr
+
+    PetscScalar :: v(nDof)
+    PetscInt, parameter :: nRows=nDof
+    PetscInt :: rows(nRows)
+    integer(int64) :: SpatialRow
+    
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       rows = [1:nDof] + (SpatialRow-1)*nDof - 1
+
+       v = Propagator(:,PropagatorCol,GetMemoryIndex_PETSc(SpatialRow))
+       call VecSetValues(PETScVec,nRows,rows,v,INSERT_VALUES,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in LoadPropagatorIntoPETSc of '//&
+               modulename//': VecSetValues failed.',&
+               errorcode = Petscerr)
+       end if
+    end do
+
+    call SyncAll
+    call VecAssemblyBegin(PETScVec,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in LoadPropagatorIntoPETSc of '//&
+            modulename//': VecAssemblyBegin failed.',&
+            errorcode = Petscerr)
+    end if
+    
+    call VecAssemblyEnd(PETScVec,PETScErr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in LoadPropagatorIntoPETSc of '//&
+            modulename//': VecAssemblyEnd failed.',&
+            errorcode = Petscerr)
+    end if
+  end subroutine LoadPropagatorIntoPETSc
+
+  !>@brief Loads propagator from PETSc-vectors
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 18.03.2019
+  !!@version 1.0
+  impure subroutine LoadPropagatorFromPETSc(Propagator,PropagatorCol,PETScVec)
+    use mpiinterface, only: MPIStop
+    implicit none
+    !> Propagator
+    complex(fp),   intent(out) :: Propagator(:,:,:)
+    !> Column of propagator to be read
+    integer(int8), intent(in)  :: PropagatorCol
+    !> PETSc vector
+    Vec, intent(in) :: PETScVec
+
+    PetscErrorCode :: PETScErr
+
+    PetscScalar :: v(nDof)
+    PetscInt, parameter :: nRows=nDof
+    PetscInt :: rows(nRows)
+    integer(int64) :: SpatialRow
+
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       rows = [1:nDof] + (SpatialRow-1)*nDof - 1
+
+       call VecGetValues(PETScVec,nRows,rows,v,PETScErr)
+       if(Petscerr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in LoadPropagatorFromPETSc of '//&
+               modulename//': VecGetValues failed.',&
+               errorcode = Petscerr)
+       end if
+       
+       Propagator(:,PropagatorCol,GetMemoryIndex_PETSc(SpatialRow)) = v
+    end do
+  end subroutine LoadPropagatorFromPETSc
+
+  !>@brief Computes \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 19.03.2019
+  !!@version 1.0
+  impure complex(fp) function GetMesoncorrelator_3S1_ZeroMomentum(HeavyField)
+    use mpi
+    use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
+    use lattice, only: nDim, GetProc_M, GetMemorySize
+    use matrixoperations, only: GetTrace
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+
+    integer(intmpi) :: mpierr
+    complex(fp) :: PauliMatrix_CS(nDof,nDof), Correlator(nDof,nDof)
+    integer(int64) :: MemoryIndex
+    integer(int8) :: i
+    complex(fp) :: LocalValue
+    
+    LocalValue = 0
+    do concurrent(MemoryIndex=1:GetMemorySize(),GetProc_M(MemoryIndex)==ThisProc())
+       Correlator = 0
+       do concurrent(i=1:nDim)
+          PauliMatrix_CS = S2CS(SU2Generators(:,:,i))
+
+          Correlator = Correlator &
+               + cmplx(0,1,fp)*matmul(matmul(matmul(&
+               PauliMatrix_CS,&
+               HeavyField%QuarkProp(:,:,MemoryIndex)),&
+               PauliMatrix_CS),&
+               conjg(HeavyField%AntiQProp(:,:,MemoryIndex)))
+       end do
+       LocalValue = LocalValue &
+            + GetTrace(Correlator)
+    end do
+
+    call MPI_ALLREDUCE(&
+         LocalValue,&
+         GetMesoncorrelator_3S1_ZeroMomentum,&
+         1_intmpi,&
+         GetComplexSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetMesoncorrelator_3S1_ZeroMomentum
 end module nrqcd
