@@ -56,10 +56,10 @@ module nrqcd
   !!@version 1.0
   type NRQCDField
      !> Heavy-quark-propagator
-     complex(fp), allocatable, private :: QuarkProp(:,:,:)
+     complex(fp), allocatable, public :: QuarkProp(:,:,:)
 
      !> Heavy antiquark-propagator
-     complex(fp), allocatable, private :: AntiQprop(:,:,:)
+     complex(fp), allocatable, public :: AntiQprop(:,:,:)
    contains ! Member functions
      ! Allocation and deallocation
      procedure, private :: Allocate
@@ -532,7 +532,8 @@ contains ! Module procedures
     PetscErrorCode :: Petscerr
     PetscReal :: Tol
 
-    integer(int64) :: SpatialRow, SpatialCol, LatticeIndex, i
+    PetscInt :: SpatialRow, SpatialCol
+    integer(int64) :: LatticeIndex, i
     
     integer(int64), allocatable :: neibs(:)
     
@@ -790,7 +791,7 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 11.03.2019
   !!@version 1.0
-  pure integer(int64) function GetSpatialPETScIndex_G(LatticeIndex)
+  pure PetscInt function GetSpatialPETScIndex_G(LatticeIndex)
     use lattice, only: GetLatticePosition, GetProc_G, &
          nDim, GetLocalLowerLatticeBoundary, GetLocalUpperLatticeBoundary, &
          GetIndex_fromPosition, GetLocalLatticeSize
@@ -845,7 +846,7 @@ contains ! Module procedures
     use lattice, only: GetLatticeIndex_M
     implicit none
     !> PETSc index
-    integer(int64), intent(in) :: SpatialPETScIndex
+    PetscInt, intent(in) :: SpatialPETScIndex
     GetLatticeIndex_PETSc = GetLatticeIndex_M(GetMemoryIndex_PETSc(SpatialPETScIndex))
   end function GetLatticeIndex_PETSc
 
@@ -858,7 +859,7 @@ contains ! Module procedures
   pure integer(int64) function GetMemoryIndex_PETSc(SpatialPETScIndex)
     implicit none
     !> PETSc index
-    integer(int64), intent(in) :: SpatialPETScIndex
+    PetscInt, intent(in) :: SpatialPETScIndex
 
     GetMemoryIndex_PETSc = FindLoc(&
          LocalSpatialPETScIndices,dim=1,& ! Where to look
@@ -892,11 +893,11 @@ contains ! Module procedures
     Cols = [1_int8:nDof] + nDof*(SpatialCol-1) - 1 ! -1 for C indexing
     v = reshape(SubMat,[nDof**2])
     
-    call MatSetValuesBlocked(SystMat,nRow,Rows,nCol,Cols,v,ADD_VALUES,PETScErr)
+    call MatSetValues(SystMat,nRow,Rows,nCol,Cols,v,ADD_VALUES,PETScErr)
     if(PETScErr /= 0) then
        call MPIStop(&
-            errormessage = 'Error in '//&
-            modulename//': MatSetValuesBlocked failed.',&
+            errormessage = 'Error in AddMatrixToSystem of '//&
+            modulename//': MatSetValues failed.',&
             errorcode = PETScErr)
     end if
   end subroutine AddMatrixToSystem
@@ -906,16 +907,20 @@ contains ! Module procedures
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 18.03.2019
   !!@version 1.0
-  impure subroutine ResetSystemMatrix(SystMat,PETScErr)
+  impure subroutine ResetSystemMatrix(SystMat)
+    use mpiinterface, only: MPIStop
     implicit none
     !> System matrix
     Mat, intent(inout) :: SystMat
-    !> PETSc error code
-    PetscErrorCode, optional :: PETScErr
 
-    PetscErrorCode :: PETScErr_
-    call MatZeroEntries(SystMat,PETScErr_)
-    if(present(PETScErr)) PETScErr = PETScErr_
+    PetscErrorCode :: PETScErr
+    call MatZeroEntries(SystMat,PETScErr) !retains the non-zero structure
+    if(PETScErr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in ResetSystemMatrix of '//&
+            modulename//': MatZeroEntries failed.',&
+            errorcode = PETScErr)
+    end if
   end subroutine ResetSystemMatrix
   
   !>@brief Performs update step using Crank-Nicholson scheme
@@ -925,6 +930,8 @@ contains ! Module procedures
   !!@version 1.0
   impure subroutine Update_CrankNicholson(HeavyField,GaugeConf,Mass,WilsonCoeffs,StepWidth)
     use mpiinterface, only: mpistop, ThisProc
+
+    use mpiinterface, only: numprocs, intmpi, syncall
     implicit none
     !> NRQCD heavy field
     class(NRQCDField),           intent(inout) :: HeavyField
@@ -944,6 +951,9 @@ contains ! Module procedures
 
     integer(int8) :: i
     PetscErrorCode :: PETScErr
+
+    integer(intmpi) :: proc
+    integer(int64) :: row
     
     ! ..--** START: Optional parameters **--..
     if(present(StepWidth)) then
@@ -953,7 +963,7 @@ contains ! Module procedures
        dt = 1._real64 ! in units of a0
     end if
     ! ..--**  END : Optional parameters **--..
-    
+
     ! Quark propagator
     call BuildSystemMatrix(SystMat_herm,GaugeConf,+Mass,WilsonCoeffs,dt)
     call MatHermitianTranspose(SystMat_herm,MAT_INITIAL_MATRIX,SystMat,PETScErr)
@@ -984,7 +994,8 @@ contains ! Module procedures
                modulename//': MatMult failed.',&
                errorcode = Petscerr)
        end if
-       
+
+       ! Perform half implicit step
        call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
        if(Petscerr /= 0) then
           call MPIStop(&
@@ -992,11 +1003,8 @@ contains ! Module procedures
                modulename//': KSPSolve failed.',&
                errorcode = Petscerr)
        end if
-
        call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
-
-       ! DEBUG
-       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScRHS)
+       
     end do
     
     ! Anti quark propagator
@@ -1031,8 +1039,8 @@ contains ! Module procedures
                modulename//': MatMult failed.',&
                errorcode = Petscerr)
        end if
-
-       ! Solve linear system
+       
+       ! Perform half implicit step
        call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
        if(Petscerr /= 0) then
           call MPIStop(&
@@ -1040,19 +1048,10 @@ contains ! Module procedures
                modulename//': KSPSolve failed.',&
                errorcode = Petscerr)
        end if
-
        call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScX)
-
-       ! DEBUG
-       call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScRHS)
     end do
-    
-    !call HeavyField%CommunicateBoundary
-
-    if(ThisProc()==0) &
-         write(output_unit,*) HeavyField%QuarkProp(1,1,1)
   end subroutine Update_CrankNicholson
-  
+
   !>@brief Builds system matrix
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -1076,55 +1075,59 @@ contains ! Module procedures
     !> Step width in units of \f$a_0\f$
     real(fp),    intent(in) :: StepWidth
 
-    PetscInt :: row, col
+    PetscInt :: SpatialRow, SpatialCol
     PetscErrorCode :: PETScErr
 
-    complex(fp) :: submatrix(nDof,nDof)
     integer(int8) :: i
     integer(int64) :: neib_p, neib_m
-    complex(fp), dimension(nDof,nDof) :: link
+    complex(fp), dimension(nDof,nDof) :: submatrix, link
+
+    
+    PetscInt :: rows(ndof), cols(ndof),nrows,ncols
+    PetscScalar :: v(ndof**2)
     
     call ResetSystemMatrix(SystMat)
-
-    ! O(dt^0)
-    submatrix = GetUnitMatrix(nDof)
-    do row=LocalSpatialMinRow,LocalSpatialMaxRow
-       call AddMatrixToSystem(row,row,submatrix,SystMat)
-    end do
     
+    ! O(dt^0)
+    ! Unit matrix
+    submatrix = GetUnitMatrix(nDof)
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       call AddMatrixToSystem(SpatialRow,SpatialRow,submatrix,SystMat)
+    end do
+
     ! O(dt^1)
     ! .. c1
-    do row=LocalSpatialMinRow,LocalSpatialMaxRow
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        do i=1,nDim
           ! + delta_{x,y}/(ai**2)/m
-          col = row
+          SpatialCol = SpatialRow
           
-          submatrix = + cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
-               *WilsonCoeffs(1)/2/mass/GetLatticeSpacing(i)**2 &
+          submatrix = + cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *WilsonCoeffs(1)/mass/GetLatticeSpacing(i)**2 &
                *GetUnitMatrix(nDof)
-          call AddMatrixToSystem(row,col,submatrix,SystMat)
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
           
           ! - delta_{x+î,y}U(x,i)/(ai**2)/2m
-          neib_p = GetNeib_G(+i,GetLatticeIndex_PETSc(row))
-          col = GetSpatialPETScIndex_G(neib_p)
-          link = GetLinkCS_G(GaugeConf,i,GetLatticeIndex_PETSc(row))
-          submatrix = cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
+          neib_p = GetNeib_G(+i,GetLatticeIndex_PETSc(SpatialRow))
+          SpatialCol = GetSpatialPETScIndex_G(neib_p)
+          link = GetLinkCS_G(GaugeConf,i,GetLatticeIndex_PETSc(SpatialRow))
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
                *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
                *Link
-          call AddMatrixToSystem(row,col,submatrix,SystMat)
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
           
           ! - delta_{x-î,y}U(x-î,i)†/(ai**2)/2m
-          neib_m = GetNeib_G(-i,GetLatticeIndex_PETSc(row))
-          col = GetSpatialPETScIndex_G(neib_m)
+          neib_m = GetNeib_G(-i,GetLatticeIndex_PETSc(SpatialRow))
+          SpatialCol = GetSpatialPETScIndex_G(neib_m)
           link = GetLinkCS_G(GaugeConf,i,neib_m)
-          submatrix = cmplx(0._fp,-StepWidth*GetLatticeSpacing(0_int8),fp)&
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
                *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
                *Link
-          call AddMatrixToSystem(row,col,submatrix,SystMat)
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+          
        end do
     end do
     
-1   continue
     call SyncAll
     call MatAssemblyBegin(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
     call MatAssemblyEnd(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
@@ -1151,8 +1154,7 @@ contains ! Module procedures
 
     PetscScalar :: v(nDof)
     PetscInt, parameter :: nRows=nDof
-    PetscInt :: rows(nRows)
-    integer(int64) :: SpatialRow
+    PetscInt :: rows(nRows),SpatialRow
     
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        rows = [1:nDof] + (SpatialRow-1)*nDof - 1
@@ -1204,8 +1206,7 @@ contains ! Module procedures
 
     PetscScalar :: v(nDof)
     PetscInt, parameter :: nRows=nDof
-    PetscInt :: rows(nRows)
-    integer(int64) :: SpatialRow
+    PetscInt :: rows(nRows), SpatialRow
 
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        rows = [1:nDof] + (SpatialRow-1)*nDof - 1
