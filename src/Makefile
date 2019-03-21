@@ -4,7 +4,7 @@ FC=mpiifort
 PROGRAM = run.exe
 
 MKLROOT=intel/mkl
-PETSC_DIR=/home/lehmann/software/petsc
+PETSC_DIR=${HOME}/software/petsc
 PETSC_ARCH=${PETSC_DIR}/arch-linux2-c-debug
 PETSC_LIB=${PETSC_ARCH}/lib/libpetsc.so
 
