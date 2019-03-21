@@ -95,11 +95,13 @@ module nrqcd
   !> Preconditioner
   PC  :: PreCondMat
   !> PETSc system matrix
-  Mat :: SystMat, SystMat_herm
+  Mat :: SystMat, SystMat_herm, SystMat_precond
   !> Solution vector
   Vec :: PETScX
   !> RHS vector
   Vec :: PETScRHS
+  !> Prec-conditioned RHS vector
+  Vec :: PETScRHS_precond
   !> Solver context
   KSP :: ksp
   !> Local PETSc indices
@@ -538,6 +540,9 @@ contains ! Module procedures
     integer(int64), allocatable :: neibs(:)
     
     integer(int64) :: dofMinRow,dofMaxRow
+
+    ! Dummy variables for first matrix building
+    type(SU3GaugeConfiguration) :: DummyConf
     
     call PETScInitialize(PETSC_NULL_CHARACTER,Petscerr)
 
@@ -631,7 +636,7 @@ contains ! Module procedures
             modulename//': KSPCreate failed.',&
             errorcode = Petscerr)
     end if
-    call KSPSetType(ksp,KSPGMRES,Petscerr)
+    !call KSPSetType(ksp,KSPGMRES,Petscerr)
     
     ! 2. System matrix
     call MatCreateAIJ(PETSC_COMM_WORLD,&
@@ -652,15 +657,28 @@ contains ! Module procedures
             modulename//': MatCreateAIJ failed.',&
             errorcode = Petscerr)
     end if
-    call ResetSystemMatrix(SystMat)
+    
+    ! Tell PETSc that the matrices are structurally (non-zero-pattern-wise) symmetric
+    call MatSetOption(SystMat,        MAT_STRUCTURALLY_SYMMETRIC,PETSC_TRUE,PETScErr)
+    call MatSetOption(SystMat_herm,   MAT_STRUCTURALLY_SYMMETRIC,PETSC_TRUE,PETScErr)
+    ! Tell PETSc to keep the non-zero-pattern, thus never "compressing" it
+    call MatSetOption(SystMat,        MAT_KEEP_NONZERO_PATTERN,PETSC_TRUE,PETScErr)
+    call MatSetOption(SystMat_herm,   MAT_KEEP_NONZERO_PATTERN,PETSC_TRUE,PETScErr)
+    ! Tell PETSc to keep the symmetry pattern for ever
+    call MatSetOption(SystMat,        MAT_SYMMETRY_ETERNAL,PETSC_TRUE,PETScErr)
+    call MatSetOption(SystMat_herm,   MAT_SYMMETRY_ETERNAL,PETSC_TRUE,PETScErr)
+
+    call DummyConf%ColdInit
+    call BuildSystemMatrix(SystMat_herm,DummyConf,1._fp,WilsonCoeffs,StepWidth)
+    call BuildSystemMatrix(SystMat,     DummyConf,1._fp,WilsonCoeffs,StepWidth)
+    
+    call MatMatMultSymbolic(SystMat_herm,SystMat,PETSC_DEFAULT_REAL,SystMat_precond,PETScErr)
+    
+    call MatSetOption(SystMat_precond,MAT_STRUCTURALLY_SYMMETRIC,PETSC_TRUE,PETScErr)
+    call MatSetOption(SystMat_precond,MAT_KEEP_NONZERO_PATTERN,PETSC_TRUE,PETScErr)
+    call MatSetOption(SystMat_precond,MAT_SYMMETRY_ETERNAL,PETSC_TRUE,PETScErr)
+    
     ! 3. Pre-conditioner
-    call KSPSetOperators(ksp,SystMat,SystMat,Petscerr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': KSPSetOperators failed.',&
-            errorcode = Petscerr)
-    end if
     call PCCreate(PETSC_COMM_WORLD,PreCondMat,Petscerr)
     if(Petscerr /= 0) then
        call MPIStop(&
@@ -686,13 +704,6 @@ contains ! Module procedures
             modulename//': KSPSetTOLERANCES failed.',&
             errorcode = Petscerr)
     end if
-    call KSPSetUp(ksp,Petscerr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': KSPSetUP failed.',&
-            errorcode = Petscerr)
-    end if
 
     ! 5. Solution vector
     call VecCreateMPI(PETSC_COMM_WORLD,&
@@ -715,6 +726,19 @@ contains ! Module procedures
             modulename//': VecCreateMPI for rhs failed.',&
             errorcode = Petscerr)
     end if
+    
+    ! 7. Preconditioned RHS vector
+    call VecCreateMPI(PETSC_COMM_WORLD,&
+         LocalSystMatSize,SystMatsize,&
+         PETScRHS_precond,Petscerr)
+    if(Petscerr /= 0) then
+       call MPIStop(&
+            errormessage = 'Error in initialization of '//&
+            modulename//': VecCreateMPI for preconditioned rhs failed.',&
+            errorcode = Petscerr)
+    end if
+
+    call DummyConf%Deallocate
   end subroutine InitPETScSolver
 
   !>@brief Finalizes PETSc-solver
@@ -730,9 +754,11 @@ contains ! Module procedures
     
     call VecDestroy(PETScX,Petscerr)
     call VecDestroy(PETScRHS,Petscerr)
+    call VecDestroy(PETScRHS_PreCond,Petscerr)
 
     call MatDestroy(SystMat,Petscerr)
-    !call PCDestroy(PreCondMat,Petscerr)
+    call MatDestroy(SystMat_herm,Petscerr)
+    call MatDestroy(SystMat_PreCond,Petscerr)
     call KSPDestroy(ksp,Petscerr)
     
     deallocate(LocalSpatialPETScIndices)
@@ -963,91 +989,72 @@ contains ! Module procedures
        dt = 1._real64 ! in units of a0
     end if
     ! ..--**  END : Optional parameters **--..
-
-    ! Quark propagator
-    call BuildSystemMatrix(SystMat_herm,GaugeConf,+Mass,WilsonCoeffs,dt)
-    call MatHermitianTranspose(SystMat_herm,MAT_INITIAL_MATRIX,SystMat,PETScErr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in Update_CrankNicholson of '//&
-            modulename//': MatHermitianTranspose failed.',&
-            errorcode = Petscerr)
-    end if
     
-    call KSPSetOperators(ksp,SystMat,SystMat_herm,PETScErr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in Update_CrankNicholson of '//&
-            modulename//': KSPSetOperators failed.',&
-            errorcode = Petscerr)
-    end if
-       
-    !call KSPGetPC(ksp,PreCondMat,PetscErr)
+    ! Quark propagator
+    ! Calling the buildsystemmatrix-routine on all matrices ensures that they have the same
+    ! non-zero-pattern
+    call BuildSystemMatrix(SystMat_herm,GaugeConf,+Mass,WilsonCoeffs,dt)
+    call BuildSystemMatrix(SystMat,GaugeConf,+Mass,WilsonCoeffs,dt)
+    
+    ! ... and hermitian conjugate
+    call MatHermitianTranspose(SystMat,MAT_INPLACE_MATRIX,SystMat,PETScErr)
+    
+    ! ... perform custom preconditioning step
+    call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    
+    call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
+    
+    call KSPSetUp(ksp,Petscerr)
     
     do i=1,nDof
+       ! Load from configuration
        call LoadPropagatorIntoPETSc(HeavyField%QuarkProp,i,PETScX)
+       
        ! Perform half explicit step
        call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
-       if(Petscerr /= 0) then
-          call MPIStop(&
-               errormessage = 'Error in Update_CrankNicholson of '//&
-               modulename//': MatMult failed.',&
-               errorcode = Petscerr)
-       end if
-
-       ! Perform half implicit step
-       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
-       if(Petscerr /= 0) then
-          call MPIStop(&
-               errormessage = 'Error in Update_CrankNicholson of '//&
-               modulename//': KSPSolve failed.',&
-               errorcode = Petscerr)
-       end if
-       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
        
+       ! Perform preconditioning step on RHS
+       call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)
+       
+       ! Perform half implicit step
+       call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
+
+       ! Load into configuration
+       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
     end do
     
     ! Anti quark propagator
     wilsonCoeffs_conjg = conjg(WilsonCoeffs)
     mass_negative = -Mass
-    call BuildSystemMatrix(SystMat_herm,GaugeConf,-Mass,WilsonCoeffs_conjg,dt)
-    call MatHermitianTranspose(SystMat_herm,MAT_INITIAL_MATRIX,SystMat,PETScErr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in Update_CrankNicholson of '//&
-            modulename//': MatHermitianTranspose failed.',&
-            errorcode = Petscerr)
-    end if
+    ! Calling the buildsystemmatrix-routine on all matrices ensures that they have the same
+    ! non-zero-pattern
+    call BuildSystemMatrix(SystMat_herm,GaugeConf,mass_negative,WilsonCoeffs_conjg,dt)
+    call BuildSystemMatrix(SystMat,GaugeConf,mass_negative,WilsonCoeffs_conjg,dt)
     
-    call KSPSetOperators(ksp,SystMat,SystMat_herm,PETScErr)
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in Update_CrankNicholson of '//&
-            modulename//': KSPSetOperators failed.',&
-            errorcode = Petscerr)
-    end if
-    !call KSPGetPC(ksp,PreCondMat,PetscErr)
+    ! ... and hermitian conjugate
+    call MatHermitianTranspose(SystMat,MAT_INPLACE_MATRIX,SystMat,PETScErr)
+    
+    ! ... perform custom preconditioning step
+    call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    
+    call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
+    
+    call KSPSetUp(ksp,Petscerr)
     
     do i=1,nDof
+       ! Load from configuration
        call LoadPropagatorIntoPETSc(HeavyField%AntiQProp,i,PETScX)
        
        ! Perform half explicit step
        call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
-       if(Petscerr /= 0) then
-          call MPIStop(&
-               errormessage = 'Error in Update_CrankNicholson of '//&
-               modulename//': MatMult failed.',&
-               errorcode = Petscerr)
-       end if
+       
+       ! Perform preconditioning step on RHS
+       call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)
        
        ! Perform half implicit step
-       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
-       if(Petscerr /= 0) then
-          call MPIStop(&
-               errormessage = 'Error in Update_CrankNicholson of '//&
-               modulename//': KSPSolve failed.',&
-               errorcode = Petscerr)
-       end if
+       call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
+
+       ! Load into configuration
        call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScX)
     end do
   end subroutine Update_CrankNicholson
@@ -1087,7 +1094,7 @@ contains ! Module procedures
     PetscScalar :: v(ndof**2)
     
     call ResetSystemMatrix(SystMat)
-    
+
     ! O(dt^0)
     ! Unit matrix
     submatrix = GetUnitMatrix(nDof)

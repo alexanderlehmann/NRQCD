@@ -67,8 +67,19 @@ FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
 
 #### List libraries used by the program here
 
-## Int64 aka 8-byte-integer
-LIBS = -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_cdft_core.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_ilp64.a -Wl,--end-group -lpthread -lm -ldl
+## Int64 aka 8-byte-integer with Intel-MPI
+#LIBS = -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_cdft_core.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_ilp64.a -Wl,--end-group -lpthread -lm -ldl
+
+## Int64 aka 8-byte-integer with Open-MPI
+#LIBS = -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_cdft_core.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKL_MPICH}  -Wl,--end-group -lpthread -lm -ldl
+
+#LIBS =  -Wl,--start-group libmkl_blacs_custom_ilp64.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -lm
+
+#FFLAGS += -I${MKLROOT}/include/intel64/ilp64 -mkl=sequential
+
+#LIBS =   ${MKLROOT}/lib/intel64/libmkl_blas95_ilp64.a ${MKLROOT}/lib/intel64/libmkl_lapack95_ilp64.a -lmkl_cdft_core -lmkl_blacs_intelmpi_ilp64 -lpthread -lm -ldl -I${MKLROOT}/include/intel64/ilp64 -mkl=sequential
+
+LIBS = ${MKLROOT}/lib/intel64/libmkl_blas95_ilp64.a ${MKLROOT}/lib/intel64/libmkl_lapack95_ilp64.a -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_cdft_core.a ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_ilp64.a -Wl,--end-group -lpthread -lm -ldl -I${MKLROOT}/include/intel64/ilp64 -I${MKLROOT}/include
 
 LIBS += ${PETSC_LIB}
 
