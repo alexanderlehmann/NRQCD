@@ -3,17 +3,12 @@
 !------------------------------------------------------------------------------
 !
 ! MODULE: fft
-!>@brief
-!! Providing interfaces for fast fourier transforms between real and momentum space
-!!@author
-!! Alexander Lehmann,
-!! UiS (<alexander.lehmann@uis.no>)
+!>@brief Providing interfaces for fast fourier transforms between real and momentum space
+!!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
 !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-!!@date
-!! 19.02.2019
-!!@version
-!! 1.0
-  !------------------------------------------------------------------------------
+!!@date 19.02.2019
+!!@version 1.0
+!------------------------------------------------------------------------------
 module xpfft
   use, intrinsic :: iso_fortran_env
   use precision, only: fp

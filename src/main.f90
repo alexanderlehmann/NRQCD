@@ -15,6 +15,226 @@ module programs
   PUBLIC
 
 contains
+  !>@brief Program for computing the spectral function out of a correlator
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.03.2019
+  !!@version 1.0
+  impure subroutine ComputeSpectrum
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+    use io
+    use windowing
+    use twfft
+    implicit none
+    character(len=200) :: FileName_input, FileName_output
+    integer :: nHeaderLines
+    complex(fp), allocatable :: Correlator(:)
+    real(fp), allocatable :: Spectrum(:)
+
+    real(fp) :: dt
+    
+    call InitSimulation
+
+    if(ThisProc()==0) then
+       write(output_unit,*)'**********************'
+       write(output_unit,*)'Extraction of spectrum'
+       write(output_unit,*)'**********************'
+       write(output_unit,*)
+       write(output_unit,*)'Input file:  ',trim(FileName_input)
+       write(output_unit,*)'Output file: ',trim(FileName_output)
+       call flush(output_unit)
+
+       call ReadSignal(FileName_input,nHeaderLines,Correlator,dt)
+
+       call ApplyHannWindow(Correlator)
+
+       call Symm2FFTformat(Correlator)
+
+       call t2w(Correlator)
+
+       ! Extract spectrum
+       allocate(spectrum(size(correlator)))
+       spectrum = dt*2*aimag(correlator)
+
+       call WriteSpectrum2File(Spectrum,FileName_output,dt)
+    end if
+    call EndSimulation
+
+  contains
+    pure subroutine Symm2FFTformat(signal)
+      implicit none
+      complex(fp), allocatable, intent(inout) :: signal(:)
+      complex(fp), allocatable :: signal_input(:)
+
+      integer :: i,k
+
+      allocate(signal_input(size(signal)))
+      signal_input = signal
+
+      signal(1:size(signal)/2) = signal_input(size(signal)/2:size(signal))
+
+      do i=1,size(signal)/2-2
+         k = size(signal)/2  + i
+
+         signal(k) = signal_input(i)
+      end do
+    end subroutine Symm2FFTformat
+    
+    !>@brief Reads signal/correlator from file
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 22.03.2019
+    !!@version 1.0
+    impure subroutine ReadSignal(FileName,nHeaderLines,Signal,dt)
+      use io
+      implicit none
+      character(len=*),         intent(in)  :: FileName
+      integer,                  intent(in)  :: nHeaderLines
+      complex(fp), allocatable, intent(out) :: Signal(:)
+      real(fp),                 intent(out) :: dt
+
+      integer :: i, SignalSize
+      integer(int8) :: FileID
+      integer :: stat
+      real(fp) :: t,signal_re,signal_im
+      real(fp) :: t2
+      
+      ! 1. Open file
+      FileID = OpenFile(filename=FileName,fm='formatted',act='read',st='old')
+      
+      ! 2. Determine length of signal
+      do i=1,nHeaderLines
+         read(unit=FileID,fmt=*)
+      end do
+      SignalSize = 0
+      do
+         read(unit=FileID,fmt=*,iostat=stat)
+         if(stat/=0) exit
+         SignalSize = SignalSize + 1
+      end do
+      call CloseFile(FileID)
+      
+      ! 3. Read signal
+      allocate(Signal(SignalSize))
+      FileID = OpenFile(filename=FileName,fm='formatted',act='read',st='old')
+      
+      do i=1,nHeaderLines
+         read(unit=FileID,fmt=*)
+      end do
+
+      do i=1,SignalSize
+         read(unit=FileID,fmt=*,iostat=stat) t, signal_re, signal_im
+         if(i==1) then
+            t2 = t
+         elseif(i==2) then
+            dt = t - t2
+         end if
+
+         Signal(i) = cmplx(signal_re,signal_im,fp)
+      end do
+      
+      call CloseFile(FileID) 
+    end subroutine ReadSignal
+
+    !>@brief Writes spectrum to file
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 22.03.2019
+    !!@version 1.0
+    impure subroutine WriteSpectrum2File(Spectrum,FileName,dt)
+      use io
+      use mathconstants, only: pi
+      implicit none
+      real(fp),        intent(in) :: Spectrum(:)
+      character(len=*),intent(in) :: FileName
+      real(fp),        intent(in) :: dt
+
+      integer(int8) :: FileID
+
+      integer(int64) :: i,k
+      
+      real(fp) :: wmin, wmax, dw
+      real(fp), parameter :: twopi = 2*pi
+      
+      fileID = OpenFile(filename=filename,fm='formatted',act='write',st='replace')
+
+      wmin = -pi/dt
+      wmax = +pi/dt
+      dw   = twopi/(dt*size(spectrum))
+
+      ! Starting with negative frequencies...
+      do i=size(spectrum)/2+1,size(spectrum)
+         k = i-size(spectrum)/2
+         write(fileID,fmt='(2(SP,E13.6,1X))') wmin + k*dw,spectrum(i)
+      end do
+
+      ! ...continueing with positive frequencies
+      do i=1,size(spectrum)/2
+         k = i-1
+         write(fileID,fmt='(2(SP,E13.6,1X))') k*dw,spectrum(i)
+      end do
+      call CloseFile(fileID)
+    end subroutine WriteSpectrum2File
+
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 22.03.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface, only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=200) :: arg
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Number of lines in header
+      arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') nheaderlines
+
+      ! Input filename
+      arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
+      FileName_input = arg
+
+      ! Output filename
+      arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
+      FileName_output = arg
+      
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 22.03.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface, only: FinalizeModule_MPIinterface   => FinalizeModule
+      implicit none
+
+      call FinalizeModule_MPIinterface
+
+      STOP "Simulation completed"
+    end subroutine EndSimulation
+  end subroutine ComputeSpectrum
+  
   !>@brief Program for measuring the heavy quarkonium correlator
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -68,9 +288,9 @@ contains
     call InitSimulation
     
     if(ThisProc()==0) then
-       fileID_Correlator = OpenFile(filename="Correlator_3s1.txt",&
+       fileID_Correlator = OpenFile(filename="correlator_3s1.txt",&
             st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Norm = OpenFile(filename="Norm.txt",&
+       fileID_Norm = OpenFile(filename="norm.txt",&
             st='REPLACE',fm='FORMATTED',act='WRITE')
     end if
     
@@ -309,7 +529,7 @@ contains
     end do
     if(ThisProc()==0) call CloseFile(fileID_eg)
 
-    call endsimulation
+    call EndSimulation
   contains
 
     !>@brief Initialisation of the simulation
@@ -844,6 +1064,8 @@ program simulation
      call MeasureEnergyAndGaussLawDeviation
   case(3)
      call MeasureHeavyQuarkoniumCorrelators
+  case(4)
+     call ComputeSpectrum
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
