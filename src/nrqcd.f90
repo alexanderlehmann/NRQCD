@@ -1066,7 +1066,7 @@ contains ! Module procedures
   !!@version 1.0
   impure subroutine BuildSystemMatrix(SystMat,GaugeConf,Mass,WilsonCoeffs,StepWidth)
     use mpiinterface, only: SyncAll
-    use matrixoperations, only: GetUnitMatrix
+    use matrixoperations, only: GetUnitMatrix, GetKronProd
     use lattice, only: nDim,GetLatticeSpacing,GetNeib_G
 
     use mpiinterface, only: ThisProc, MPIStop
@@ -1085,9 +1085,10 @@ contains ! Module procedures
     PetscInt :: SpatialRow, SpatialCol
     PetscErrorCode :: PETScErr
 
-    integer(int8) :: i
-    integer(int64) :: neib_p, neib_m
-    complex(fp), dimension(nDof,nDof) :: submatrix, link
+    integer(int8) :: i,j,k, LeviCivita
+    integer(int64) :: neib_p, neib_m, latticeindex
+    complex(fp), dimension(nDof,nDof) :: submatrix, link_CS
+    complex(fp), dimension(nColours,nColours) :: link, link_p, link_m, efield, efield_p, efield_m, derivEfield
 
     
     PetscInt :: rows(ndof), cols(ndof),nrows,ncols
@@ -1103,7 +1104,7 @@ contains ! Module procedures
     end do
 
     ! O(dt^1)
-    ! .. c1
+    ! .. -c1/2m D^2
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        do i=1,nDim
           ! + delta_{x,y}/(ai**2)/m
@@ -1117,21 +1118,144 @@ contains ! Module procedures
           ! - delta_{x+î,y}U(x,i)/(ai**2)/2m
           neib_p = GetNeib_G(+i,GetLatticeIndex_PETSc(SpatialRow))
           SpatialCol = GetSpatialPETScIndex_G(neib_p)
-          link = GetLinkCS_G(GaugeConf,i,GetLatticeIndex_PETSc(SpatialRow))
+          link_CS = GetLinkCS_G(GaugeConf,i,GetLatticeIndex_PETSc(SpatialRow))
           submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
                *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
-               *Link
+               *Link_CS
           call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
           
           ! - delta_{x-î,y}U(x-î,i)†/(ai**2)/2m
           neib_m = GetNeib_G(-i,GetLatticeIndex_PETSc(SpatialRow))
           SpatialCol = GetSpatialPETScIndex_G(neib_m)
-          link = GetLinkCS_G(GaugeConf,i,neib_m)
+          link_CS = GetLinkCS_G(GaugeConf,i,neib_m)
           submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
                *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
-               *Link
+               *Link_CS
           call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
           
+       end do
+    end do
+
+    ! .. -c3/8m^2.[D_i,g.at.E_i]
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       do i=1,nDim
+          ! + delta_{x,y}/2m ( F(x,jk)-F(x,kj) )/2
+          SpatialCol = SpatialRow
+          LatticeIndex = GetLatticeIndex_PETSc(SpatialCol)
+
+          efield_p = GaugeConf%GetElectricField(i,GetNeib_G(+i,LatticeIndex))
+          efield_m = GaugeConf%GetElectricField(i,GetNeib_G(-i,LatticeIndex))
+          link     = GaugeConf%GetLink_G(i,LatticeIndex)
+          link_m   = GaugeConf%GetLink_G(i,GetNeib_G(-i,LatticeIndex))
+
+          DerivEfield = (&
+               + matmul(matmul(                 link,    efield_p),conjg(transpose(link  ))) &
+               - matmul(matmul( conjg(transpose(link_m)),efield_m),                link_m)   &
+               )/(2*GetLatticeSpacing(i))
+          
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *(-WilsonCoeffs(3))/8/mass**2 &
+               *C2CS(DerivEfield)
+          
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+       end do
+    end do
+
+    ! .. -c2.g/2m B.sigma
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       do i=1,nDim
+          ! + delta_{x,y}/2m ( F(x,jk)-F(x,kj) )/2
+          SpatialCol = SpatialRow
+          LatticeIndex = GetLatticeIndex_PETSc(SpatialCol)
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *(-WilsonCoeffs(2))/2/mass &
+               *GetMagneticField_CS_G(GaugeConf,i,LatticeIndex)
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+       end do
+    end do
+    
+    ! .. -c4.i/8m^2.eps_ijk sigma_k x {D_i,g.at.E_j}
+    do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
+       do i=1,nDim
+          LatticeIndex = GetLatticeIndex_PETSc(SpatialRow)
+          neib_p = GetNeib_G(+i,LatticeIndex)
+          neib_m = GetNeib_G(-i,LatticeIndex)
+          
+          ! Indices of ε:
+          ! positive permutation (i,j,k)
+          j = mod(i,  ndim)+1
+          k = mod(i+1,ndim)+1
+          LeviCivita=+1
+          
+          ! - ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
+          SpatialCol = GetSpatialPETScIndex_G(neib_p)
+
+          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          efield_p = GaugeConf%GetElectricField(j,neib_p)
+          link     = GaugeConf%GetLink_G(i,LatticeIndex)
+
+          DerivEfield = ( matmul(efield,link) + matmul(link,efield_p) )/2/GetLatticeSpacing(i)
+          
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *LeviCivita&
+               *(-WilsonCoeffs(4))/8/mass**2*cmplx(0._fp,1._fp,fp) &
+               *GetKronProd(DerivEfield,SU2Generators(:,:,k))
+
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+
+          ! + ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
+          SpatialCol = GetSpatialPETScIndex_G(neib_m)
+
+          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          efield_m = GaugeConf%GetElectricField(j,neib_m)
+          link_m   = conjg(transpose(GaugeConf%GetLink_G(i,neib_m)))
+
+          DerivEfield = ( matmul(efield,link_m) + matmul(link_m,efield_m) )/2/GetLatticeSpacing(i)
+          
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *LeviCivita&
+               *(+WilsonCoeffs(4))/8/mass**2*cmplx(0._fp,1._fp,fp) &
+               *GetKronProd(DerivEfield,SU2Generators(:,:,k))
+          
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+
+          ! Indices of ε:
+          ! negative permutation (i,j,k)
+          j = mod(i+1,ndim)+1
+          k = mod(i,  ndim)+1
+          LeviCivita=-1
+          
+          ! - ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
+          SpatialCol = GetSpatialPETScIndex_G(neib_p)
+
+          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          efield_p = GaugeConf%GetElectricField(j,neib_p)
+          link     = GaugeConf%GetLink_G(i,LatticeIndex)
+
+          DerivEfield = ( matmul(efield,link) + matmul(link,efield_p) )/2/GetLatticeSpacing(i)
+          
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *LeviCivita&
+               *(-WilsonCoeffs(4))/8/mass**2*cmplx(0._fp,1._fp,fp) &
+               *GetKronProd(DerivEfield,SU2Generators(:,:,k))
+
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
+
+          ! + ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
+          SpatialCol = GetSpatialPETScIndex_G(neib_m)
+
+          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          efield_m = GaugeConf%GetElectricField(j,neib_m)
+          link_m   = conjg(transpose(GaugeConf%GetLink_G(i,neib_m)))
+
+          DerivEfield = ( matmul(efield,link_m) + matmul(link_m,efield_m) )/2/GetLatticeSpacing(i)
+          
+          submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
+               *LeviCivita&
+               *(+WilsonCoeffs(4))/8/mass**2*cmplx(0._fp,1._fp,fp) &
+               *GetKronProd(DerivEfield,SU2Generators(:,:,k))
+          
+          call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
        end do
     end do
     
@@ -1276,4 +1400,36 @@ contains ! Module procedures
          MPI_SUM,&
          MPI_COMM_WORLD,mpierr)
   end function GetMesoncorrelator_3S1_ZeroMomentum
+
+  !>@brief Computes chromo-magnetic field
+  !!@returns chromo-magnetic field
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 22.03.2019
+  !!@version 1.0
+  pure function GetMagneticField_CS_G(GaugeConf,i,LatticeIndex)
+    use lattice, only: nDim
+    implicit none
+    !> Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeConf
+    !> Spatial direction
+    integer(int8),  intent(in) :: i
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+
+    complex(fp), dimension(nDoF,nDoF) :: GetMagneticField_CS_G
+
+    complex(fp), dimension(nColours,nColours) :: MagneticField
+    
+    ! Spatial directions as positive permutation (i,j,k)
+    integer(int8) :: j,k
+    
+    j = modulo(i,       nDim)+1_int8
+    k = modulo(i+1_int8,nDim)+1_int8
+
+    MagneticField = ( GaugeConf%GetFieldStrengthTensor_G(j,k,LatticeIndex)&
+         + GaugeConf%GetFieldStrengthTensor_G(k,j,LatticeIndex) ) / 2
+    
+    GetMagneticField_CS_G = C2CS(MagneticField)
+  end function GetMagneticField_CS_G
 end module nrqcd
