@@ -1130,7 +1130,7 @@ contains ! Module procedures
           link_CS = GetLinkCS_G(GaugeConf,i,neib_m)
           submatrix = cmplx(0._fp,-StepWidth/2*GetLatticeSpacing(0_int8),fp)&
                *(-WilsonCoeffs(1))/2/mass/GetLatticeSpacing(i)**2 &
-               *Link_CS
+               *conjg(transpose(Link_CS))
           call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
           
        end do
@@ -1258,7 +1258,7 @@ contains ! Module procedures
           call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
        end do
     end do
-    
+
     call SyncAll
     call MatAssemblyBegin(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
     call MatAssemblyEnd(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)

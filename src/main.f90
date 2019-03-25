@@ -301,7 +301,8 @@ contains
     t2 = t+s/2     ! varies
     
     ! Initial value for gauge field at t=0
-    call GaugeConf_atT1%ColdInit
+    call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
 
     ! Evolving gauge configuration to t1 (possibly negative)
     TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
@@ -330,6 +331,13 @@ contains
           if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
           call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,real(sign(+1,is),fp))
           call GaugeConf%Update
+
+          !norm_quark = HeavyField%GetNorm_Quark()
+          !norm_antiq = HeavyField%GetNorm_AntiQ()
+          !if(ThisProc()==0) then
+          !   write(OUTPUT_UNIT,'(2(SP,E19.12,1X))') norm_quark,norm_antiq
+          !   call flush(output_unit)
+          !end if
        end do dtstep_in_s
 
        mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
@@ -340,7 +348,7 @@ contains
           write(FileID_Correlator,'(3(SP,E16.9,1X))') &
                s,real(mesoncorrelator,real64),aimag(mesoncorrelator)
           write(FileID_Norm,'(3(SP,E19.12,1X))')&
-             s,norm_quark,norm_antiq
+               s,norm_quark,norm_antiq
        end if
 
        call GaugeConf_atT1%Update
