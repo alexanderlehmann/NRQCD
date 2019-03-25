@@ -1000,9 +1000,10 @@ contains ! Module procedures
     call MatHermitianTranspose(SystMat,MAT_INPLACE_MATRIX,SystMat,PETScErr)
     
     ! ... perform custom preconditioning step
-    call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    !call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    !call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
     
-    call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
+    call KSPSetOperators(ksp,SystMat,SystMat,PETScErr)
     
     call KSPSetUp(ksp,Petscerr)
     
@@ -1014,11 +1015,11 @@ contains ! Module procedures
        call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
        
        ! Perform preconditioning step on RHS
-       call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)
-       
+       !call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)       
        ! Perform half implicit step
-       call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
-
+       !call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
+       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
+       
        ! Load into configuration
        call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
     end do
@@ -1035,9 +1036,10 @@ contains ! Module procedures
     call MatHermitianTranspose(SystMat,MAT_INPLACE_MATRIX,SystMat,PETScErr)
     
     ! ... perform custom preconditioning step
-    call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    !call MatMatMultNumeric(SystMat_herm,SystMat,SystMat_PreCond,PETScErr)
+    !call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
     
-    call KSPSetOperators(ksp,SystMat_precond,SystMat_precond,PETScErr)
+    call KSPSetOperators(ksp,SystMat,SystMat,PETScErr)
     
     call KSPSetUp(ksp,Petscerr)
     
@@ -1049,11 +1051,13 @@ contains ! Module procedures
        call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
        
        ! Perform preconditioning step on RHS
-       call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)
+       !call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)
        
        ! Perform half implicit step
-       call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
+       !call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
 
+       call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
+       
        ! Load into configuration
        call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScX)
     end do
