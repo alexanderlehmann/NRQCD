@@ -48,7 +48,7 @@ contains
 
        call ReadSignal(FileName_input,nHeaderLines,Correlator,dt)
 
-       call ApplyHannWindow(Correlator)
+       !call ApplyHannWindow(Correlator)
 
        call Symm2FFTformat(Correlator)
 
@@ -300,10 +300,10 @@ contains
     t1 = t-s/2     ! varies
     t2 = t+s/2     ! varies
     
-    ! Initial value for gauge field at t=0
-    call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-
+    !call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
+    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    call Gaugeconf_atT1%ColdInit
+    
     ! Evolving gauge configuration to t1 (possibly negative)
     TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
     do it=1,TimeSteps
@@ -311,9 +311,9 @@ contains
        call GaugeConf_atT1%Update(sign(+1._real64,t1))
     end do
 
-    ! Initial value for heavy field at t1
+    ! Initialising heavy field
     call HeavyField_atT1%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
-    svalues: do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
+    do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
        s = is*LatticeSpacings(0)
 
        if(ThisProc()==0) write(output_unit,*) 's=',real(s,real32),'step',int(is,int16),'max=',&
@@ -324,27 +324,29 @@ contains
 
        ! Initialising quark-pair at t1 ...
        HeavyField = HeavyField_atT1
-
-       ! ... and evolving to t2
+       
+        ! ... and evolving to t2
        TimeSteps = abs(is)
-       dtstep_in_s: do it=1,TimeSteps
+       
+       do it=1,TimeSteps
           if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
-          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,real(sign(+1,is),fp))
-          call GaugeConf%Update
-
-          !norm_quark = HeavyField%GetNorm_Quark()
-          !norm_antiq = HeavyField%GetNorm_AntiQ()
-          !if(ThisProc()==0) then
-          !   write(OUTPUT_UNIT,'(2(SP,E19.12,1X))') norm_quark,norm_antiq
-          !   call flush(output_unit)
-          !end if
-       end do dtstep_in_s
+          if(is>0) then
+             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
+             call GaugeConf%Update
+          else
+             call GaugeConf%Update(-1._fp)
+             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
+          end if
+       end do
 
        mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
        norm_quark = HeavyField%GetNorm_Quark()
        norm_antiq = HeavyField%GetNorm_AntiQ()
 
        if(ThisProc()==0) then
+          write(output_unit,*)  int(is,int8),mesoncorrelator, norm_quark, norm_antiq
+          call flush(output_unit)
+          
           write(FileID_Correlator,'(3(SP,E16.9,1X))') &
                s,real(mesoncorrelator,real64),aimag(mesoncorrelator)
           write(FileID_Norm,'(3(SP,E19.12,1X))')&
@@ -352,7 +354,7 @@ contains
        end if
 
        call GaugeConf_atT1%Update
-    end do svalues
+    end do
 
     ! Closing files
     if(ThisProc()==0) then
