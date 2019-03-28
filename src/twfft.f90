@@ -30,10 +30,13 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.03.2019
   !!@version 1.0
-  subroutine w2t(data_)
+  subroutine w2t(data_,dt)
     implicit none
     !> Fourier-transform input and output
     complex(fp), intent(inout) :: data_(:)
+    !> Temporal spacing
+    real(fp), intent(in) :: dt
+    
 
     complex(real64), allocatable :: data(:)
 
@@ -49,7 +52,7 @@ contains
          DFTI_COMPLEX,tw_nrank,tw_length)
     status = DftiSetValue(tw_desc,&
          DFTI_FORWARD_SCALE,&
-         1._real64)
+         real(1/(dt*tw_length),real64))
     status = DftiCommitDescriptor(tw_desc)
 
     allocate(data(size(data_)))
@@ -67,10 +70,12 @@ contains
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 22.03.2019
   !!@version 1.0
-  subroutine t2w(data_)
+  subroutine t2w(data_,dt)
     implicit none
     !> Fourier-transform input and output
     complex(fp), intent(inout) :: data_(:)
+    !> Temporal spacing
+    real(fp), intent(in) :: dt
 
     complex(real64), allocatable :: data(:)
     
@@ -86,7 +91,7 @@ contains
          DFTI_COMPLEX,tw_nrank,tw_length)
     status = DftiSetValue(tw_desc,&
          DFTI_BACKWARD_SCALE,&
-         1._real64/tw_length)
+         real(dt,real64))
     status = DftiCommitDescriptor(tw_desc)
 
     allocate(data(size(data_)))

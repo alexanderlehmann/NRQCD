@@ -27,6 +27,8 @@ contains
     use io
     use windowing
     use twfft
+
+    use mathconstants, only: pi
     implicit none
     character(len=200) :: FileName_input, FileName_output
     integer :: nHeaderLines
@@ -34,6 +36,9 @@ contains
     real(fp), allocatable :: Spectrum(:)
 
     real(fp) :: dt
+
+    integer :: it
+    integer(int8) :: fileID
     
     call InitSimulation
 
@@ -47,23 +52,56 @@ contains
        call flush(output_unit)
 
        call ReadSignal(FileName_input,nHeaderLines,Correlator,dt)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='input.txt',fm='formatted',act='write',st='replace')
 
-       !call ApplyHannWindow(Correlator)
+          do it=1,size(correlator)
+             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+          end do
+
+          call CloseFile(fileID)
+       end if
+
+       call ApplyHannWindow(Correlator)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='hanned.txt',fm='formatted',act='write',st='replace')
+
+          do it=1,size(correlator)
+             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+          end do
+
+          call CloseFile(fileID)
+       end if
 
        call Symm2FFTformat(Correlator)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='fftformat.txt',fm='formatted',act='write',st='replace')
 
-       call t2w(Correlator)
+          do it=1,size(correlator)
+             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+          end do
+
+          call CloseFile(fileID)
+       end if
+
+       call t2w(Correlator,dt)
 
        ! Extract spectrum
        allocate(spectrum(size(correlator)))
-       spectrum = dt*2*aimag(correlator)
+       
+       spectrum = 2*aimag(correlator)
 
        call WriteSpectrum2File(Spectrum,FileName_output,dt)
     end if
     call EndSimulation
 
   contains
-    pure subroutine Symm2FFTformat(signal)
+    !>@brief Transforms symmetrized signal into FFT format
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 22.03.2019
+    !!@version 1.0
+    impure subroutine Symm2FFTformat(signal)
       implicit none
       complex(fp), allocatable, intent(inout) :: signal(:)
       complex(fp), allocatable :: signal_input(:)
@@ -73,10 +111,10 @@ contains
       allocate(signal_input(size(signal)))
       signal_input = signal
 
-      signal(1:size(signal)/2) = signal_input(size(signal)/2:size(signal))
+      signal(1:size(signal)/2) = signal_input(size(signal)/2+1:size(signal))
 
-      do i=1,size(signal)/2-2
-         k = size(signal)/2  + i
+      do i=1,size(signal)/2
+         k = size(signal)/2 + i 
 
          signal(k) = signal_input(i)
       end do
@@ -269,8 +307,8 @@ contains
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1
-    type(NRQCDField)         :: HeavyField, HeavyField_atT1
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1, GaugeConf_at0
+    type(NRQCDField)         :: HeavyField, HeavyField_atT1, HeavyField_at0
 
     ! Counting
     integer :: i
@@ -283,16 +321,97 @@ contains
     real(fp) :: norm_quark, norm_antiq
     complex(fp) :: mesoncorrelator
     integer(int8) :: FileID_Norm, FileID_Correlator
-    
+
+    complex(fp), allocatable :: correlator(:)
+    real(fp),allocatable :: time(:), norm(:,:)
     
     call InitSimulation
+
+    ! Do it as a plain fourier transform
+    t1 = t-s/2     ! fixed
+    t2 = t+s/2     ! fixed
+
+    !call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
+    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    call Gaugeconf_at0%ColdInit
+
+    ! Initialising heavy field
+    call HeavyField_at0%InitSinglePoint(spin=1_int8,colour=1_int8,latticeindex=1_int64)
+
     
+    ! Negative Time evolution
+    GaugeConf=GaugeConf_at0
+    HeavyField=HeavyField_at0
+
+    allocate(correlator(nint(2*TimeRange/LatticeSpacings(0))))
+    allocate(time(nint(2*TimeRange/LatticeSpacings(0))))
+    allocate(norm(2,nint(2*TimeRange/LatticeSpacings(0))))
+    do it=0,-nint(TimeRange/LatticeSpacings(0)),-1 !nint(+TimeRange/LatticeSpacings(0))
+       t = it*LatticeSpacings(0)
+
+       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+       norm_quark = HeavyField%GetNorm_Quark()
+       norm_antiq = HeavyField%GetNorm_AntiQ()
+
+       correlator(1+nint(TimeRange/LatticeSpacings(0))+it) = mesoncorrelator
+       time(1+nint(TimeRange/LatticeSpacings(0))+it) = t
+       norm(:,1+nint(TimeRange/LatticeSpacings(0))+it) = [norm_quark,norm_antiq]
+       
+       if(ThisProc()==0) then
+          write(output_unit,*)  t,mesoncorrelator, norm_quark, norm_antiq
+          call flush(output_unit)
+       end if
+
+       call GaugeConf%Update(-1._fp)
+       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
+    end do
+    
+    ! Positive Time Evolution
+    GaugeConf=GaugeConf_at0
+    HeavyField=HeavyField_at0
+    do it=1,nint(TimeRange/LatticeSpacings(0))-1,+1
+       t = it*LatticeSpacings(0)
+
+       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
+       call GaugeConf%Update(+1._fp)
+
+       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+       norm_quark = HeavyField%GetNorm_Quark()
+       norm_antiq = HeavyField%GetNorm_AntiQ()
+
+       correlator(1+nint(TimeRange/LatticeSpacings(0)) + it) = mesoncorrelator
+       time(1+nint(TimeRange/LatticeSpacings(0)) + it) = t
+       norm(:,1+nint(TimeRange/LatticeSpacings(0)) + it) = [norm_quark,norm_antiq]
+       
+       if(ThisProc()==0) then
+          write(output_unit,*)  t,mesoncorrelator, norm_quark, norm_antiq
+          call flush(output_unit)
+       end if
+    end do
+
     if(ThisProc()==0) then
+       ! Opening files
        fileID_Correlator = OpenFile(filename="correlator_3s1.txt",&
             st='REPLACE',fm='FORMATTED',act='WRITE')
        fileID_Norm = OpenFile(filename="norm.txt",&
             st='REPLACE',fm='FORMATTED',act='WRITE')
+
+       do it=1,size(correlator)
+          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
+               time(it),real(correlator(it),real64),aimag(correlator(it))
+          write(FileID_Norm,'(3(SP,E19.12,1X))')&
+               time(it),norm(1,it),norm(2,it)
+       end do
+
+       ! Closing files
+       call CloseFile(FileID_Correlator)
+       call CloseFile(FileID_Norm)
     end if
+
+    call HeavyField%Destructor
+    
+    call EndSimulation
+    
     
     ! Determination of CMS coordinates
     t  = CoMTime   ! fixed
@@ -308,7 +427,7 @@ contains
     TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
     do it=1,TimeSteps
        if(ThisProc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
-       call GaugeConf_atT1%Update(sign(+1._real64,t1))
+       !call GaugeConf_atT1%Update(sign(+1._real64,t1))
     end do
 
     ! Initialising heavy field
@@ -332,9 +451,9 @@ contains
           if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
           if(is>0) then
              call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
-             call GaugeConf%Update
+        !     call GaugeConf%Update
           else
-             call GaugeConf%Update(-1._fp)
+        !     call GaugeConf%Update(-1._fp)
              call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
           end if
        end do
