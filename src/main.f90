@@ -80,48 +80,9 @@ contains
     character(len=80) :: FileGluonicWilsonLoops, FileFermionicWilsonLoops
 
     integer(intmpi) :: proc
-
-    integer(int64) :: Memoryindex
-
-    real(fp) :: energy, gauss, time
     
     call InitSimulation
 
-    call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-
-    do it=1,10
-       time = it*GetLatticeSpacing(0_int8)
-       gauss = GaugeConf%GetDeviationFromGaussLaw()
-       energy= GaugeConf%GetEnergy()
-       if(ThisProc()==0) write(output_unit,'(3(SP,E20.12,1X))') time,energy,gauss
-       call GaugeConf%Update
-    end do
-    call EndSimulation
-    
-
-    call Gaugeconf_atT1%ColdInit
-    xr = x0
-    call HeavyField_atT1%InitSinglePoint(&
-         latticeindex_quark=x0, latticeindex_antiq=xr)
-    do it=1,10
-       if(ThisProc()==0) write(output_unit,*) it
-       call HeavyField_atT1%Update(GaugeConf_atT1,HeavyQuarkMass,WilsonCoefficients)
-    end do
-    do proc=0,NumProcs()
-       if(ThisProc()==proc) then
-          write(output_unit,*) HeavyField_atT1%GetQuarkProp_G(1_int64)!GetLatticeIndex(GetLocalLowerLatticeBoundary([1_int8:nDim])))
-          write(output_unit,*)
-          call flush(output_unit)
-       end if
-
-       call SyncAll
-    end do
-
-    call EndSimulation
-
-
-    
     rmax = LatticeExtensions(messdir)/2
     
     ! Determination of CMS coordinates
@@ -337,10 +298,9 @@ contains
 
       call FinalizeModule_NRQCD
       call FinalizeModule_xpFFT
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       call FinalizeModule_MPIinterface
 
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
   end subroutine MeasureWilsonLines
@@ -597,9 +557,9 @@ contains
       use mpiinterface, only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
       implicit none
 
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       call FinalizeModule_MPIinterface
 
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
   end subroutine ComputeSpectrum
@@ -662,9 +622,9 @@ contains
     t1 = t-s/2     ! fixed
     t2 = t+s/2     ! fixed
 
-    call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    !call Gaugeconf_at0%ColdInit
+    !call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
+    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    call Gaugeconf_at0%ColdInit
 
     ! Initialising heavy field
     call HeavyField_at0%InitSinglePointSingleDoF(&
@@ -931,10 +891,9 @@ contains
 
       call FinalizeModule_NRQCD
       call FinalizeModule_xpFFT
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       call FinalizeModule_MPIinterface
-
+      
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
   end subroutine MeasureHeavyQuarkoniumCorrelators
@@ -1085,10 +1044,9 @@ contains
       implicit none
 
       call FinalizeModule_xpFFT
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       call FinalizeModule_MPIinterface
 
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
   end subroutine MeasureEnergyAndGaussLawDeviation
@@ -1503,10 +1461,9 @@ contains
       implicit none
       
       call FinalizeModule_xpFFT
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       call FinalizeModule_MPIinterface
 
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
   end subroutine MeasureGluondistribution

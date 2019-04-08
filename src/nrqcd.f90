@@ -621,6 +621,8 @@ contains ! Module procedures
 
     ! Dummy variables for first matrix building
     type(SU3GaugeConfiguration) :: DummyConf
+
+    PetscScalar :: TestScalar
     
     !call PETScInitialize(PETSC_NULL_CHARACTER,Petscerr)
 
@@ -630,6 +632,9 @@ contains ! Module procedures
     !        modulename//': Initialisation of PETSc failed.',&
     !        errorcode = Petscerr)
     !end if
+
+    TestScalar = cmplx(1,1,fp)
+    TestScalar = conjg(TestScalar)
 
     call InitLocalSpatialPETScIndices(LocalSpatialPETScIndices)
     
@@ -1027,6 +1032,7 @@ contains ! Module procedures
   impure subroutine Update_CrankNicholson(HeavyField,GaugeConf,Mass,WilsonCoeffs,StepWidth)
     use mpiinterface, only: mpistop, ThisProc
 
+use lattice
     use mpiinterface, only: numprocs, intmpi, syncall
     implicit none
     !> NRQCD heavy field
@@ -1050,7 +1056,7 @@ contains ! Module procedures
 
     integer(intmpi) :: proc
     integer(int64) :: row
-    
+
     ! ..--** START: Optional parameters **--..
     if(present(StepWidth)) then
        dt = StepWidth
@@ -1076,24 +1082,29 @@ contains ! Module procedures
     call KSPSetOperators(ksp,SystMat,SystMat,PETScErr)
     
     call KSPSetUp(ksp,Petscerr)
-    
+
     do i=1,nDof
        ! Load from configuration
        call LoadPropagatorIntoPETSc(HeavyField%QuarkProp,i,PETScX)
-       
+
        ! Perform half explicit step
        call MatMult(SystMat_herm,PETScX,PETScRHS,PETScErr)
-       
+
+       call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScRHS)
+
+       !**: START preconditioning
        ! Perform preconditioning step on RHS
        !call MatMult(SystMat_herm,PETScRHS,PETScRHS_precond,PETScErr)       
        ! Perform half implicit step
        !call KSPSolve(ksp,PETScRHS_precond,PETScX,PETScErr)
+       !**: END preconditioning
+
        call KSPSolve(ksp,PETScRHS,PETScX,PETScErr)
-       
+
        ! Load into configuration
        call LoadPropagatorFromPETSc(HeavyField%QuarkProp,i,PETScX)
     end do
-    
+
     ! Anti quark propagator
     wilsonCoeffs_conjg = conjg(WilsonCoeffs)
     mass_negative = -Mass
@@ -1165,10 +1176,6 @@ contains ! Module procedures
     integer(int64) :: neib_p, neib_m, latticeindex
     complex(fp), dimension(nDof,nDof) :: submatrix, link_CS
     complex(fp), dimension(nColours,nColours) :: link, link_p, link_m, efield, efield_p, efield_m, derivEfield
-
-    
-    PetscInt :: rows(ndof), cols(ndof),nrows,ncols
-    PetscScalar :: v(ndof**2)
     
     call ResetSystemMatrix(SystMat)
 
@@ -1212,7 +1219,6 @@ contains ! Module procedures
           
        end do
     end do
-1   continue
     
     ! .. -c3/8m^2.[D_i,g.at.E_i]
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow

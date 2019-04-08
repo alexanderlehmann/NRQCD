@@ -8,7 +8,7 @@ gaugeconfiguration_su3.o : gaugeconfiguration_su3.f90 mathconstants.o xpfft.o to
 halocomm.o : halocomm.f90 arrayoperations.o lattice.o mpiinterface.o precision.o 
 io.o : io.f90 mpiinterface.o 
 lattice.o : lattice.f90 tolerances.o mathconstants.o arrayoperations.o mpiinterface.o precision.o 
-main.o : main.f90 statistics.o tolerances.o xpfft.o halocomm.o random.o wilsonline.o nrqcd.o gaugeconfiguration_su3.o lattice.o mathconstants.o twfft.o windowing.o io.o mpiinterface.o precision.o 
+main.o : main.f90 statistics.o mathconstants.o twfft.o windowing.o tolerances.o xpfft.o random.o wilsonline.o nrqcd.o halocomm.o io.o gaugeconfiguration_su3.o lattice.o mpiinterface.o precision.o 
 mathconstants.o : mathconstants.f90 precision.o 
 matrixoperations.o : matrixoperations.f90 precision.o 
 mkl_cdft.o : mkl_cdft.f90 mkl_dfti.o 
