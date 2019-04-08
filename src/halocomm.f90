@@ -229,77 +229,89 @@ contains ! Module procedures
     use, intrinsic :: iso_fortran_env
     use mpi
     use lattice, only: GetMemoryIndex
-    use mpiinterface, only: ThisProc, GetRealSendType
+    use mpiinterface, only: ThisProc,GetRealSendType
     implicit none
     real(fp), intent(inout) :: data(:)
 
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(fp), allocatable :: buffer(:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    real(fp), asynchronous, allocatable :: sendbuffer(:,:),recvbuffer(:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(MaxHaloPoints))
+    allocate(sendbuffer(MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(BufferIndex) = data(MemoryIndex)
-       end do packing
+          sendbuffer(BufferIndex,neib) = data(MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,neib),              & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,neib),              & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
-          ! Assign data to buffer
-          data(MemoryIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          ! Assign buffer to data
+          data(MemoryIndex) = recvbuffer(BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_real_rank1
 
   !>@brief Communication of 2D-array with real entries
@@ -318,70 +330,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(fp), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    real(fp), asynchronous, allocatable :: sendbuffer(:,:,:),recvbuffer(:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,MemoryIndex)
-       end do packing
+          sendbuffer(:,BufferIndex,neib) = data(:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,neib),            & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,neib),            & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,MemoryIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,MemoryIndex) = recvbuffer(:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_real_rank2
 
   !>@brief Communication of 3D-array with real entries
@@ -400,70 +424,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(fp), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    real(fp), asynchronous, allocatable :: sendbuffer(:,:,:,:),recvbuffer(:,:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),size(data,2),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,MemoryIndex)
-       end do packing
+          sendbuffer(:,:,BufferIndex,neib) = data(:,:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,1,neib),          & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,1,neib),          & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,MemoryIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,:,MemoryIndex) = recvbuffer(:,:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_real_rank3
 
   !>@brief Communication of 4D-array with real entries
@@ -482,70 +518,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    real(fp), allocatable :: buffer(:,:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    real(fp), asynchronous, allocatable :: sendbuffer(:,:,:,:,:),recvbuffer(:,:,:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
-          ! Assign buffer to data
-          buffer(:,:,:,BufferIndex) = data(:,:,:,MemoryIndex)
-       end do packing
+          ! Assign data to buffer
+          sendbuffer(:,:,:,BufferIndex,neib) = data(:,:,:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,1,1,neib),        & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,1,1,neib),        & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetRealSendType(),    & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1,1),&          ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1,1),&          ! ... and it's first index
-            buffersize,&        ! How many points
-            GetRealSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,:,MemoryIndex) = buffer(:,:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,:,:,MemoryIndex) = recvbuffer(:,:,:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_real_rank4
 
   !>@brief Communication of 1D-array with complex entries
@@ -564,70 +612,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(fp), allocatable :: buffer(:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    complex(fp), asynchronous, allocatable :: sendbuffer(:,:),recvbuffer(:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(MaxHaloPoints))
+    allocate(sendbuffer(MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(BufferIndex) = data(MemoryIndex)
-       end do packing
+          sendbuffer(BufferIndex,neib) = data(MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,neib),              & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,neib),              & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1),&                ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(MemoryIndex) = buffer(BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(MemoryIndex) = recvbuffer(BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_complex_rank1
 
   !>@brief Communication of 2D-array with complex entries
@@ -646,70 +706,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(fp), allocatable :: buffer(:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    complex(fp), asynchronous, allocatable :: sendbuffer(:,:,:),recvbuffer(:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,BufferIndex) = data(:,MemoryIndex)
-       end do packing
+          sendbuffer(:,BufferIndex,neib) = data(:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,neib),            & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,neib),            & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1),&              ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,MemoryIndex) = buffer(:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,MemoryIndex) = recvbuffer(:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_complex_rank2
 
   !>@brief Communication of 3D-array with complex entries
@@ -728,70 +800,82 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(fp), allocatable :: buffer(:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    complex(fp), asynchronous, allocatable :: sendbuffer(:,:,:,:),recvbuffer(:,:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),size(data,2),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),size(data,2),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,BufferIndex) = data(:,:,MemoryIndex)
-       end do packing
+          sendbuffer(:,:,BufferIndex,neib) = data(:,:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,1,neib),          & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,1,neib),          & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1),&            ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,MemoryIndex) = buffer(:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,:,MemoryIndex) = recvbuffer(:,:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_complex_rank3
 
   !>@brief Communication of 4D-array with complex entries
@@ -810,69 +894,81 @@ contains ! Module procedures
     integer(int8), parameter :: r=rank(data)
     
     ! MPI
-    complex(fp), allocatable :: buffer(:,:,:,:)
-    integer(intmpi) :: dest, src, sendtag, recvtag, buffersize, status(mpi_status_size), mpierr
+    complex(fp), asynchronous, allocatable :: sendbuffer(:,:,:,:,:),recvbuffer(:,:,:,:,:)
+    integer(intmpi) :: dest, src, tag, buffersize, mpierr, status(mpi_status_size)
 
     integer(intmpi) :: neib
     integer(intmpi) :: ValuesPerPoint, MaxHaloPoints
     integer(intmpi) :: BufferIndex
+    integer(intmpi), allocatable :: sendrequests(:)
     integer(int64) :: MemoryIndex
     integer(int64) :: LatticeIndex
     
     MaxHaloPoints = MaxVal(NeibPoints,DIM=1)
     
-    allocate(buffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints))
+    allocate(sendbuffer(size(data,1),size(data,2),size(data,3),MaxHaloPoints,neibs))
+    allocate(recvbuffer,source=sendbuffer)
 
     ValuesPerPoint = size(data)/size(data,r)
-    
-    AllNeighbours: do neib=1,Neibs
-       buffersize = ValuesPerPoint*NeibPoints(neib)
+    allocate(sendrequests(neibs))
 
-       ! Prepare buffer with send-data
-       packing: do BufferIndex=1,NeibPoints(neib)
+    packing: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = SendList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign data to buffer
-          buffer(:,:,:,BufferIndex) = data(:,:,:,MemoryIndex)
-       end do packing
+          sendbuffer(:,:,:,BufferIndex,neib) = data(:,:,:,MemoryIndex)
+       end do
+    end do packing
 
-       ! Send and recieve
+    sending: do neib=1,neibs
        dest = HaloProcs(neib)
-       src  = dest
+       tag  = ThisProc()
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_ISEND(&
+            sendbuffer(           & ! What to communicate...
+            1,1,1,1,neib),        & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            dest, tag,            & ! Destination and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            sendrequests(neib),   & ! Request handle
+            mpierr)                 ! Error-code
+    end do sending
+    
+    recieving: do neib=1,neibs
+       src = HaloProcs(neib)
+       tag = src
+       buffersize = ValuesPerPoint*NeibPoints(neib)
+       call MPI_RECV(&
+            recvbuffer(           & ! What to communicate...
+            1,1,1,1,neib),        & ! ... and it's first index
+            buffersize,           & ! How many points
+            GetComplexSendType(), & ! What type
+            src,  tag,            & ! Source and tag
+            MPI_COMM_WORLD,       & ! MPI-Communicator
+            status,               & ! Status
+            mpierr)                 ! Error code
+    end do recieving
 
-       sendtag = ThisProc()
-       recvtag = dest
-
-       call MPI_SendRecv(&
-            buffer(&            ! What to send ...
-            1,1,1,1),&          ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to send
-            dest, sendtag,&     ! Destination and sendtag
-            buffer(&            ! What to recieve ...
-            1,1,1,1),&          ! ... and it's first index
-            buffersize,&        ! How many points
-            GetComplexSendType(),& ! What type to recieve
-            src,  recvtag,&     ! Source and recvtag
-            mpi_comm_world,&    ! Communicator
-            status, mpierr)     ! Status and error-code
-
-       ! Unpack recieved data from buffer
-       unpacking: do BufferIndex=1,NeibPoints(neib)
+    unpacking: do neib=1,neibs
+       do BufferIndex=1,NeibPoints(neib)
           ! Get global lattice index
           LatticeIndex = RecvList(BufferIndex,neib)
-          
+
           ! Get local index in data
           MemoryIndex = GetMemoryIndex(LatticeIndex)
 
           ! Assign buffer to data
-          data(:,:,:,MemoryIndex) = buffer(:,:,:,BufferIndex)
-       end do unpacking
-    end do AllNeighbours
-    deallocate(buffer)
+          data(:,:,:,MemoryIndex) = recvbuffer(:,:,:,BufferIndex,neib)
+       end do
+    end do unpacking
+    
+    ! Wait for all sends to finish
+    call MPI_WaitAll(neibs,sendrequests,MPI_STATUSES_IGNORE,mpierr)
   end subroutine CommunicateBoundary_complex_rank4
 end module halocomm

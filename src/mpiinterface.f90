@@ -68,13 +68,14 @@ contains
   impure subroutine InitModule
     use precision, only: fp
     use, intrinsic :: iso_fortran_env
+    use petsc
     implicit none
     integer(intmpi) :: mpierr
 
     if(isInitialised) then
        call MPISTOP('Error in init of '//modulename//': already initialised.')
     else
-       call MPI_INIT(mpierr)
+       call PETScInitialize(PETSC_NULL_CHARACTER,mpierr)!MPI_INIT(mpierr)
        if(mpierr /= MPI_SUCCESS) then
           write(ERROR_UNIT,*) 'Error while MPI-initialization. Error code:',mpierr
           STOP
@@ -119,11 +120,20 @@ contains
   !!@date 17.02.2019
   !!@version 1.0
   impure subroutine FinalizeModule
+    use petsc
     implicit none
     integer(intmpi) :: mpierr
     
     if(IsInitialised) then
-       call MPI_FINALIZE(mpierr)
+       !call MPI_FINALIZE(mpierr)
+       call PETScFinalize(mpierr)
+
+       if(mpierr /= 0) then
+          call MPIStop(&
+               errormessage = 'Error in finalization of '//&
+               modulename//': Finalization of PETSc failed.',&
+               errorcode = mpierr)
+       end if
        IsInitialised = .FALSE.
     else
        call MPISTOP('Error in finalization of '//modulename//': is not initialised.')

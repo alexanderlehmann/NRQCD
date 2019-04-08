@@ -3,18 +3,15 @@ FC=mpiifort
 
 PROGRAM = run.exe
 
-MKLROOT=intel/mkl
-PETSC_DIR=${HOME}/software/petsc
-PETSC_ARCH=${PETSC_DIR}/arch-linux2-c-debug
-PETSC_LIB=${PETSC_ARCH}/lib/libpetsc.so
+PETSC_LIB=${PETSC_DIR}/lib/libpetsc.so
 
 #### Compiler options
 
 #### Optimization
-FFLAGS = -O3
+FFLAGS = -O0
 
 # Inter-file inlining optimization
-FFLAGS += -ipo
+#FFLAGS += -ipo
 
 # Suppressing warning about too long routine names
 FFLAGS += -diag-disable 5462 -diag-disable 6536
@@ -23,7 +20,7 @@ FFLAGS += -diag-disable 5462 -diag-disable 6536
 FFLAGS += -fpp
 
 # Include files
-FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include -I${PETSC_ARCH}/include
+FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include
 
 #FFLAGS += -g -traceback
 

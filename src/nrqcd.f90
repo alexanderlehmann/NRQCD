@@ -31,7 +31,7 @@ module nrqcd
 
   PRIVATE
 
-  public NRQCDField, InitModule, FinalizeModule
+  public NRQCDField, InitModule, FinalizeModule,S2CS,C2CS,GetLinkCS_M,GetLinkCS_G
 
   !> Module name
   character(len=5), parameter, public ::  modulename='nrqcd'
@@ -77,6 +77,7 @@ module nrqcd
      
      ! Initialisation routines
      procedure, public :: InitSinglePoint
+     procedure, public :: InitSinglePointSingleDoF
 
      ! Norm
      procedure, public :: GetNorm_Quark
@@ -88,6 +89,10 @@ module nrqcd
 
      ! Mesoncorrelators
      procedure, public :: GetMesoncorrelator_3S1_ZeroMomentum
+
+     ! Access function
+     procedure, public :: GetQuarkProp_G
+     procedure, public :: GetAntiqProp_G
   end type NRQCDField
 
 
@@ -290,23 +295,57 @@ contains ! Module procedures
   end subroutine CommunicateBoundary_Propagator
 
   !>@brief Initialises the propagator and anti-propagator
+  !! at a single spatial point with a normalized unit matrix in colour x spin -space
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 07.04.2019
+  !!@version 1.0
+  impure subroutine InitSinglePoint(Heavyfield,LatticeIndex_quark,LatticeIndex_antiq)
+    use mpiinterface, only: ThisProc
+    use lattice, only: GetProc_G, GetMemoryIndex
+    use matrixoperations, only: GetUnitMatrix
+    use precision, only: fp
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(out) :: HeavyField
+    !> Lattice index of created quark
+    integer(int64),    intent(in)  :: LatticeIndex_quark,LatticeIndex_antiq
+    
+    HeavyField = NRQCDField()
+    
+    HeavyField%QuarkProp = 0
+    HeavyField%AntiQProp = 0
+
+    if(ThisProc()==GetProc_G(LatticeIndex_quark)) then
+       HeavyField%QuarkProp(&
+            :,:,GetMemoryIndex(LatticeIndex_quark)) = GetUnitMatrix(nDoF)/sqrt(real(nDoF,fp))
+    end if
+    if(ThisProc()==GetProc_G(LatticeIndex_antiq)) then
+       HeavyField%AntiQProp(&
+            :,:,GetMemoryIndex(LatticeIndex_antiq)) = GetUnitMatrix(nDoF)/sqrt(real(nDoF,fp))
+    end if
+
+    call HeavyField%CommunicateBoundary
+  end subroutine InitSinglePoint
+
+  !>@brief Initialises the propagator and anti-propagator
   !! at a single spatial point for a single colour- and spin-combination
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 07.03.2019
   !!@version 1.0
-  impure subroutine InitSinglePoint(Heavyfield,spin,colour,LatticeIndex)
+  impure subroutine InitSinglePointSingleDoF(Heavyfield,spin_quark,colour_quark,LatticeIndex_quark,spin_antiq,colour_antiq,LatticeIndex_antiq)
     use mpiinterface, only: ThisProc
     use lattice, only: GetProc_G, GetMemoryIndex
     implicit none
     !> NRQCD heavy field
     class(NRQCDField), intent(out) :: HeavyField
-    !> Spin-component of created quark-antiquark-pair
-    integer(int8),     intent(in)  :: spin
-    !> Colour-component of created quark-antiquark-pair
-    integer(int8),     intent(in)  :: colour
-    !> Lattice index
-    integer(int64),    intent(in)  :: LatticeIndex
+    !> Spin-component of created quark
+    integer(int8),     intent(in)  :: spin_quark,spin_antiq
+    !> Colour-component of created quark
+    integer(int8),     intent(in)  :: colour_quark,colour_antiq
+    !> Lattice index of created quark
+    integer(int64),    intent(in)  :: LatticeIndex_quark,LatticeIndex_antiq
     
     !call HeavyField%Allocate
     HeavyField = NRQCDField()
@@ -314,20 +353,59 @@ contains ! Module procedures
     HeavyField%QuarkProp = 0
     HeavyField%AntiQProp = 0
 
-    if(ThisProc()==GetProc_G(LatticeIndex)) then
+    if(ThisProc()==GetProc_G(LatticeIndex_quark)) then
        HeavyField%QuarkProp(&
-            GetSpinColourIndex(Spin,Colour),&
-            GetSpinColourIndex(Spin,Colour),&
-            GetMemoryIndex(LatticeIndex)) = 1
-       
+            GetSpinColourIndex(Spin_quark,Colour_quark),&
+            GetSpinColourIndex(Spin_quark,Colour_quark),&
+            GetMemoryIndex(LatticeIndex_quark)) = 1
+    end if
+    if(ThisProc()==GetProc_G(LatticeIndex_antiq)) then
        HeavyField%AntiQProp(&
-            GetSpinColourIndex(Spin,Colour),&
-            GetSpinColourIndex(Spin,Colour),&
-            GetMemoryIndex(LatticeIndex)) = 1
+            GetSpinColourIndex(Spin_antiq,Colour_antiq),&
+            GetSpinColourIndex(Spin_antiq,Colour_antiq),&
+            GetMemoryIndex(LatticeIndex_antiq)) = 1
     end if
 
     call HeavyField%CommunicateBoundary
-  end subroutine InitSinglePoint
+  end subroutine InitSinglePointSingleDoF
+
+  !>@brief Access to quark propagator
+  !!@returns Quark propagator
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 02.04.2019
+  !!@version 1.0
+  pure function GetQuarkProp_G(HeavyField,LatticeIndex)
+    use lattice, only: GetMemoryIndex
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+    !> Lattice index
+    integer(int64),    intent(in)  :: LatticeIndex
+    !> Quark propagator
+    complex(fp), dimension(ndof,ndof) :: GetQuarkProp_G
+
+    GetQuarkProp_G = HeavyField%QuarkProp(:,:,GetMemoryIndex(LatticeIndex))
+  end function GetQuarkProp_G
+
+  !>@brief Access to antiquark propagator
+  !!@returns Antiquark propagator
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 02.04.2019
+  !!@version 1.0
+  pure function GetAntiQProp_G(HeavyField,LatticeIndex)
+    use lattice, only: GetMemoryIndex
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+    !> Lattice index
+    integer(int64),    intent(in)  :: LatticeIndex
+    !> Quark propagator
+    complex(fp), dimension(ndof,ndof) :: GetAntiQProp_G
+
+    GetAntiQProp_G = HeavyField%AntiQProp(:,:,GetMemoryIndex(LatticeIndex))
+  end function GetAntiQProp_G
 
   !>@brief Combined spin-colour-index
   !!@returns Combined spin-colour-index
@@ -544,14 +622,14 @@ contains ! Module procedures
     ! Dummy variables for first matrix building
     type(SU3GaugeConfiguration) :: DummyConf
     
-    call PETScInitialize(PETSC_NULL_CHARACTER,Petscerr)
+    !call PETScInitialize(PETSC_NULL_CHARACTER,Petscerr)
 
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in initialization of '//&
-            modulename//': Initialisation of PETSc failed.',&
-            errorcode = Petscerr)
-    end if
+    !if(Petscerr /= 0) then
+    !   call MPIStop(&
+    !        errormessage = 'Error in initialization of '//&
+    !        modulename//': Initialisation of PETSc failed.',&
+    !        errorcode = Petscerr)
+    !end if
 
     call InitLocalSpatialPETScIndices(LocalSpatialPETScIndices)
     
@@ -762,14 +840,6 @@ contains ! Module procedures
     call KSPDestroy(ksp,Petscerr)
     
     deallocate(LocalSpatialPETScIndices)
-    call PETScFinalize(Petscerr)
-
-    if(Petscerr /= 0) then
-       call MPIStop(&
-            errormessage = 'Error in finalization of '//&
-            modulename//': Finalization of PETSc failed.',&
-            errorcode = Petscerr)
-    end if
   end subroutine FinalizePETScSolver
 
   !>@brief Checks previous necessary initialisations
@@ -1061,6 +1131,8 @@ contains ! Module procedures
        ! Load into configuration
        call LoadPropagatorFromPETSc(HeavyField%AntiQProp,i,PETScX)
     end do
+
+    call HeavyField%CommunicateBoundary
   end subroutine Update_CrankNicholson
 
   !>@brief Builds system matrix
@@ -1109,6 +1181,7 @@ contains ! Module procedures
 
     ! O(dt^1)
     ! .. -c1/2m D^2
+    !goto 1 ! Leave out diffusion term which corresponds to p²/(2m)
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        do i=1,nDim
           ! + delta_{x,y}/(ai**2)/m
@@ -1139,7 +1212,8 @@ contains ! Module procedures
           
        end do
     end do
-
+1   continue
+    
     ! .. -c3/8m^2.[D_i,g.at.E_i]
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
        do i=1,nDim
@@ -1262,7 +1336,7 @@ contains ! Module procedures
           call AddMatrixToSystem(SpatialRow,SpatialCol,submatrix,SystMat)
        end do
     end do
-
+    
     call SyncAll
     call MatAssemblyBegin(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
     call MatAssemblyEnd(SystMat,MAT_FINAL_ASSEMBLY,PETScErr)
