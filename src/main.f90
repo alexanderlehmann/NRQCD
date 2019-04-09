@@ -761,7 +761,7 @@ contains
        norm_antiq = HeavyField%GetNorm_AntiQ()
        
        if(ThisProc()==0) then
-          write(output_unit,*)  s, mesoncorrelator, norm_quark, norm_antiq
+          write(output_unit,'(5(SP,E15.7,1X))')  s, real(mesoncorrelator),aimag(mesoncorrelator), norm_quark, norm_antiq
           call flush(output_unit)
           
           write(FileID_Correlator,'(3(SP,E16.9,1X))') &
