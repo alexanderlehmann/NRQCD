@@ -727,7 +727,6 @@ contains
     ! Evolving gauge configuration to t1 (possibly negative)
     TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
     do it=1,TimeSteps
-       if(ThisProc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
        call GaugeConf_atT1%Update(sign(+1._real64,t1))
     end do
 
@@ -737,9 +736,6 @@ contains
          spin_antiq=1_int8,colour_antiq=1_int8,latticeindex_antiq=1_int64)
     do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
        s = is*LatticeSpacings(0)
-
-       if(ThisProc()==0) write(output_unit,*) 's=',real(s,real32),'step',int(is,int16),'max=',&
-            int(nint(+TimeRange/LatticeSpacings(0)),int16)
 
        ! Setting links for time-evolution at t1
        GaugeConf = GaugeConf_atT1
@@ -751,7 +747,6 @@ contains
        TimeSteps = abs(is)
        
        do it=1,TimeSteps
-          if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
           if(is>0) then
              call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
              call GaugeConf%Update(+1._fp)
@@ -764,9 +759,9 @@ contains
        mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
        norm_quark = HeavyField%GetNorm_Quark()
        norm_antiq = HeavyField%GetNorm_AntiQ()
-
+       
        if(ThisProc()==0) then
-          write(output_unit,*)  int(is,int8),mesoncorrelator, norm_quark, norm_antiq
+          write(output_unit,*)  s, mesoncorrelator, norm_quark, norm_antiq
           call flush(output_unit)
           
           write(FileID_Correlator,'(3(SP,E16.9,1X))') &

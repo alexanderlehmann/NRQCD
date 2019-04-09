@@ -1,0 +1,57 @@
+#!/bin/bash
+#PBS -N 16
+#PBS -l nodes=1:ppn=32
+##PBS -l cput=4:00:00
+#PBS -l walltime=24:00:00
+#PBS -l pmem=1gb
+#PBS -m abe
+#PBS -M alexander.lehmann@uis.no
+
+SERVER=$PBS_O_HOST
+WORKDIR=/home/ansatt/lehmann/work/nrqcd/190409_1
+
+cd $WORKDIR
+
+## PARAMETERS
+processes=$(wc -l $PBS_NODEFILE | awk '{print $1}')
+
+EXECUTABLE= /home/ansatt/lehmann/NRQCD/src/run.exe
+
+mode=3
+Nx=16
+Ny=16
+Nz=16
+ax=1.0
+ay=1.0
+az=1.0
+
+CoMTime=0.
+TimeRange=10.
+TimeSpacing=0.1
+
+# Initialisation of gluon field
+RandomSeed=1
+# Given in units of az
+InitialGluonSaturationScale=0.7
+InitialGluonOccupationAmplitude=0.2
+Coupling=0.01
+# Quarks
+iterativeTol=1.E-8
+Mass=10.
+c0_re=1. ; c0_im=0.
+c1_re=1. ; c1_im=0.
+c2_re=1. ; c2_im=0.
+c3_re=1. ; c3_im=0.
+
+#--------------------------------------------------------------
+
+#module load intelcomp/18.0.1
+#module load mpt/2.14
+
+export LD_LIBRARY_PATH=$WORKDIR/lib:$LD_LIBRARY_PATH
+
+#--------------------------------------------------------------
+
+mpiexec -n $processes \
+	$EXECUTABLE \
+	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $CoMTime $TimeRange $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im
