@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N 16
+#PBS -N 8
 #PBS -l nodes=1:ppn=32
 ##PBS -l cput=4:00:00
 #PBS -l walltime=24:00:00
@@ -8,19 +8,19 @@
 #PBS -M alexander.lehmann@uis.no
 
 SERVER=$PBS_O_HOST
-WORKDIR=/home/ansatt/lehmann/work/nrqcd/190409_1
+WORKDIR=/home/ansatt/lehmann/work/nrqcd/190409_2
 
 cd $WORKDIR
 
 ## PARAMETERS
 processes=$(wc -l $PBS_NODEFILE | awk '{print $1}')
 
-EXECUTABLE= /home/ansatt/lehmann/NRQCD/src/run.exe
+EXECUTABLE=/home/ansatt/lehmann/NRQCD/src/run.exe
 
 mode=3
-Nx=16
-Ny=16
-Nz=16
+Nx=8
+Ny=8
+Nz=8
 ax=1.0
 ay=1.0
 az=1.0
@@ -48,10 +48,11 @@ c3_re=1. ; c3_im=0.
 #module load intelcomp/18.0.1
 #module load mpt/2.14
 
-export LD_LIBRARY_PATH=$WORKDIR/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$PETSC_DIR/lib/:$LD_LIBRARY_PATH
 
 #--------------------------------------------------------------
 
-mpiexec -n $processes \
+time mpiexec -n $processes \
 	$EXECUTABLE \
-	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $CoMTime $TimeRange $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im
+	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $CoMTime $TimeRange $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im \
+	| tee stdout.txt
