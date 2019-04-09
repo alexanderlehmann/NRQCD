@@ -618,14 +618,14 @@ contains
     
     call InitSimulation
 
-    goto 1
+    !goto 1
     ! Do it as a plain fourier transform
     t1 = t-s/2     ! fixed
     t2 = t+s/2     ! fixed
 
-    !call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
-    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf_at0%ColdInit
+    call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    !call Gaugeconf_at0%ColdInit
 
     ! Initialising heavy field
     call HeavyField_at0%InitSinglePointSingleDoF(&
@@ -652,7 +652,7 @@ contains
        norm(:,1+nint(TimeRange/LatticeSpacings(0))+it) = [norm_quark,norm_antiq]
        
        if(ThisProc()==0) then
-          write(output_unit,*)  t,mesoncorrelator, norm_quark, norm_antiq
+          write(output_unit,'(5(SP,E15.7,1X))')  t, real(mesoncorrelator),aimag(mesoncorrelator), norm_quark, norm_antiq
           call flush(output_unit)
        end if
 
