@@ -618,6 +618,7 @@ contains
     
     call InitSimulation
 
+    goto 1
     ! Do it as a plain fourier transform
     t1 = t-s/2     ! fixed
     t2 = t+s/2     ! fixed
@@ -705,22 +706,29 @@ contains
     
     call EndSimulation
     
-    
+1   continue
+    if(ThisProc()==0) then
+       ! Opening files
+       fileID_Correlator = OpenFile(filename="correlator_3s1.txt",&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Norm = OpenFile(filename="norm.txt",&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+    end if
     ! Determination of CMS coordinates
     t  = CoMTime   ! fixed
     s  = TimeRange ! varies
     t1 = t-s/2     ! varies
     t2 = t+s/2     ! varies
     
-    !call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
-    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf_atT1%ColdInit
+    call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    !call Gaugeconf_atT1%ColdInit
     
     ! Evolving gauge configuration to t1 (possibly negative)
     TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
     do it=1,TimeSteps
        if(ThisProc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
-       !call GaugeConf_atT1%Update(sign(+1._real64,t1))
+       call GaugeConf_atT1%Update(sign(+1._real64,t1))
     end do
 
     ! Initialising heavy field
@@ -745,10 +753,10 @@ contains
        do it=1,TimeSteps
           if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
           if(is>0) then
-             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
-        !     call GaugeConf%Update
+             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
+             call GaugeConf%Update(+1._fp)
           else
-        !     call GaugeConf%Update(-1._fp)
+             call GaugeConf%Update(-1._fp)
              call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
           end if
        end do
