@@ -15,8 +15,6 @@ module programs
   PUBLIC
 
 contains
-  
-  
   !>@brief Program for measuring the various wilson lines
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -26,17 +24,13 @@ contains
     use, intrinsic :: iso_fortran_env
     use precision
     use mpiinterface
-
     use lattice
     use gaugeconfiguration_su3
     use mpi
     use io
     use halocomm
-
     use nrqcd
-
-    use wilsonline, only: GetFermionicWilsonLoop
-
+    use wilsonline
     use random
     
     implicit none
@@ -54,132 +48,190 @@ contains
     real(fp) :: TimeRange
     real(fp) :: HeavyQuarkmass
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
-    
+
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1, GaugeConf_at0
-    type(NRQCDField)         :: HeavyField, HeavyField_atT1, HeavyField_at0
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_at0
+    type(NRQCDField)         :: HeavyField,HeavyField_at0
 
     ! Counting
     integer :: i
 
-    ! CMS coordinates
-    real(fp) :: t,s,t1,t2
-    integer(int64) :: is, it
+    real(fp) :: t1,t2
+    integer(int64) :: it
 
     ! Wilson line parameters
     integer(int8), parameter :: messdir=nDim
     integer(int64), parameter :: x0=1
     integer(int64) :: rmax, r, xr
-    
+
     ! Observable
-    complex(fp) :: GluonicWilsonLoop, FermionicWilsonLoop
-    
+    complex(fp) :: GluonicWilsonLoop, FermionicWilsonLoop, MesonCorrelator
+    real(fp) :: quarknorm, antiqnorm
+
+    ! Observable-arrays
+    complex(fp),allocatable :: mesoncorrelators(:), GluonicWilsonLoops(:,:), FermionicWilsonLoops(:,:)
+    real(fp),   allocatable :: time(:), quarknorms(:,:), antiqnorms(:,:)
+
     ! Output
-    integer(int8) :: FileID_GluonicWilsonLoops,FileID_FermionicWilsonLoops
+    integer(int8) :: FileID_GluonicWilsonLoops,FileID_FermionicWilsonLoops,FileID_MesonCorrelator,&
+         FileID_Norm
 
-    character(len=80) :: FileGluonicWilsonLoops, FileFermionicWilsonLoops
-
+    character(len=80) :: FileGluonicWilsonLoops, FileFermionicWilsonLoops, FileMesonCorrelator,&
+         FileNorm
+    
     integer(intmpi) :: proc
-    
+
     call InitSimulation
-
+    
     rmax = LatticeExtensions(messdir)/2
-    
-    ! Determination of CMS coordinates
-    t  = CoMTime   ! fixed
-    s  = TimeRange ! varies
-    t1 = t-s/2     ! varies
-    t2 = t+s/2     ! varies
-    
-    !call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
+
+    ! Allocating observable arrays
+    allocate(Time(nint(2*TimeRange/LatticeSpacings(0))))
+    allocate(MesonCorrelators(nint(2*TimeRange/LatticeSpacings(0))))
+    allocate(AntiQNorms(nint(2*TimeRange/LatticeSpacings(0)),0:rmax))
+    allocate(QuarkNorms(nint(2*TimeRange/LatticeSpacings(0)),0:rmax))
+    allocate(GluonicWilsonLoops(nint(2*TimeRange/LatticeSpacings(0)),0:rmax))
+    allocate(FermionicWilsonLoops(nint(2*TimeRange/LatticeSpacings(0)),0:rmax))
+
+    ! Do it as a plain fourier transform
+    t1 = CoMTime-TimeRange/2     ! fixed
+    t2 = CoMTime+TimeRange/2     ! fixed
+
+    !call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
     !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf_atT1%ColdInit
-    
-    ! Evolving gauge configuration to t1 (possibly negative)
-    TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
-    do it=1,TimeSteps
-       !if(ThisProc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
-       call GaugeConf_atT1%Update(sign(+1._real64,t1))
-    end do
-    
-    if(ThisProc()==0) then
-       fileID_GluonicWilsonLoops = OpenFile(filename=FileGluonicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_FermionicWilsonLoops   = OpenFile(filename=FileFermionicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-    end if
-    do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
-       s = is*LatticeSpacings(0)
+    call Gaugeconf_at0%ColdInit
 
-       if(ThisProc()==0) then
-          write(output_unit,*)  s
-          call flush(output_unit)
+    xr = x0
+    do r=0,rmax
+       ! Initialising quark-antiquark-pair
+       ! with quark at variable remote point xr
+       ! and antiquark at fixed (origin) point x0
+       call HeavyField_at0%InitSinglePoint(&
+            latticeindex_quark=xr,&
+            latticeindex_antiq=x0)
 
-          ! Wilson lines
-          write(FileID_GluonicWilsonLoops,'(SP,E16.9,1X)',advance='no') s
-          write(FileID_FermionicWilsonLoops,  '(SP,E16.9,1X)',advance='no') s
-       end if
-       
-       xr=x0
-       do r=0_int8,rmax
-          ! Initialising heavy field
-          call HeavyField_atT1%InitSinglePoint(&
-               latticeindex_quark=x0, latticeindex_antiq=xr)
+       ! Negative time evolution
+       GaugeConf =GaugeConf_at0
+       HeavyField=HeavyField_at0
 
-          ! Setting links for time-evolution at t1
-          GaugeConf = GaugeConf_atT1
+       do it=0,-nint(TimeRange/LatticeSpacings(0)),-1
+          if(r==0) then
+             time(1+nint(TimeRange/LatticeSpacings(0))+it) = it*LatticeSpacings(0)
+             
+             mesoncorrelators(1+nint(TimeRange/LatticeSpacings(0))+it) &
+                  = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+          end if
 
-          ! Initialising quark-pair at t1 ...
-          HeavyField = HeavyField_atT1
+          quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r) = HeavyField%GetNorm_Quark()
+          antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r) = HeavyField%GetNorm_AntiQ()
+          
+          GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r) &
+               = GetGluonicWilsonLoop(GaugeConf_at0, GaugeConf, x0, r, messdir)
+          FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r) &
+               = GetFermionicWilsonLoop(GaugeConf_at0, GaugeConf, HeavyField, x0, r, messdir)
+          
+          call GaugeConf%Update(-1._fp)
+          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
 
-          ! ... and evolving to t2
-          TimeSteps = abs(is)
-
-          do it=1,TimeSteps
-             !if(thisproc()==0) write(output_unit,*) int(it,int16),'of',int(TimeSteps,int16)
-             if(is>0) then
-                call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
-                call GaugeConf%Update
-             else
-                call GaugeConf%Update(-1._fp)
-                call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
-             end if
-          end do
-
-          GluonicWilsonLoop &
-               = GetFermionicWilsonLoop(GaugeConf_atT1,GaugeConf,HeavyField_atT1,HeavyField_atT1,x0,r,messdir)
-          FermionicWilsonLoop   &
-               = GetFermionicWilsonLoop(GaugeConf_atT1,GaugeConf,HeavyField,HeavyField,x0,r,messdir)
-
+          ! Status update to stdout
           if(ThisProc()==0) then
-             if(r<rmax) then
-                write(FileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(GluonicWilsonLoop), aimag(GluonicWilsonLoop)
-                write(FileID_FermionicWilsonLoops,  '(2(SP,E16.9,1X))',advance='no') &
-                     real(FermionicWilsonLoop),   aimag(FermionicWilsonLoop)
-             else
-                write(FileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(GluonicWilsonLoop), aimag(GluonicWilsonLoop)
-                write(FileID_FermionicWilsonLoops,  '(2(SP,E16.9,1X))',advance='yes') &
-                     real(FermionicWilsonLoop),   aimag(FermionicWilsonLoop)
-             end if
-
-             write(output_unit,'(SP,(5(E16.9,1X)))') s, real(GluonicWilsonLoop), aimag(GluonicWilsonLoop), real(FermionicWilsonLoop),   aimag(FermionicWilsonLoop)
+             write(output_unit,*)  &
+                  time(1+nint(TimeRange/LatticeSpacings(0))+it),&
+                  quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r)
              call flush(output_unit)
           end if
-          xr = GetNeib_G(messdir, xr) ! next shifted index
        end do
 
-       call GaugeConf_atT1%Update
+       ! Positive time evolution
+       GaugeConf =GaugeConf_at0
+       HeavyField=HeavyField_at0
+       do it=1,nint(TimeRange/LatticeSpacings(0))-1,+1
+          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
+          call GaugeConf%Update(+1._fp)
+
+          if(r==0) then
+             time(1+nint(TimeRange/LatticeSpacings(0))+it) = it*LatticeSpacings(0)
+             
+             mesoncorrelators(1+nint(TimeRange/LatticeSpacings(0))+it) &
+                  = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+          end if
+
+          quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r) = HeavyField%GetNorm_Quark()
+          antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r) = HeavyField%GetNorm_AntiQ()
+          
+          GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r) &
+               = GetGluonicWilsonLoop(GaugeConf_at0, GaugeConf, x0, r, messdir)
+          FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r) &
+               = GetFermionicWilsonLoop(GaugeConf_at0, GaugeConf, HeavyField, x0, r, messdir)
+
+          ! Status update to stdout
+          if(ThisProc()==0) then
+             write(output_unit,*)  &
+                  time(1+nint(TimeRange/LatticeSpacings(0))+it),&
+                  quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
+                  FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r)
+             call flush(output_unit)
+          end if
+       end do
+
+       ! Preparing next step
+       xr = GetNeib_G(messdir,xr)
     end do
 
-    ! Closing files
     if(ThisProc()==0) then
-       call CloseFile(FileID_GluonicWilsonLoops)
+       ! Opening files
+       fileID_MesonCorrelator = OpenFile(filename=FileMesonCorrelator,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Norm = OpenFile(filename=FileNorm,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_GluonicWilsonLoops  = OpenFile(filename=FileGluonicWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_FermionicWilsonLoops= OpenFile(filename=FileFermionicWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       
+       do it=1,size(MesonCorrelators,1)
+          write(FileID_MesonCorrelator,'(3(SP,E16.9,1X))') &
+               time(it),real(mesoncorrelators(it),real64),aimag(mesoncorrelators(it))
+
+          write(fileID_Norm,'(1(SP,E16.9,1X))',advance='no') time(it)
+          write(fileID_GluonicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
+          write(fileID_FermionicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
+          
+          do r=0,rmax
+             if(r<rmax) then
+                write(fileID_Norm,'(2(SP,E16.9,1X))',advance='no') &
+                     quarknorms(it,r), antiqnorms(it,r)
+                
+                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
+                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
+                
+                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
+                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
+             else
+                write(fileID_Norm,'(2(SP,E16.9,1X))',advance='yes') &
+                     quarknorms(it,r), antiqnorms(it,r)
+                
+                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
+                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
+                
+                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
+                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
+             end if
+          end do
+       end do
+
+       ! Closing files
+       call CloseFile(fileID_MesonCorrelator)
+       call CloseFile(FileID_Norm)
+       call CloseFile(FileID_GluonicWilsonloops)
        call CloseFile(FileID_FermionicWilsonLoops)
     end if
-    
-    call HeavyField%Destructor
+
     call EndSimulation
   contains
     !>@brief Initialisation of the simulation
@@ -272,7 +324,9 @@ contains
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicWilsonLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileFermionicWilsonLoops);
-      
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
       call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
