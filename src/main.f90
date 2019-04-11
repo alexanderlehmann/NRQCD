@@ -97,12 +97,16 @@ contains
     t1 = CoMTime-TimeRange/2     ! fixed
     t2 = CoMTime+TimeRange/2     ! fixed
 
-    !call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
-    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf_at0%ColdInit
+    call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    !call Gaugeconf_at0%ColdInit
 
     xr = x0
     do r=0,rmax
+       if(ThisProc()==0) then
+          write(output_unit,*) 'r=',r,'of',rmax
+       end if
+       
        ! Initialising quark-antiquark-pair
        ! with quark at variable remote point xr
        ! and antiquark at fixed (origin) point x0
@@ -132,17 +136,6 @@ contains
           
           call GaugeConf%Update(-1._fp)
           call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
-
-          ! Status update to stdout
-          if(ThisProc()==0) then
-             write(output_unit,*)  &
-                  time(1+nint(TimeRange/LatticeSpacings(0))+it),&
-                  quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r)
-             call flush(output_unit)
-          end if
        end do
 
        ! Positive time evolution
@@ -166,17 +159,6 @@ contains
                = GetGluonicWilsonLoop(GaugeConf_at0, GaugeConf, x0, r, messdir)
           FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r) &
                = GetFermionicWilsonLoop(GaugeConf_at0, GaugeConf, HeavyField, x0, r, messdir)
-
-          ! Status update to stdout
-          if(ThisProc()==0) then
-             write(output_unit,*)  &
-                  time(1+nint(TimeRange/LatticeSpacings(0))+it),&
-                  quarknorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  antiqnorms(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  GluonicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r),&
-                  FermionicWilsonLoops(1+nint(TimeRange/LatticeSpacings(0))+it,r)
-             call flush(output_unit)
-          end if
        end do
 
        ! Preparing next step
