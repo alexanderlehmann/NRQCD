@@ -622,7 +622,6 @@ contains
     ! Simulation parameters
     integer(int64) :: LatticeExtensions(ndim)
     real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
     integer(int64) :: RandomNumberSeed
 
     real(fp) :: GluonSaturationScale !qs
@@ -634,144 +633,58 @@ contains
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1, GaugeConf_at0
-    type(NRQCDField)         :: HeavyField, HeavyField_atT1, HeavyField_at0
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1
+    type(NRQCDField)         :: HeavyField, HeavyField_atT1
 
     ! Counting
     integer :: i
 
     ! CMS coordinates
     real(fp) :: t,s,t1,t2
-    integer(int64) :: is, it
+    integer(int64) :: is, it, TimeSteps
 
     ! Output
     real(fp) :: norm_quark, norm_antiq
     complex(fp) :: mesoncorrelator
     integer(int8) :: FileID_Norm, FileID_Correlator
 
+    character(len=80) :: FileMesonCorrelator, FileNorm
+
     complex(fp), allocatable :: correlator(:)
     real(fp),allocatable :: time(:), norm(:,:)
     
     call InitSimulation
-
-    !goto 1
-    ! Do it as a plain fourier transform
-    t1 = t-s/2     ! fixed
-    t2 = t+s/2     ! fixed
-
-    call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    !call Gaugeconf_at0%ColdInit
-
-    ! Initialising heavy field
-    call HeavyField_at0%InitSinglePointSingleDoF(&
-         spin_quark=1_int8,colour_quark=1_int8,latticeindex_quark=1_int64,&
-         spin_antiq=1_int8,colour_antiq=1_int8,latticeindex_antiq=1_int64)
-
     
-    ! Negative Time evolution
-    GaugeConf=GaugeConf_at0
-    HeavyField=HeavyField_at0
-
-    allocate(correlator(nint(2*TimeRange/LatticeSpacings(0))))
-    allocate(time(nint(2*TimeRange/LatticeSpacings(0))))
-    allocate(norm(2,nint(2*TimeRange/LatticeSpacings(0))))
-    do it=0,-nint(TimeRange/LatticeSpacings(0)),-1 !nint(+TimeRange/LatticeSpacings(0))
-       t = it*LatticeSpacings(0)
-
-       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
-       norm_quark = HeavyField%GetNorm_Quark()
-       norm_antiq = HeavyField%GetNorm_AntiQ()
-
-       correlator(1+nint(TimeRange/LatticeSpacings(0))+it) = mesoncorrelator
-       time(1+nint(TimeRange/LatticeSpacings(0))+it) = t
-       norm(:,1+nint(TimeRange/LatticeSpacings(0))+it) = [norm_quark,norm_antiq]
-       
-       if(ThisProc()==0) then
-          write(output_unit,'(5(SP,E15.7,1X))')  t, real(mesoncorrelator),aimag(mesoncorrelator), norm_quark, norm_antiq
-          call flush(output_unit)
-       end if
-
-       call GaugeConf%Update(-1._fp)
-       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
-    end do
-    
-    ! Positive Time Evolution
-    GaugeConf=GaugeConf_at0
-    HeavyField=HeavyField_at0
-    do it=1,nint(TimeRange/LatticeSpacings(0))-1,+1
-       t = it*LatticeSpacings(0)
-
-       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-       call GaugeConf%Update(+1._fp)
-
-       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
-       norm_quark = HeavyField%GetNorm_Quark()
-       norm_antiq = HeavyField%GetNorm_AntiQ()
-
-       correlator(1+nint(TimeRange/LatticeSpacings(0)) + it) = mesoncorrelator
-       time(1+nint(TimeRange/LatticeSpacings(0)) + it) = t
-       norm(:,1+nint(TimeRange/LatticeSpacings(0)) + it) = [norm_quark,norm_antiq]
-       
-       if(ThisProc()==0) then
-          write(output_unit,*)  t,mesoncorrelator, norm_quark, norm_antiq
-          call flush(output_unit)
-       end if
-    end do
-
     if(ThisProc()==0) then
        ! Opening files
-       fileID_Correlator = OpenFile(filename="correlator_3s1.txt",&
+       fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Norm = OpenFile(filename="norm.txt",&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-
-       do it=1,size(correlator)
-          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-               time(it),real(correlator(it),real64),aimag(correlator(it))
-          write(FileID_Norm,'(3(SP,E19.12,1X))')&
-               time(it),norm(1,it),norm(2,it)
-       end do
-
-       ! Closing files
-       call CloseFile(FileID_Correlator)
-       call CloseFile(FileID_Norm)
-    end if
-
-    call HeavyField%Destructor
-    
-    call EndSimulation
-    
-1   continue
-    if(ThisProc()==0) then
-       ! Opening files
-       fileID_Correlator = OpenFile(filename="correlator_3s1.txt",&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Norm = OpenFile(filename="norm.txt",&
+       fileID_Norm = OpenFile(filename=FileNorm,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
     end if
     ! Determination of CMS coordinates
-    t  = CoMTime   ! fixed
-    s  = TimeRange ! varies
-    t1 = t-s/2     ! varies
-    t2 = t+s/2     ! varies
+    TimeSteps = nint(TimeRange/LatticeSpacings(0))
+    t  = +CoMTime      ! fixed
+    s  = -TimeRange/2  ! varies
+    t1 = +t-s/2        ! varies
+    t2 = +t+s/2        ! varies
     
     call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
     !call Gaugeconf_atT1%ColdInit
     
     ! Evolving gauge configuration to t1 (possibly negative)
-    TimeSteps = abs(NINT(t1/LatticeSpacings(0)))
-    do it=1,TimeSteps
+    do it=1,abs(NINT(t1/LatticeSpacings(0)))
        call GaugeConf_atT1%Update(sign(+1._real64,t1))
     end do
 
     ! Initialising heavy field
-    call HeavyField_atT1%InitSinglePointSingleDoF(&
-         spin_quark=1_int8,colour_quark=1_int8,latticeindex_quark=1_int64,&
-         spin_antiq=1_int8,colour_antiq=1_int8,latticeindex_antiq=1_int64)
-    do is=-nint(TimeRange/LatticeSpacings(0)),nint(+TimeRange/LatticeSpacings(0))-1
-       s = is*LatticeSpacings(0)
+    call HeavyField_atT1%InitSinglePoint(&
+         latticeindex_quark=1_int64,&
+         latticeindex_antiq=1_int64)
+    do is=1,TimeSteps
+       t1 = +t-s/2
+       t2 = +t+s/2
 
        ! Setting links for time-evolution at t1
        GaugeConf = GaugeConf_atT1
@@ -780,10 +693,8 @@ contains
        HeavyField = HeavyField_atT1
        
         ! ... and evolving to t2
-       TimeSteps = abs(is)
-       
-       do it=1,TimeSteps
-          if(is>0) then
+       do it=1,abs(nint((t2-t1)/LatticeSpacings(0))),+1
+          if(t1<t2) then
              call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
              call GaugeConf%Update(+1._fp)
           else
@@ -807,6 +718,9 @@ contains
        end if
 
        call GaugeConf_atT1%Update
+
+       ! Setting up the next value for s
+       s = s + LatticeSpacings(0)
     end do
 
     ! Closing files
@@ -904,6 +818,9 @@ contains
 
          WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
       end do
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
