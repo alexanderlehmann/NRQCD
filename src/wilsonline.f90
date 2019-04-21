@@ -33,9 +33,87 @@ module WilsonLine
 
   PRIVATE
 
-  public GetFermionicWilsonLoop, GetGluonicWilsonLoop
+  public GetFermionicWilsonLoop, GetGluonicWilsonLoop, GetPointSplitCorrelator
 
 contains ! Module procedures
+  impure complex(fp) function GetPointSplitCorrelator(&
+       GaugeField,Heavyfield,origin,distance,proddir)
+    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
+    use mpi
+    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
+    use matrixoperations, only: GetTrace
+    use su2, only: SU2Generators => Generators
+    implicit none
+    !> SU(3)-Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField
+    !> NRQCD heavy field with quark- and antiquark-propagator initialised at origin
+    type(NRQCDField),            intent(in) :: HeavyField
+    !> Lattice index at origin of link product
+    integer(int64),              intent(in) :: origin
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+
+    integer(int64) :: quark_index, antiq_index
+
+    ! Indices
+    integer(int64) :: LatticeIndex_distance, shiftstep
+    integer(int8) :: k
+    
+    ! MPI stuff
+    integer(intmpi) :: proc, mpierr
+    
+    complex(fp), dimension(nDoF,nDoF) :: LinkProduct, WholeProduct,&
+         quarkprop, antiqprop,PauliMatrix
+    
+    
+    
+    quark_index = origin
+    antiq_index = origin
+    do shiftstep=1,distance/2
+       quark_index = GetNeib_G(+proddir,quark_index)
+       antiq_index = GetNeib_G(-proddir,antiq_index)
+    end do
+    
+    
+    ! Getting link product
+    LinkProduct = GetLinkProduct(GaugeField,antiq_index,distance,proddir)
+    LinkProduct = transpose(LinkProduct)
+    
+    ! Getting propagators
+    proc = GetProc_G(quark_index)
+    if(ThisProc()==proc) then
+       QuarkProp = HeavyField%GetQuarkProp_G(quark_index)
+    end if
+    call mpi_bcast(QuarkProp,size(QuarkProp),GetComplexSendType(),&
+         proc,mpi_comm_world,mpierr)
+
+    proc = GetProc_G(antiq_index)
+    if(ThisProc()==proc) then
+       AntiQProp = HeavyField%GetAntiQProp_G(antiq_index)
+    end if
+    call mpi_bcast(AntiQProp,size(AntiQProp),GetComplexSendType(),&
+         proc,mpi_comm_world,mpierr)
+
+    GetPointSplitCorrelator = 0
+    
+    ! Final multiplication step
+    do k=1,3
+       PauliMatrix = S2CS(SU2Generators(:,:,k))
+
+       WholeProduct = matmul(matmul(matmul(matmul(&
+            quarkprop,&
+            paulimatrix),&
+            conjg(antiqprop)),&
+            conjg(paulimatrix)),&
+            conjg(LinkProduct))
+
+       GetPointSplitCorrelator = GetPointSplitCorrelator + GetTrace(WholeProduct)
+    end do
+
+  end function GetPointSplitCorrelator
+  
 
   impure complex(fp) function GetFermionicWilsonLoop(&
        GaugeField_t1, GaugeField_t2, HeavyField, origin, distance, proddir)
