@@ -33,7 +33,9 @@ module WilsonLine
 
   PRIVATE
 
-  public GetFermionicWilsonLoop, GetGluonicWilsonLoop, GetPointSplitCorrelator
+  public GetFermionicWilsonLoop, GetGluonicWilsonLoop, GetPointSplitCorrelator,&
+       GetPotentialWilsonLoop,GetWilsonLoop
+       
 
 contains ! Module procedures
   impure complex(fp) function GetPointSplitCorrelator(&
@@ -248,4 +250,198 @@ contains ! Module procedures
     end do
   end function GetLinkProduct
 
+
+  impure function GetWilsonLine(GaugeField,origin,distance,proddir)
+    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
+    use mpi
+    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
+    use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> SU(3)-Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField
+    !> Lattice index at origin of link product
+    integer(int64),              intent(in) :: origin
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    !> Link product
+    complex(fp), dimension(nColours,nColours) :: GetWilsonLine
+
+    ! Link at a site
+    complex(fp), dimension(nColours,nColours) :: Link
+    
+    ! Indices
+    integer(int64) :: k, xk
+
+    ! MPI stuff
+    integer(intmpi) :: proc, mpierr
+
+    GetWilsonLine = GetUnitMatrix(nDoF)
+    xk = origin
+    do k=1,distance,+1
+       proc = GetProc_G(xk)
+
+       if(ThisProc()==proc) then
+          Link = GaugeField%GetLink_G(proddir,xk)
+          GetWilsonLine = matmul(GetWilsonLine,Link)
+       end if
+       
+       call mpi_bcast(GetWilsonLine,size(GetWilsonLine),GetComplexSendType(),&
+            proc,mpi_comm_world,mpierr)
+       
+       xk = GetNeib_G(proddir,xk)
+    end do
+  end function GetWilsonLine
+
+
+  impure function GetTimeDerivativeWilsonLine(GaugeField,origin,distance,proddir)
+    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
+    use mpi
+    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
+    use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> SU(3)-Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField
+    !> Lattice index at origin of link product
+    integer(int64),              intent(in) :: origin
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    !> Link product
+    complex(fp), dimension(nColours,nColours) :: GetTimeDerivativeWilsonLine
+
+    complex(fp), dimension(nColours,nColours) :: WilsonLine1,WilsonLine2,Efield
+    
+    ! MPI stuff
+    integer(intmpi) :: proc, mpierr
+
+    integer(int8) :: k
+    integer(int64) :: DerivativeIndex, LatticeIndex
+    
+    GetTimeDerivativeWilsonLine = GetUnitMatrix(nDoF)
+
+    DerivativeIndex = origin
+    do k=1,distance ! Sum over positions where the derivative is evaluated
+       
+       ! product of links until derivative position
+       WilsonLine1 = GetWilsonLine(GaugeField,origin,k-1_int64,proddir)
+       
+       ! product of links after derivative position
+       WilsonLine2 = GetWilsonLine(GaugeField,DerivativeIndex,distance-k+1_int64,proddir)
+
+       ! Getting electric field
+       proc = GetProc_G(DerivativeIndex)
+       if(ThisProc()==proc) then
+          efield = GaugeField%GetElectricField(proddir,DerivativeIndex)
+       end if
+       call mpi_bcast(efield,size(efield),GetComplexSendType(),&
+            proc,mpi_comm_world,mpierr)
+
+       ! Performing the product and adding it to the sum
+       GetTimeDerivativeWilsonLine = &
+            GetTimeDerivativeWilsonLine &
+            + &
+            matmul(matmul(&
+            WilsonLine1,&
+            Efield),&
+            WilsonLine2)
+       
+       DerivativeIndex = GetNeib_G(proddir,DerivativeIndex)
+    end do
+
+    GetTimeDerivativeWilsonLine = cmplx(0,1,fp)*GetTimeDerivativeWilsonLine
+  end function GetTimeDerivativeWilsonLine
+
+
+  impure function GetWilsonLoop(&
+       GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
+    use matrixoperations, only: GetTrace
+    use lattice, only: GetLatticeSize
+    implicit none
+    !> SU(3)-Gauge configuration at \f$t=t_1\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t1
+    !> SU(3)-Gauge configuration at \f$t=t_2\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t2
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    complex(fp) :: res
+    
+    complex(fp), dimension(nColours,nColours) :: LinkProduct_t1, LinkProduct_t2, WholeProduct
+
+    integer(int64) :: origin
+
+    res = 0
+    
+    do origin=1,GetLatticeSize()
+
+       ! Getting link product
+       LinkProduct_t1 = GetWilsonLine(GaugeField_t1,origin,distance,proddir)
+       LinkProduct_t2 = GetWilsonLine(GaugeField_t2,origin,distance,proddir)
+
+       ! Final multiplication step
+       WholeProduct = matmul(LinkProduct_t1,conjg(transpose(LinkProduct_t2)))
+
+       res = res + GetTrace(WholeProduct)/nColours
+       
+    end do
+    res = res / GetLatticeSize()
+  end function GetWilsonLoop
+
+  impure function GetTimeDerivativeWilsonLoop(&
+       GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
+    use matrixoperations, only: GetTrace
+    use lattice, only: GetLatticeSize
+    implicit none
+    !> SU(3)-Gauge configuration at \f$t=t_1\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t1
+    !> SU(3)-Gauge configuration at \f$t=t_2\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t2
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    complex(fp) :: res
+
+    complex(fp), dimension(nColours,nColours) :: LinkProduct_t1, LinkProduct_t2, WholeProduct
+
+    integer(int64) :: origin
+
+    res = 0
+
+    do origin=1,GetLatticeSize()
+
+       ! Getting link product
+       LinkProduct_t1 = GetWilsonLine(GaugeField_t1,origin,distance,proddir)
+       LinkProduct_t2 = GetTimeDerivativeWilsonLine(GaugeField_t2,origin,distance,proddir)
+
+       ! Final multiplication step
+       WholeProduct = matmul(LinkProduct_t1,conjg(transpose(LinkProduct_t2)))
+
+       res = res + GetTrace(WholeProduct)/nColours
+    end do
+
+    res = res / GetLatticeSize()
+  end function GetTimeDerivativeWilsonLoop
+
+  impure function GetPotentialWilsonLoop(&
+       GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
+    implicit none
+    !> SU(3)-Gauge configuration at \f$t=t_1\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t1
+    !> SU(3)-Gauge configuration at \f$t=t_2\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t2
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    complex(fp) :: res
+
+    res = cmplx(0,1,fp)*GetTimeDerivativeWilsonLoop(GaugeField_t1, GaugeField_t2,distance, proddir)&
+         /GetWilsonLoop(GaugeField_t1, GaugeField_t2,distance, proddir)
+
+  end function GetPotentialWilsonLoop
 end module WilsonLine

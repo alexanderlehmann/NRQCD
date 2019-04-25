@@ -15,6 +15,487 @@ module programs
   PUBLIC
 
 contains
+  impure subroutine DeterminePotential_oneTimePoint
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+    use halocomm
+    use wilsonline
+    use random
+    use statistics, only: GetMean, GetStdError
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: GluonSaturationScale !qs
+    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
+    real(fp) :: GluonCoupling
+    real(fp) :: tstart
+    
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
+    
+    ! Counting
+    integer :: i
+
+    real(fp) :: tEnd
+    integer(int64) :: it
+
+    ! Wilson loop parameters
+    integer(int8), parameter :: messdir=nDim
+    integer(int64) :: rmax, r
+
+    ! Observables
+    complex(fp), allocatable :: WilsonLoops(:,:), PotentialWilsonLoops(:,:)
+    real(fp), allocatable :: rObservable(:), iObservable(:)
+    real(fp) :: rMean, rStderr,iMean,iStderr
+    real(fp) :: time
+    
+    ! Output
+    integer(int8) :: FileID
+
+    character(len=80) :: &
+         FileName_WilsonLoops, FileName_PotentialWilsonLoops
+
+    integer(intmpi) :: proc
+
+    integer(int64) :: measurement
+    integer(int64), parameter :: nMeasurement=100
+
+    call InitSimulation
+
+    rmax = LatticeExtensions(messdir)/2
+
+    allocate(WilsonLoops(nMeasurement,rmax))
+    WilsonLoops = 0
+    allocate(PotentialWilsonLoops(nMeasurement,rmax))
+    PotentialWilsonLoops = 0
+
+    do measurement=1,nMeasurement
+       if(ThisProc()==0) write(output_unit,*)&
+            int(measurement,int16),'of',&
+            int(nMeasurement,int16),'configurations';&
+            call flush(output_unit)
+       
+       ! initialisation of config ....
+       call GaugeConf_initial%TransversePolarisedOccupiedInit_Box(&
+            GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+       GaugeConf = GaugeConf_initial
+
+       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
+          call GaugeConf%Update(sign(+1._real64,tstart))
+       end do
+
+       do r=1,rmax
+          WilsonLoops(measurement,r) = &
+               GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+          
+          PotentialWilsonLoops(measurement,r) = &
+               GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+       end do
+    end do
+
+    if(ThisProc()==0) then
+       allocate(rObservable(rmax))
+       allocate(iObservable(rmax))
+       
+       fileID = OpenFile(filename=FileName_WilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       do r=1,rmax
+          rObservable = real(WilsonLoops(:,r))
+          iObservable = aimag(WilsonLoops(:,r))
+          
+          rMean = GetMean(rObservable)
+          iMean = GetMean(iObservable)
+          rStdErr = GetStdError(rObservable)
+          iStdErr = GetStdError(iObservable)
+          
+          write(FileID,'(1(I2,1X),4(SP,E16.9,1X))') r,rMean,rStdErr,iMean,iStderr
+       end do
+       call CloseFile(FileID)
+
+       
+       fileID = OpenFile(filename=FileName_PotentialWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       do r=1,rmax
+          rObservable = real(PotentialWilsonLoops(:,r))
+          iObservable = aimag(PotentialWilsonLoops(:,r))
+          
+          rMean = GetMean(rObservable)
+          iMean = GetMean(iObservable)
+          rStdErr = GetStdError(rObservable)
+          iStdErr = GetStdError(iObservable)
+          
+          write(FileID,'(1(I2,1X),4(SP,E16.9,1X))') r,rMean,rStdErr,iMean,iStderr
+       end do
+       call CloseFile(FileID)
+    end if
+    
+    call EndSimulation
+
+  contains
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! start time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tstart
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonSaturationScale
+
+      ! Initial gluon distribution (box): Amplitude
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonOccupationAmplitude
+
+      ! Coupling (only relevant in initialisation)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonCoupling
+
+      ! Output filenames
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_PotentialWilsonLoops);
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine DeterminePotential_oneTimePoint
+  
+  impure subroutine DeterminePotential
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+    use halocomm
+    use wilsonline
+    use random
+    use statistics
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: TimeSteps
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: GluonSaturationScale !qs
+    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
+    real(fp) :: GluonCoupling
+    real(fp) :: tstart
+    real(fp) :: TimeRange
+
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
+
+    ! Counting
+    integer :: i
+
+    integer(int64) :: it
+
+    ! Wilson loop parameters
+    integer(int8), parameter :: messdir=nDim
+    integer(int64) :: rmax, r
+
+    ! Observables
+    complex(fp) :: WilsonLoop, PotentialWilsonLoop
+
+    complex(fp), allocatable :: WilsonLoops(:,:,:), PotentialWilsonLoops(:,:,:)
+    real(fp), allocatable :: rObservable(:), iObservable(:)
+    real(fp) :: rMean, rStderr,iMean,iStderr
+    real(fp) :: time
+    integer(int64) :: TimePoints
+    ! Output
+    integer(int8) :: FileID_WilsonLoops, FileID_PotentialWilsonLoops
+
+    character(len=80) :: &
+         FileName_WilsonLoops, FileName_PotentialWilsonLoops
+
+    integer(intmpi) :: proc
+
+    integer(int64) :: measurement
+    integer(int64), parameter :: nMeasurement=10
+
+    call InitSimulation
+
+    rmax = LatticeExtensions(messdir)/2
+
+    TimePoints = nint(TimeRange/LatticeSpacings(0))
+    
+    allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
+    WilsonLoops = 0
+    allocate(PotentialWilsonLoops(nMeasurement,rmax,0:TimePoints))
+    PotentialWilsonLoops = 0
+
+    do measurement=1,nMeasurement
+
+       if(ThisProc()==0) write(output_unit,*)&
+            int(measurement,int16),'of',&
+            int(nMeasurement,int16),'configurations';&
+            call flush(output_unit)
+
+       ! initialisation of config ....
+       call GaugeConf_initial%TransversePolarisedOccupiedInit_Box(&
+            GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+       GaugeConf = GaugeConf_initial
+
+       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
+          call GaugeConf%Update(sign(+1._real64,tstart))
+       end do
+
+       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+          do r=1,rmax
+             WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             PotentialWilsonLoop = GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+
+             WilsonLoops(measurement,r,it) = WilsonLoop
+             PotentialWilsonLoops(measurement,r,it) = PotentialWilsonLoop
+          end do
+
+          call GaugeConf%Update
+       end do
+    end do
+    if(ThisProc()==0) then
+       fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_PotentialWilsonLoops = OpenFile(filename=FileName_PotentialWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+          time = tstart + it*LatticeSpacings(0)
+          if(ThisProc()==0) then
+             write(output_unit,*) real(time,real32)
+             call flush(output_unit)
+          end if
+          do r=1,rmax
+             if(r==0) then
+                write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(WilsonLoops(:,r,it))
+             iObservable = aimag(WilsonLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             if(r<rmax) then
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+
+             
+             if(r==0) then
+                write(FileID_PotentialWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(PotentialWilsonLoops(:,r,it))
+             iObservable = aimag(PotentialWilsonLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             if(r<rmax) then
+                write(FileID_PotentialWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_PotentialWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+             
+          end do
+       end do
+       
+       call CloseFile(FileID_WilsonLoops)
+       call CloseFile(FileID_PotentialWilsonLoops)
+    end if
+
+    call EndSimulation
+
+  contains
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! start time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tstart
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonSaturationScale
+
+      ! Initial gluon distribution (box): Amplitude
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonOccupationAmplitude
+
+      ! Coupling (only relevant in initialisation)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonCoupling
+
+      ! Output filenames
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_PotentialWilsonLoops);
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+
+
+    
+  end subroutine DeterminePotential
+
+  
   impure subroutine DetermineCustomPotentials
     use, intrinsic :: iso_fortran_env
     use precision
@@ -2128,6 +2609,10 @@ program simulation
      call DeterminePotentials
   case (7)
      call DetermineCustomPotentials
+  case (8)
+     call DeterminePotential
+  case (9)
+     call DeterminePotential_oneTimePoint
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
