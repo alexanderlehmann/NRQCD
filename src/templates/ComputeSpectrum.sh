@@ -6,8 +6,11 @@ exename=./run.exe
 mode=4
 
 nheaderlines=0
-filename_input="correlator_3s1.txt"
-filename_output="spectrum_3s1.txt"
+#filename_input="/home/lehmann/results/nrqcd/free_spectrum/O_m2/2019-04-01/32x32x32_long_dt1/correlator_3s1.txt"
+#filename_output="/home/lehmann/results/nrqcd/free_spectrum/O_m2/2019-04-01/32x32x32_long_dt1/spectrum_3s1.txt"
+filename_input=mesoncorrelator_3s1.txt
+filename_output=spectrum_3s1.txt
+
 
 mpiexec -n $processes \
 	$exename \
