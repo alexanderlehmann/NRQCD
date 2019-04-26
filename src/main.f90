@@ -345,7 +345,7 @@ contains
              call flush(output_unit)
           end if
           do r=1,rmax
-             if(r==0) then
+             if(r==1) then
                 write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
              end if
              rObservable = real(WilsonLoops(:,r,it))
@@ -365,7 +365,7 @@ contains
              end if
 
              
-             if(r==0) then
+             if(r==1) then
                 write(FileID_PotentialWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
              end if
              rObservable = real(PotentialWilsonLoops(:,r,it))

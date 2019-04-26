@@ -8,7 +8,7 @@ PETSC_LIB=${PETSC_DIR}/lib/libpetsc.so
 #### Compiler options
 
 #### Optimization
-#FFLAGS = -O3
+FFLAGS = -O3
 
 # Inter-file inlining optimization
 #FFLAGS += -ipo
@@ -26,7 +26,7 @@ FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include
 
 #### Debugging options
 # Checking everything
-FFLAGS += -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
+#FFLAGS += -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
 
 # Robust debug result
 #FFLAGS = -init=snan -traceback -warn interfaces -fp-speculation safe -traceback -check uninit -check bounds -ftrapuv -g
