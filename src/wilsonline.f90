@@ -34,7 +34,7 @@ module WilsonLine
   PRIVATE
 
   public GetFermionicWilsonLoop, GetGluonicWilsonLoop, GetPointSplitCorrelator,&
-       GetPotentialWilsonLoop,GetWilsonLoop
+       GetPotentialWilsonLoop,GetWilsonLoop, GetTimeDerivativeWilsonLoop
        
 
 contains ! Module procedures
@@ -343,15 +343,13 @@ contains ! Module procedures
        GetTimeDerivativeWilsonLine = &
             GetTimeDerivativeWilsonLine &
             + &
-            matmul(matmul(&
+            cmplx(0,1,fp)*matmul(matmul(&
             WilsonLine1,&
             Efield),&
             WilsonLine2)
        
        DerivativeIndex = GetNeib_G(proddir,DerivativeIndex)
     end do
-
-    GetTimeDerivativeWilsonLine = cmplx(0,1,fp)*GetTimeDerivativeWilsonLine
   end function GetTimeDerivativeWilsonLine
 
 

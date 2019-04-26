@@ -274,18 +274,18 @@ contains
     integer(int64) :: rmax, r
 
     ! Observables
-    complex(fp) :: WilsonLoop, PotentialWilsonLoop
+    complex(fp) :: WilsonLoop, TimeDerivativeWilsonLoop, Potential
 
-    complex(fp), allocatable :: WilsonLoops(:,:,:), PotentialWilsonLoops(:,:,:)
+    complex(fp), allocatable :: WilsonLoops(:,:,:), TimeDerivativeWilsonLoops(:,:,:)
     real(fp), allocatable :: rObservable(:), iObservable(:)
     real(fp) :: rMean, rStderr,iMean,iStderr
     real(fp) :: time
     integer(int64) :: TimePoints
     ! Output
-    integer(int8) :: FileID_WilsonLoops, FileID_PotentialWilsonLoops
+    integer(int8) :: FileID_WilsonLoops, FileID_TimeDerivativeWilsonLoops, FileID_Potential
 
     character(len=80) :: &
-         FileName_WilsonLoops, FileName_PotentialWilsonLoops
+         FileName_WilsonLoops, FileName_TimeDerivativeWilsonLoops, FileName_Potential
 
     integer(intmpi) :: proc
 
@@ -300,8 +300,8 @@ contains
     
     allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
     WilsonLoops = 0
-    allocate(PotentialWilsonLoops(nMeasurement,rmax,0:TimePoints))
-    PotentialWilsonLoops = 0
+    allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
+    TimeDerivativeWilsonLoops = 0
 
     do measurement=1,nMeasurement
 
@@ -323,10 +323,12 @@ contains
 
           do r=1,rmax
              WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             PotentialWilsonLoop = GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             TimeDerivativeWilsonLoop = &
+                  GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             !GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
 
              WilsonLoops(measurement,r,it) = WilsonLoop
-             PotentialWilsonLoops(measurement,r,it) = PotentialWilsonLoop
+             TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
           end do
 
           call GaugeConf%Update
@@ -335,7 +337,9 @@ contains
     if(ThisProc()==0) then
        fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_PotentialWilsonLoops = OpenFile(filename=FileName_PotentialWilsonLoops,&
+       fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Potential = OpenFile(filename=FileName_Potential,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
        do it=0,nint(TimeRange/LatticeSpacings(0)),+1
 
@@ -356,6 +360,8 @@ contains
              rStdErr = GetStdError(rObservable)
              iStdErr = GetStdError(iObservable)
 
+             WilsonLoop = cmplx(rMean,iMean)
+             
              if(r<rmax) then
                 write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
                      rMean,rStdErr,iMean,iStderr
@@ -366,29 +372,45 @@ contains
 
              
              if(r==1) then
-                write(FileID_PotentialWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+                write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
              end if
-             rObservable = real(PotentialWilsonLoops(:,r,it))
-             iObservable = aimag(PotentialWilsonLoops(:,r,it))
+             rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
+             iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
 
              rMean = GetMean(rObservable)
              iMean = GetMean(iObservable)
              rStdErr = GetStdError(rObservable)
              iStdErr = GetStdError(iObservable)
 
+             TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
+             
              if(r<rmax) then
-                write(FileID_PotentialWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
                      rMean,rStdErr,iMean,iStderr
              else
-                write(FileID_PotentialWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
                      rMean,rStdErr,iMean,iStderr
              end if
-             
+
+             ! Assume uncorrelated data (incorrect, but anyhow)
+             potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
+             if(r==1) then
+                write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             if(r<rmax) then
+                write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
+                     real(potential),aimag(potential)
+             else
+                write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
+                     real(potential),aimag(potential)
+             end if
+
           end do
        end do
-       
+
        call CloseFile(FileID_WilsonLoops)
-       call CloseFile(FileID_PotentialWilsonLoops)
+       call CloseFile(FileID_TimeDerivativeWilsonLoops)
+       call CloseFile(FileID_Potential)
     end if
 
     call EndSimulation
@@ -461,7 +483,8 @@ contains
 
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_PotentialWilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
