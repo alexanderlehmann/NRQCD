@@ -57,6 +57,7 @@ module gaugeconfiguration_su3
      procedure, private:: SetEfield_M
      
      ! Initialisation routines
+     procedure, public :: EquilibriumInit
      procedure, public :: SemicoldInit
      procedure, public :: HotInit
      procedure, public :: ColdInit
@@ -367,6 +368,176 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
+  impure subroutine EquilibriumInit(GaugeConf,Beta,Coupling)
+    use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
+         ndim, GetNeib_M
+    use random, only: GetRandomNormalCmplx
+    use mpiinterface, only: ThisProc, mpistop
+    implicit none
+    !> Gauge configuration
+    class(GaugeConfiguration), intent(out) :: GaugeConf
+    !> \f$\beta_{\text{L}}\f$
+    real(fp), intent(in) :: beta
+    !> Coupling \f$g\f$
+    real(fp), intent(in) :: coupling
+
+    real(fp) :: sigma
+    
+    integer(int8) :: k, a
+    integer(int64) :: MemoryIndex
+    complex(fp) :: r(ngen)
+
+    integer, parameter :: nefieldinit=40
+    integer :: iefieldinit
+    integer, parameter :: nequilibrium=300
+    integer :: iequibstep
+
+    
+    real(fp) :: energy, deviation
+    real(fp), parameter :: kappa=0.12_fp
+    real(fp), dimension(ngen) :: ec
+    complex(fp), dimension(nsun,nsun) :: U, G, Gneib, E, term
+    
+    sigma = 1/(2*beta)
+    
+    call GaugeConf%ColdInit
+    ! Start thermalizing gauge links
+
+    do iefieldinit=1,nefieldinit
+       ! Redrawing E-field
+       do MemoryIndex=1,GetMemorySize()
+          if(ThisProc()==GetProc_M(MemoryIndex)) then
+             do k=1,nDim
+                r = sigma*GetRandomNormalCmplx(int(ngen,int64))
+
+                GaugeConf%Efield(:,k,MemoryIndex) = real(r,fp)*Coupling*GetLatticeSpacing(0_int8)
+             end do
+          end if
+       end do
+
+       call GaugeConf%CommunicateBoundary()
+       
+       deviation = GetGdeviation(GaugeConf)
+       
+       ! Projection of the electric field
+       do while(deviation>1E-12)
+          do MemoryIndex=1,GetMemorySize()
+             if(ThisProc()==GetProc_M(MemoryIndex)) then
+                G = GetG(GaugeConf,MemoryIndex)
+                do k=1,nDim
+                   ec = GaugeConf%GetEfield_M([1_int8:ngen],k,MemoryIndex)
+                   E = GetAlgebraMatrix(ec)
+
+                   Gneib = GetG(GaugeConf,GetNeib_M(+k,MemoryIndex))
+                   term = &
+                        kappa*(matmul(matmul(matmul(&
+                        U,G),conjg(transpose(u))),Gneib)&
+                        - G) &
+                        + E
+
+                   do a=1,ngen
+                      GaugeConf%Efield(a,k,MemoryIndex) &
+                           = GetAlgebraCoordinate(a,term)
+                   end do
+                end do
+             end if
+          end do
+          call GaugeConf%CommunicateBoundary()
+          deviation = GetGdeviation(GaugeConf)
+       end do
+
+       ! Evolution of the gauge links
+       do iequibstep=1,nequilibrium
+          call GaugeConf%Update
+       end do
+       
+       ! Print energy to terminal
+       energy = GaugeConf%GetEnergy()
+       if(ThisProc()==0) then
+          write(output_unit,*)'Energy=',Energy
+       end if
+       
+    end do
+
+  contains
+    impure real(fp) function GetGdeviation(GaugeConf)
+    use mpiinterface, only: intmpi, GetRealSendType, ThisProc
+    use mpi
+    use lattice, only: nDim, GetLatticeSpacing,GetNeib_M,GetLatticeIndex_M, GetMemorySize, GetProc_M
+    implicit none
+    !> Gauge configuration
+    type(GaugeConfiguration), intent(in) :: GaugeConf
+
+    integer(intmpi) :: mpierr
+    real(fp) :: local_contribution
+
+    real(fp), dimension(ngen) :: efield, efield_neib
+    complex(fp), dimension(nsun,nsun) :: Mefield, Mefield_neib, derivative, Link_neib, G
+    
+    integer(int8)  :: i, a
+    integer(int64) :: MemoryIndex, neib
+
+    ! 1. Calculation of local contribution
+    local_contribution = 0
+    
+    do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
+       efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
+
+       neib = GetNeib_M(-i,MemoryIndex)
+       efield_neib = GaugeConf%GetEfield_M([1_int8:ngen],i,Neib)
+
+       Mefield = GetAlgebraMatrix(efield)
+       Mefield_neib = GetAlgebraMatrix(efield_neib)
+
+       Link_neib = GaugeConf%GetLink_M(i,Neib)
+
+       G = GetG(GaugeConf,MemoryIndex)
+       do concurrent(a=1_int8:ngen)
+          local_contribution = local_contribution &
+               + 2*Abs(GetTraceWithGenerator(a,G))
+       end do
+    end do
+
+    ! 2. MPI-Sum over all partitions
+    call MPI_ALLREDUCE(&
+         local_contribution,&
+         GetGdeviation,&
+         1_intmpi,&
+         GetRealSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+    end function GetGdeviation
+    
+    pure function GetG(GaugeConf,MemoryIndex)
+      use lattice, only: nDim, GetNeib_M
+      implicit none
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+      integer(int64), intent(in) :: MemoryIndex
+
+      complex(fp), dimension(nsun,nsun) :: GetG, Uneib, E, Eneib
+      real(fp), dimension(ngen) :: ec,ecneib
+
+      integer(int8) :: i
+      integer(int64) :: neib
+
+      GetG = 0
+      do i=1,ndim
+         neib = GetNeib_m(-i,MemoryIndex)
+
+         Uneib = GaugeConf%GetLink_M(i,neib)
+
+         ecneib = GaugeConf%GetEfield_M([1_int8:ngen],i,neib)
+         Eneib = GetAlgebraMatrix(ecneib)
+
+         ec = GaugeConf%GetEfield_M([1_int8:ngen],i,Memoryindex)
+         E = GetAlgebraMatrix(ec)
+
+         GetG = GetG &
+              + E - matmul(matmul(conjg(transpose(Uneib)),Eneib),U)
+      end do
+    end function GetG
+  end subroutine EquilibriumInit
+  
   !>@brief Initialises the links with unit matrices on almost all lattice sites
   !! and electric field with zeroes
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)

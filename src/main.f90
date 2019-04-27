@@ -15,6 +15,282 @@ module programs
   PUBLIC
 
 contains
+  impure subroutine MeasurePotential_Equilibrium
+
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+    use halocomm
+    use wilsonline
+    use random
+    use statistics
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: TimeSteps
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: Beta
+    real(fp) :: GluonCoupling
+    real(fp) :: tstart
+    real(fp) :: TimeRange
+
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
+
+    ! Counting
+    integer :: i
+
+    integer(int64) :: it
+
+    ! Wilson loop parameters
+    integer(int8), parameter :: messdir=nDim
+    integer(int64) :: rmax, r
+
+    ! Observables
+    complex(fp) :: WilsonLoop, TimeDerivativeWilsonLoop, Potential
+
+    complex(fp), allocatable :: WilsonLoops(:,:,:), TimeDerivativeWilsonLoops(:,:,:)
+    real(fp), allocatable :: rObservable(:), iObservable(:)
+    real(fp) :: rMean, rStderr,iMean,iStderr
+    real(fp) :: time
+    integer(int64) :: TimePoints
+    ! Output
+    integer(int8) :: FileID_WilsonLoops, FileID_TimeDerivativeWilsonLoops, FileID_Potential
+
+    character(len=80) :: &
+         FileName_WilsonLoops, FileName_TimeDerivativeWilsonLoops, FileName_Potential
+
+    integer(intmpi) :: proc
+
+    integer(int64) :: measurement
+    integer(int64), parameter :: nMeasurement=10
+
+    call InitSimulation
+
+    rmax = LatticeExtensions(messdir)/2
+
+    TimePoints = nint(TimeRange/LatticeSpacings(0))
+    
+    allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
+    WilsonLoops = 0
+    allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
+    TimeDerivativeWilsonLoops = 0
+
+    do measurement=1,nMeasurement
+
+       if(ThisProc()==0) write(output_unit,*)&
+            int(measurement,int16),'of',&
+            int(nMeasurement,int16),'configurations';&
+            call flush(output_unit)
+
+       ! initialisation of config ....
+       call GaugeConf_initial%EquilibriumInit(Beta,GluonCoupling)
+       GaugeConf = GaugeConf_initial
+
+       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
+          call GaugeConf%Update(sign(+1._real64,tstart))
+       end do
+
+       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+          do r=1,rmax
+             WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             TimeDerivativeWilsonLoop = &
+                  GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             !GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+
+             WilsonLoops(measurement,r,it) = WilsonLoop
+             TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
+          end do
+
+          call GaugeConf%Update
+       end do
+    end do
+    if(ThisProc()==0) then
+       fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Potential = OpenFile(filename=FileName_Potential,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+          time = tstart + it*LatticeSpacings(0)
+          if(ThisProc()==0) then
+             write(output_unit,*) real(time,real32)
+             call flush(output_unit)
+          end if
+          do r=1,rmax
+             if(r==1) then
+                write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(WilsonLoops(:,r,it))
+             iObservable = aimag(WilsonLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             WilsonLoop = cmplx(rMean,iMean)
+             
+             if(r<rmax) then
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+
+             
+             if(r==1) then
+                write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
+             iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
+             
+             if(r<rmax) then
+                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+
+             ! Assume uncorrelated data (incorrect, but anyhow)
+             potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
+             if(r==1) then
+                write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             if(r<rmax) then
+                write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
+                     real(potential),aimag(potential)
+             else
+                write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
+                     real(potential),aimag(potential)
+             end if
+
+          end do
+       end do
+
+       call CloseFile(FileID_WilsonLoops)
+       call CloseFile(FileID_TimeDerivativeWilsonLoops)
+       call CloseFile(FileID_Potential)
+    end if
+
+    call EndSimulation
+
+  contains
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! start time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tstart
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') Beta
+
+      ! Coupling (only relevant in initialisation)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonCoupling
+
+      ! Output filenames
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine MeasurePotential_Equilibrium
+  
   impure subroutine DeterminePotential_oneTimePoint
     use, intrinsic :: iso_fortran_env
     use precision
@@ -2636,6 +2912,8 @@ program simulation
      call DeterminePotential
   case (9)
      call DeterminePotential_oneTimePoint
+  case (10)
+     call MeasurePotential_Equilibrium
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
