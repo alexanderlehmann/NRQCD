@@ -387,7 +387,7 @@ contains ! Module procedures
     integer(int64) :: MemoryIndex
     complex(fp) :: r(ngen)
 
-    integer, parameter :: nefieldinit=10
+    integer, parameter :: nefieldinit=6
     integer :: iefieldinit
     integer, parameter :: nequilibrium=300
     integer :: iequibstep
@@ -432,7 +432,7 @@ contains ! Module procedures
        
        ! Projection of the electric field
        i = 0
-       do while(deviation>1E-4)
+       do while(deviation>1E-8)
           i = i + 1
           do MemoryIndex=1,GetMemorySize()
              if(ThisProc()==GetProc_M(MemoryIndex)) then

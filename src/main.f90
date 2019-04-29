@@ -70,7 +70,7 @@ contains
     integer(intmpi) :: proc
 
     integer(int64) :: measurement
-    integer(int64), parameter :: nMeasurement=10
+    integer(int64) :: nMeasurement
 
     call InitSimulation
 
@@ -252,7 +252,11 @@ contains
       ! Initial gluon distribution (box): Saturation scale
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
-
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') nMeasurement
+      
+      
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
