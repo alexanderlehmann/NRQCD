@@ -4,7 +4,7 @@ run.exe: $(FOBJ)
 	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
 
 arrayoperations.o : arrayoperations.f90 
-gaugeconfiguration_su3.o : gaugeconfiguration_su3.f90 mathconstants.o xpfft.o tolerances.o random.o mpiinterface.o halocomm.o matrixoperations.o lattice.o su3.o precision.o 
+gaugeconfiguration_su3.o : gaugeconfiguration_su3.f90 mathconstants.o xpfft.o tolerances.o io.o mpiinterface.o random.o halocomm.o matrixoperations.o lattice.o su3.o precision.o 
 halocomm.o : halocomm.f90 arrayoperations.o lattice.o mpiinterface.o precision.o 
 io.o : io.f90 mpiinterface.o 
 lattice.o : lattice.f90 tolerances.o mathconstants.o arrayoperations.o mpiinterface.o precision.o 

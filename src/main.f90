@@ -1,6 +1,6 @@
-!-------------------------------------------------------------------------
+!----------------------------------------------------------------------
 ! PROGRAMS for Lattice-NRQCD
-!-------------------------------------------------------------------------
+!----------------------------------------------------------------------
 !
 ! MODULE: programs
 !>@brief Program/mains
@@ -10,7 +10,7 @@
 !!@version 1.0
 ! REVISION HISTORY:
 ! 07 03 2019 - Initial Version
-!-------------------------------------------------------------------------
+!----------------------------------------------------------------------
 module programs
   PUBLIC
 
@@ -38,7 +38,6 @@ contains
     integer(int64) :: RandomNumberSeed
 
     real(fp) :: Beta
-    real(fp) :: GluonCoupling
     real(fp) :: tstart
     real(fp) :: TimeRange
 
@@ -92,7 +91,8 @@ contains
             call flush(output_unit)
 
        ! initialisation of config ....
-       call GaugeConf_initial%EquilibriumInit(Beta,GluonCoupling)
+       call GaugeConf_initial%EquilibriumInit(Beta)
+       if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
        GaugeConf = GaugeConf_initial
 
        do it=1,abs(NINT(tstart/LatticeSpacings(0)))
@@ -100,7 +100,7 @@ contains
        end do
 
        do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-
+          if(thisproc()==0) write(output_unit,*) it
           do r=1,rmax
              WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
              TimeDerivativeWilsonLoop = &
@@ -252,10 +252,6 @@ contains
       ! Initial gluon distribution (box): Saturation scale
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
-
-      ! Coupling (only relevant in initialisation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
 
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
