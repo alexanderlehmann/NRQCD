@@ -2080,21 +2080,25 @@ contains
     real(fp) :: GluonSaturationScale !qs
     real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
     real(fp) :: GluonCoupling
-    real(fp) :: CoMTime
-    real(fp) :: TimeRange
+    real(fp) :: tmin
+    real(fp) :: tmax
+    real(fp) :: smax
     real(fp) :: HeavyQuarkmass
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
+
+    ! Time coordinates
+    real(fp) :: t, s, t1, t2
+    integer(int64) :: is, it, it1, it2
+    integer(int64) :: itmin, itmax
+    integer(int64) :: ismin, ismax
+    integer(int64) :: it2min, it2max
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atT1
-    type(NRQCDField)         :: HeavyField, HeavyField_atT1
+    type(GaugeConfiguration) :: GaugeConf, GaugeConf_t
+    type(NRQCDField)         :: HeavyField, HeavyField_t
 
     ! Counting
     integer :: i
-
-    ! CMS coordinates
-    real(fp) :: t,s,t1,t2
-    integer(int64) :: is, it, TimeSteps
 
     ! Output
     real(fp) :: norm_quark, norm_antiq
@@ -2103,8 +2107,8 @@ contains
 
     character(len=80) :: FileMesonCorrelator, FileNorm
 
-    complex(fp), allocatable :: correlator(:)
-    real(fp),allocatable :: time(:), norm(:,:)
+    complex(fp), allocatable :: correlator(:,:)
+    real(fp),allocatable :: qnorm(:,:),anorm(:,:)
     
     call InitSimulation
     
@@ -2115,65 +2119,84 @@ contains
        fileID_Norm = OpenFile(filename=FileNorm,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
     end if
-    ! Determination of CMS coordinates
-    TimeSteps = nint(TimeRange/LatticeSpacings(0))
-    t  = +CoMTime      ! fixed
-    s  = -TimeRange/2  ! varies
-    t1 = +t-s/2        ! varies
-    t2 = +t+s/2        ! varies
-    
-    call GaugeConf_atT1%TransversePolarisedOccupiedInit_Box(&
+
+    ! Initialisation, defining the point t=0
+    call GaugeConf_t%TransversePolarisedOccupiedInit_Box(&
          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    !call Gaugeconf_atT1%ColdInit
+    !call Gaugeconf_t%ColdInit
+
+
+    ! Boundaries of the time coordinates
+    itmin = nint(tmin/LatticeSpacings(0))
+    itmax = nint(tmax/LatticeSpacings(0))
+    ismin = 0
+    if(2*itmax>nint(smax/LatticeSpacings(0))) then
+       ismax = nint(smax/LatticeSpacings(0))
+    else
+       ismax = 2*itmax
+    end if
+
+    if(Thisproc()==0) then
+       print*,itmin,itmax,ismin,ismax
+    end if
+
+    allocate(correlator(itmin:itmax,ismin:ismax))
+    allocate(qnorm(itmin:itmax,ismin:ismax))
+    allocate(anorm(itmin:itmax,ismin:ismax))
+    correlator=0
+    qnorm=0
+    anorm=0
     
-    ! Evolving gauge configuration to t1 (possibly negative)
-    do it=1,abs(NINT(t1/LatticeSpacings(0)))
-       call GaugeConf_atT1%Update(sign(+1._real64,t1))
+    ! Evolving gauge configuration to tmin>=0
+    do it=1,abs(NINT(tmin/LatticeSpacings(0)))
+       call GaugeConf_t%Update(sign(+1._real64,t1))
     end do
 
     ! Initialising heavy field
-    call HeavyField_atT1%InitSinglePoint(&
+    call HeavyField_t%InitSinglePoint(&
          latticeindex_quark=1_int64,&
          latticeindex_antiq=1_int64)
-    do is=1,TimeSteps
-       t1 = +t-s/2
-       t2 = +t+s/2
+    
+    do it=itmin,itmax
+       t = LatticeSpacings(0)*it
 
-       ! Setting links for time-evolution at t1
-       GaugeConf = GaugeConf_atT1
+       !if(t>smax/2) then
+       !   ismax = nint(smax/LatticeSpacings(0))
+       !else
+       !   ismax = 2*(itmax-it)
+       !end if
+       ismax = minval([nint(smax/LatticeSpacings(0),int64),2*(itmax-it)],1)
+       it2min = it
+       it2max = it + ismax/2
+       it1 = it
 
-       ! Initialising quark-pair at t1 ...
-       HeavyField = HeavyField_atT1
-       
-        ! ... and evolving to t2
-       do it=1,abs(nint((t2-t1)/LatticeSpacings(0))),+1
-          if(t1<t2) then
-             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-             call GaugeConf%Update(+1._fp)
-          else
-             call GaugeConf%Update(-1._fp)
-             call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,-1._fp)
-          end if
+       if(thisproc()==0) print*,it,ismax,it2max
+       do it2=it2min,it2max
+          
        end do
 
-       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
-       norm_quark = HeavyField%GetNorm_Quark()
-       norm_antiq = HeavyField%GetNorm_AntiQ()
+       ! Setting links for time-evolution from t1=t to t2=min(2*tmax,smax)
+       GaugeConf = GaugeConf_t
+
+       ! Initialising quark-pair at t ...
+       HeavyField = HeavyField_t
+
+       go to 1
+       !do is=ismin,ismax
+          !mesoncorrelator
+
+       !   call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
+       !   call GaugeConf%Update(+1._fp)
+       !end do
+       1 continue
+        ! ... and evolving to t2
+       !do is=1,abs(nint((t2-t1)/LatticeSpacings(0))),+1
+       !   call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
+       !   call GaugeConf%Update(+1._fp)
+       !end do
        
-       if(ThisProc()==0) then
-          write(output_unit,'(5(SP,E15.7,1X))')  s, real(mesoncorrelator),aimag(mesoncorrelator), norm_quark, norm_antiq
-          call flush(output_unit)
-          
-          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-               s,real(mesoncorrelator,real64),aimag(mesoncorrelator)
-          write(FileID_Norm,'(3(SP,E19.12,1X))')&
-               s,norm_quark,norm_antiq
-       end if
-
-       call GaugeConf_atT1%Update
-
-       ! Setting up the next value for s
-       s = s + LatticeSpacings(0)
+       call GaugeConf_t%Update
+       
     end do
 
     ! Closing files
@@ -2229,14 +2252,16 @@ contains
          read(arg,'(F10.13)') LatticeSpacings(i)
       end do
 
-      ! Center of mass time T
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') CoMTime
-      ! Center of mass time-range smax
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
 
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+      ! Minimal CoM time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tmin
+      ! Maximum CoM time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tmax
+      ! Upper bound for s
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') smax
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
