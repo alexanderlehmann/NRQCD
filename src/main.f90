@@ -2148,8 +2148,9 @@ contains
 
     allocate(qnorm(ismin:ismax,itmin:itmax))
     qnorm = nan
+    qnorm(0,:) = 1
     allocate(anorm(ismin:ismax,itmin:itmax))
-    anorm = nan
+    anorm = qnorm
 
     !goto 1
     ! Initialisation, defining the point t=0
