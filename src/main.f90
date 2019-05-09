@@ -2102,8 +2102,8 @@ contains
     integer(int64) :: it1min, it1max, it1range
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_t, GaugeConf_t1
-    type(NRQCDField)         :: HeavyField, HeavyField_t, HeavyField_t1
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2
+    type(NRQCDField)         :: HeavyField_t1, HeavyField_t2
 
     ! Counting
     integer :: i
@@ -2124,14 +2124,41 @@ contains
     integer(int64) :: ittest, istest
     logical :: tTest, sTest
 
+    ! Measurement of progression
+    integer(int64) :: iprogress, nprogress
+
+    ! Format builder
+    character(len=100) :: form
+    character(len=1) :: auxd, auxw
+    integer :: d, p, w
+
     nan = ieee_value(nan, ieee_quiet_nan)
     
     call InitSimulation
 
+    ! Allocating result arrays
+    ismin = 0
+    ismax = nint(smax/ds)
+    itmin = nint(tmin/ds)
+    itmax = nint(tmax/ds)
+    
+    allocate(correlator(ismin:ismax,itmin:itmax))
+    correlator = cmplx(nan,nan,fp)
+    correlator(0,:) = cmplx(0,1,fp)
+
+    allocate(qnorm(ismin:ismax,itmin:itmax))
+    qnorm = nan
+    allocate(anorm(ismin:ismax,itmin:itmax))
+    anorm = nan
+
+    !goto 1
     ! Initialisation, defining the point t=0
-    !call GaugeConf_t%TransversePolarisedOccupiedInit_Box(&
-    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf_t1%ColdInit
+    call GaugeConf_t1%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    !call Gaugeconf_t1%ColdInit
+    call HeavyField_t1%InitSinglePoint(&
+         latticeindex_quark=1,&
+         latticeindex_antiq=1)
 
     ! Evolve gauge configuration from t1=0 (initialisation time) to minimum t1-value
     t1min = tmin - smax/2
@@ -2144,22 +2171,58 @@ contains
        call GaugeConf_t1%Update(sign(1._fp,t1min))
        t1 = t1 + sign(LatticeSpacings(0),t1min)
 
-       if(ThisProc()==0) print*,t1
+       !if(ThisProc()==0) print*,t1
+    end do
+
+    ! Counting number of (t,s) points --> Needed for output of progression
+    nprogress = 0
+    do it1=nint(t1min/LatticeSpacings(0)),nint(t1max/LatticeSpacings(0))
+       t1 = it1*LatticeSpacings(0)
+
+       it2range = nint(smax/LatticeSpacings(0))
+       do it2=it1+1,it1+it2range
+          nprogress = nprogress + 1
+          
+          t2 = it2*LatticeSpacings(0)
+          t = (t2+t1)/2
+          s =  t2-t1
+          ! Check if t and s on the (t,s)-grid
+          ittest = nint(t/ds)
+          istest = nint(s/ds)
+
+          dttest = ittest*ds
+          dstest = istest*ds
+
+          tTest = abs(dttest-t).le.GetZeroTol()
+          sTest = abs(dstest-s).le.GetZeroTol()
+          
+          if(t > tmax) then
+             exit
+          end if
+       end do
     end do
 
     ! Evoling along t1 ...
+    iprogress = 0
     do it1=nint(t1min/LatticeSpacings(0)),nint(t1max/LatticeSpacings(0))
        t1 = it1*LatticeSpacings(0)
        
+       ! ... and t2 --> getting (t,s)-coordinates
+       GaugeConf_t2 = GaugeConf_t1
+       HeavyField_t2 = HeavyField_t1
        it2range = nint(smax/LatticeSpacings(0))
        do it2=it1+1,it1+it2range
+          iprogress = iprogress + 1
+          if(ThisProc()==0) then
+             write(output_unit,'(E16.9,A1)') real(iprogress)/nprogress*100,'%'
+          end if
+          
+          call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
+          call GaugeConf_t2%Update
 
           t2 = it2*LatticeSpacings(0)
           t = (t2+t1)/2
           s =  t2-t1
-
-          !if(modulo(t,ds)==0 .and. modulo(s,ds)==0 &
-          !     .and. tmin.le.t .and. t.le.tmax) then
 
           ! Check if t and s on the (t,s)-grid
           ittest = nint(t/ds)
@@ -2170,111 +2233,28 @@ contains
 
           tTest = abs(dttest-t).le.GetZeroTol()
           sTest = abs(dstest-s).le.GetZeroTol()
+          
           if(tmin.le.t .and. t.le.tmax .and. tTest .and. sTest) then
              it = nint(t/ds)
              is = nint(s/ds)
-             !correlator(it,is) =
              
-             if(ThisProc()==0) then
-                print*,real([t1,t2,t,s],real32)
-             end if
+             correlator(is,it) = HeavyField_t2%GetMesonCorrelator_3s1_ZeroMomentum()
+             qnorm(is,it) = HeavyField_t2%GetNorm_Quark()
+             anorm(is,it) = HeavyField_t2%GetNorm_AntiQ()
+             
+             !if(ThisProc()==0) then
+             !print*,real([t1,t2,t,s],real32),int([it,is],int16)
+             !print*,int([it,is],int16)
+             !end if
+          else if(t > tmax) then
+             exit
           end if
-          !if(thisproc()==0)print*,real([t1,t2,t,s],real32)
-          !if(thisproc()==0)print*,modulo(t,ds)==0,modulo(t,ds)
        end do
-    end do
-
-    ! ... and t2 --> getting (t,s)-coordinates
-    
-    call mpistop
-    goto 1
-
-    
-    t1min = tmin-smax/2
-    it1min = nint(t1min/LatticeSpacings(0))
-    t1max = tmax-smax/2
-    it1max = nint(t1max/LatticeSpacings(0))
-    
-    call GaugeConf_t1%Update(-0.5_fp)
-    do it1=1,abs(it1min)
-       call Gaugeconf_t1%Update(sign(1._fp,t1min))
-    end do
-
-    ! Allocation of output arrays
-    itmin = nint(tmin/LatticeSpacings(0))
-    itmax = nint(tmax/LatticeSpacings(0))
-    ismin = 1
-    ismax = nint(smax/LatticeSpacings(0))
-
-    allocate(correlator(ismin:ismax,itmin:itmax))
-    correlator = cmplx(nan,nan,fp)
-    allocate(qnorm(ismin:ismax,itmin:itmax))
-    qnorm = nan
-    allocate(anorm(ismin:ismax,itmin:itmax))
-    anorm = nan
-
-    do it1=it1min,it1max
-       t1 = (it1-0.5_fp)*LatticeSpacings(0)
-
-       it2min = it1 + 1
-       it2max = it1 + ismax
-       
-       GaugeConf = GaugeConf_t1
-       do it2=it2min,it2max,+1
-
-          call GaugeConf%Update
-
-          it = (it1+it2)/2
-          is = it2-it1
-
-          if(modulo(it1+it2,2)==0) then
-             if(ThisProc()==0) then
-                print*,int([it1,it2,it,is],int16)
-             end if
-          endif
-       end do
-       if(thisproc()==0) print*
 
        call GaugeConf_t1%Update
     end do
-    call mpistop
 
-    goto 1
-    do it1=itmin,itmax
-       if(ThisProc()==0) write(output_unit,*) it1,'of',itmax-itmin+1
-       t = LatticeSpacings(0)*it
-       
-       it2min = it1
-       it2=it2min
-       it = (it2+it1)/2
-       is = it2-it1
-       ismax = minval([nint(smax/LatticeSpacings(0),int64),2*(itmax-it1)],1)
-       it2max = it1 + ismax/2
-       correlator(it,is) = cmplx(0,1,fp)
-       qnorm(it,is) = 1
-       anorm(it,is) = 1
-
-       ! Setting links for time-evolution from t1=t to t2=min(2*tmax,smax)
-       GaugeConf = GaugeConf_t
-
-       ! Initialising quark-pair at t ...
-       HeavyField = HeavyField_t
-
-       do it2=it2min+1,it2max
-          !call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-          !call GaugeConf%Update(+1._fp)
-          is = it2 - it1
-          it = (it2+it1)/2
-          correlator(it,is) = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
-          qnorm(it,is) = HeavyField%GetNorm_Quark()
-          anorm(it,is) = HeavyField%GetNorm_AntiQ()
-       end do
-
-       ! Evolving gauge field to next t
-       call GaugeConf_t%Update
-    end do
 1   continue
-    
     if(ThisProc()==0) then
        ! Opening files
        fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
@@ -2282,21 +2262,59 @@ contains
        fileID_Norm = OpenFile(filename=FileNorm,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
 
+
+       ! Write header
+       write(FileID_Correlator,'(A3,1X)',advance='no') 's\t'
+       write(FileID_Norm,'(A3,1X)',advance='no') 's\t'
+       do it=lbound(correlator,2),ubound(correlator,2)
+          t = it*ds
+
+          d = nint(-log10(ds))
+          if(abs(t)>0) then
+             p = nint(log10(abs(t)))
+          else
+             p = 0
+          end if
+          w = d + p + 1 + 1
+          
+          write(auxw,'(I1)') w
+          write(auxd,'(I1)') d
+          form = '(F'// auxw // '.' // auxd // ',1X)'
+          
+          write(FileID_Correlator,'(A2)',advance='no') 'Re'
+          write(FileID_Correlator,form,advance='no')  t
+          write(FileID_Correlator,'(A2)',advance='no') 'Im'
+          write(FileID_Correlator,form,advance='no')  t
+          
+          write(FileID_Norm,'(A1)',advance='no') 'Q'
+          write(FileID_Norm,form,advance='no')  t
+          write(FileID_Norm,'(A1)',advance='no') 'A'
+          write(FileID_Norm,form,advance='no')  t
+
+          if(it==ubound(correlator,2)) then
+             write(FileID_Correlator,*)
+             write(FileID_Norm,*)            
+          end if
+          
+       end do
        
-       do is=lbound(correlator,2),ubound(correlator,2)
-          do it=lbound(correlator,1),ubound(correlator,1)
-             if(it<ubound(correlator,1)) then
+       do is=lbound(correlator,1),ubound(correlator,1)
+          s = is*ds
+          write(FileID_Correlator,'(SP,E16.9,1X)',advance='no') s
+          write(FileID_Norm,'(SP,E16.9,1X)',advance='no') s
+          do it=lbound(correlator,2),ubound(correlator,2)
+             if(it<ubound(correlator,2)) then
                 write(FileID_Correlator,'(2(SP,E16.9,1X))',advance='no') &
-                     real(correlator(it,is)),aimag(correlator(it,is))
+                     real(correlator(is,it)),aimag(correlator(is,it))
 
                 write(FileID_Norm,'(2(SP,E16.9,1X))',advance='no') &
-                     qnorm(it,is),anorm(it,is)
+                     qnorm(is,it),anorm(is,it)
              else
                 write(FileID_Correlator,'((SP,E16.9,1X),(SP,E16.9))',advance='yes') &
-                     real(correlator(it,is)),aimag(correlator(it,is))
+                     real(correlator(is,it)),aimag(correlator(is,it))
                 
                 write(FileID_Norm,'(2(SP,E16.9,1X))',advance='yes') &
-                     qnorm(it,is),anorm(it,is)
+                     qnorm(is,it),anorm(is,it)
              end if
           end do
        end do
@@ -2306,7 +2324,6 @@ contains
        call CloseFile(FileID_Norm)
     end if
     
-    !call HeavyField%Destructor
     call EndSimulation
   contains
     !>@brief Initialisation of the simulation
