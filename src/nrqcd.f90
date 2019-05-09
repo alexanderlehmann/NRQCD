@@ -1473,7 +1473,7 @@ use lattice
                conjg(HeavyField%AntiQProp(:,:,MemoryIndex)))
        end do
        LocalValue = LocalValue &
-            + GetTrace(Correlator)
+            + GetTrace(Correlator)*nspins**2/ncolours
     end do
 
     call MPI_ALLREDUCE(&
