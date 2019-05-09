@@ -2271,7 +2271,7 @@ contains
           t = it*ds
 
           d = nint(-log10(ds))
-          if(abs(t)>0) then
+          if(abs(t)>1) then
              p = nint(log10(abs(t)))
           else
              p = 0
