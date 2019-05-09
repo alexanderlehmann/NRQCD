@@ -2264,8 +2264,8 @@ contains
 
 
        ! Write header
-       write(FileID_Correlator,'(A3,1X)',advance='no') 's\t'
-       write(FileID_Norm,'(A3,1X)',advance='no') 's\t'
+       write(FileID_Correlator,'(A1,1X)',advance='no') 's'
+       write(FileID_Norm,'(A1,1X)',advance='no') 's'
        do it=lbound(correlator,2),ubound(correlator,2)
           t = it*ds
 
