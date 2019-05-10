@@ -1784,14 +1784,9 @@ contains ! Module procedures
     integer(int64), intent(in) :: latticeindex
     !> Algebra coordinates of electric field
     real(fp) :: GetElectricField_AlgebraCoordinate
-
-    complex(fp) :: TemporalPlaquette(nsun,nsun)
-
-    TemporalPlaquette = conf%GetPlaquette_G(0_int8,i,LatticeIndex)
     
     GetElectricField_AlgebraCoordinate &
-         = GetAlgebraCoordinate(a,TemporalPlaquette)&
-         /GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = conf%GetEfield_G(a,i,latticeindex)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraCoordinate
 
   !>@brief Returns electric field
@@ -1812,14 +1807,12 @@ contains ! Module procedures
     integer(int64), intent(in) :: latticeindex
     !> Electric field
     complex(fp) :: GetElectricField_AlgebraMatrix(nSUN,nSUN)
-
-    complex(fp) :: TemporalPlaquette(nsun,nsun)
-
-    TemporalPlaquette = conf%GetPlaquette_G(0_int8,i,LatticeIndex)
+    
+    real(fp) :: efield(ngen)
+    efield = conf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
     
     GetElectricField_AlgebraMatrix &
-         = TemporalPlaquette&
-         /GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraMatrix
 
   !>@brief Update routine using the Leapfrog algorithm
