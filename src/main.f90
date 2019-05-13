@@ -2055,7 +2055,7 @@ contains
     complex(fp), allocatable :: Correlator(:)
     real(fp), allocatable :: Spectrum(:)
 
-    real(fp) :: dt
+    real(fp) :: dt, MaxTime
 
     integer :: it
     integer(int8) :: fileID
@@ -2169,7 +2169,8 @@ contains
       end do
       SignalSize = 0
       do
-         read(unit=FileID,fmt=*,iostat=stat)
+         read(unit=FileID,fmt=*,iostat=stat) t, signal_re, signal_im
+         if(t>MaxTime) exit
          if(stat/=0) exit
          SignalSize = SignalSize + 1
       end do
@@ -2273,6 +2274,11 @@ contains
       ! Output filename
       arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
       FileName_output = arg
+
+      ! maximum time
+      arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
+      FileName_output = arg
+      read(arg,'(F6.1)') MaxTime
       
 
       !..--** Module initialisations **--..
