@@ -15,6 +15,247 @@ module programs
   PUBLIC
 
 contains
+  impure subroutine MeasureHeavyQuarkoniumCorrelators_nonWigner
+
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+
+    use nrqcd
+
+    use tolerances, only: GetZeroTol
+    use, intrinsic :: ieee_arithmetic
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: GluonSaturationScale !qs
+    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
+    real(fp) :: GluonCoupling
+    real(fp) :: tmin
+    real(fp) :: HeavyQuarkmass
+    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
+
+    ! Time coordinates
+    real(fp) :: t, trange
+    
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf
+    type(NRQCDField)         :: HeavyField
+
+    ! Counting
+    integer :: i
+    
+    integer(int64) :: it, TimeSteps
+    
+    ! Output
+    real(fp) :: norm_quark, norm_antiq
+    complex(fp) :: mesoncorrelator
+    integer(int8) :: FileID_Norm, FileID_Correlator
+
+    character(len=80) :: FileMesonCorrelator, FileNorm
+
+    ! Format builder
+    character(len=100) :: form
+    character(len=1) :: auxd, auxw
+    integer :: d, p, w
+    
+    call InitSimulation
+
+    ! Initialisation, defining the point t=0
+    !call GaugeConf%TransversePolarisedOccupiedInit_Box(&
+    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    call Gaugeconf%ColdInit
+    call HeavyField%InitSinglePoint(&
+         latticeindex_quark=1,&
+         latticeindex_antiq=1)
+
+    t = 0
+    do it=1,nint(abs(tmin)/LatticeSpacings(0))
+       call GaugeConf%Update(sign(1._fp,tmin))
+       t = t + sign(LatticeSpacings(0),tmin)
+    end do
+
+
+    
+    if(ThisProc()==0) then
+       ! Opening files
+       fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_Norm = OpenFile(filename=FileNorm,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+
+       write(FileID_Correlator,'(A1,1X,A2,1X,A2)') 's','Re','Im'
+       write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
+
+       ! Write first line
+       write(FileID_Correlator,'(3(SP,E16.9,1X))') &
+            t,0._fp,1._fp
+       write(FileID_Norm,'(3(SP,E16.9,1X))') &
+            t,1._fp,1._fp
+    end if
+
+    TimeSteps = nint(trange/LatticeSpacings(0))
+    do it=1,TimeSteps
+       if(ThisProc()==0) then
+          write(output_unit,'(F5.1,A1)') real(it)/TimeSteps*100,'%'
+       end if
+       t = t + LatticeSpacings(0)
+
+       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
+       call GaugeConf%Update
+
+       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+       norm_quark = HeavyField%GetNorm_Quark()
+       norm_antiq = HeavyField%GetNorm_AntiQ()
+       if(ThisProc()==0) then
+          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
+               t,real(mesoncorrelator,fp), aimag(mesoncorrelator)
+          write(FileID_Norm,'(3(SP,E16.9,1X))') &
+               t,norm_quark,norm_antiq
+       end if
+    end do
+
+    if(ThisProc()==0) then
+       ! Closing files
+       call CloseFile(FileID_Correlator)
+       call CloseFile(FileID_Norm)
+    end if
+    
+    call EndSimulation
+  contains
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      use NRQCD,              only: InitModule_NRQCD              => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+
+      real(fp) :: c_re, c_im
+      real(fp) :: kspTol
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+      
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+
+      ! Start time for quarkonium correlator (t1)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tmin
+      ! t2-t1
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') trange
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonSaturationScale
+
+      ! Initial gluon distribution (box): Amplitude
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonOccupationAmplitude
+
+      ! Coupling (only relevant in initialisation)
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GluonCoupling
+
+      ! Tolerance for iterative PETSc solver
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') kspTol
+      
+      ! Heavy quark mass
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') HeavyQuarkmass
+      
+      ! Wilson coefficents
+      do i=1,nWilsonCoefficients
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_re
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_im
+
+         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
+      end do
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_NRQCD
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+      
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+
+  end subroutine MeasureHeavyQuarkoniumCorrelators_nonWigner
+
+  
   impure subroutine MeasurePotential_Equilibrium
 
     use, intrinsic :: iso_fortran_env
@@ -1841,10 +2082,11 @@ contains
           call CloseFile(fileID)
        end if
 
+       !goto 1
        call ApplyHannWindow(Correlator)
        if(ThisProc()==0) then
           fileID = OpenFile(filename='hanned.txt',fm='formatted',act='write',st='replace')
-
+       
           do it=1,size(correlator)
              write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
           end do
@@ -1852,17 +2094,17 @@ contains
           call CloseFile(fileID)
        end if
 
-       call Symm2FFTformat(Correlator)
-       if(ThisProc()==0) then
-          fileID = OpenFile(filename='fftformat.txt',fm='formatted',act='write',st='replace')
+       !call Symm2FFTformat(Correlator)
+       !if(ThisProc()==0) then
+       !   fileID = OpenFile(filename='fftformat.txt',fm='formatted',act='write',st='replace')
 
-          do it=1,size(correlator)
-             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
-          end do
+       !   do it=1,size(correlator)
+       !      write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+       !   end do
 
-          call CloseFile(fileID)
-       end if
-
+       !   call CloseFile(fileID)
+       !end if
+1      continue
        call t2w(Correlator,dt)
 
        ! Extract spectrum
@@ -1983,14 +2225,16 @@ contains
 
       ! Starting with negative frequencies...
       do i=size(spectrum)/2+1,size(spectrum)
-         k = i-size(spectrum)/2
+         k = i-size(spectrum)/2 - 1
          write(fileID,fmt='(2(SP,E13.6,1X))') wmin + k*dw,spectrum(i)
+         print*,'-',i,k,wmin+k*dw
       end do
 
       ! ...continueing with positive frequencies
       do i=1,size(spectrum)/2
-         k = i-1
+         k = i -1
          write(fileID,fmt='(2(SP,E13.6,1X))') k*dw,spectrum(i)
+         print*,'+',i,k,k*dw
       end do
       call CloseFile(fileID)
     end subroutine WriteSpectrum2File
@@ -3063,6 +3307,8 @@ program simulation
      call DeterminePotential_oneTimePoint
   case (10)
      call MeasurePotential_Equilibrium
+  case (11)
+     call MeasureHeavyQuarkoniumCorrelators_nonWigner
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
