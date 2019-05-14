@@ -2082,11 +2082,11 @@ contains
           call CloseFile(fileID)
        end if
 
-       !goto 1
-       call ApplyHannWindow(Correlator)
-       if(ThisProc()==0) then
-          fileID = OpenFile(filename='hanned.txt',fm='formatted',act='write',st='replace')
        
+       call Symmetrisation(correlator)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='symm.txt',fm='formatted',act='write',st='replace')
+
           do it=1,size(correlator)
              write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
           end do
@@ -2094,17 +2094,27 @@ contains
           call CloseFile(fileID)
        end if
 
-       !call Symm2FFTformat(Correlator)
-       !if(ThisProc()==0) then
-       !   fileID = OpenFile(filename='fftformat.txt',fm='formatted',act='write',st='replace')
+       
+       call ApplyHannWindow(Correlator)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='hanned.txt',fm='formatted',act='write',st='replace')
 
-       !   do it=1,size(correlator)
-       !      write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
-       !   end do
+          do it=1,size(correlator)
+             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+          end do
 
-       !   call CloseFile(fileID)
-       !end if
-1      continue
+          call CloseFile(fileID)
+       end if
+
+       call Symm2FFTformat(Correlator)
+       if(ThisProc()==0) then
+          fileID = OpenFile(filename='fftformat.txt',fm='formatted',act='write',st='replace')
+          do it=1,size(correlator)
+             write(FileID,*) it,real(correlator(it)),aimag(correlator(it))
+          end do
+          call CloseFile(fileID)
+       end if
+
        call t2w(Correlator,dt)
 
        ! Extract spectrum
@@ -2117,6 +2127,33 @@ contains
     call EndSimulation
 
   contains
+    
+    subroutine Symmetrisation(signal)
+      implicit none
+      complex(real64), allocatable, intent(inout) :: signal(:)
+      complex(real64), allocatable :: signal_input(:)
+
+      integer :: i,k
+
+      if(.not.allocated(signal)) then
+         STOP 'Signal not allocated'
+      end if
+      allocate(signal_input(size(signal)))
+      signal_input = signal
+      deallocate(signal)
+      allocate(signal(size(signal_input)*2-2))
+
+      
+      do i=2,size(signal_input)
+         k = size(signal_input) -(i-1)
+         signal(k) = -conjg(signal_input(i))
+      end do
+      do i=1,size(signal_input)-1
+         k = i + size(signal_input) - 1
+         signal(k) = signal_input(i)
+      end do
+    end subroutine Symmetrisation
+    
     !>@brief Transforms symmetrized signal into FFT format
     !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
     !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -2228,14 +2265,14 @@ contains
       do i=size(spectrum)/2+1,size(spectrum)
          k = i-size(spectrum)/2 - 1
          write(fileID,fmt='(2(SP,E13.6,1X))') wmin + k*dw,spectrum(i)
-         print*,'-',i,k,wmin+k*dw
+         !print*,'-',i,k,wmin+k*dw
       end do
 
       ! ...continueing with positive frequencies
       do i=1,size(spectrum)/2
          k = i -1
          write(fileID,fmt='(2(SP,E13.6,1X))') k*dw,spectrum(i)
-         print*,'+',i,k,k*dw
+         !print*,'+',i,k,k*dw
       end do
       call CloseFile(fileID)
     end subroutine WriteSpectrum2File
@@ -2277,7 +2314,6 @@ contains
 
       ! maximum time
       arg_count = arg_count + 1; call get_command_argument(arg_count,arg);
-      FileName_output = arg
       read(arg,'(F6.1)') MaxTime
       
 

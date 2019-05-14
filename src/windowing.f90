@@ -20,7 +20,7 @@ contains
     ! with
     ! ... T = signal length in time domain
     do i=1,size_data
-       data(i) = data(i) * cos(pi*(i-1)/(size_data/2))**2
+       data(i) = data(i) * sin(pi*(i-1)/(size_data))**2
     end do
   end subroutine ApplyHannWindow
 
