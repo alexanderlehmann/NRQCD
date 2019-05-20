@@ -15,7 +15,7 @@ module programs
   PUBLIC
 
 contains
-  impure subroutine MeasureHeavyQuarkoniumCorrelators_nonWigner
+  impure subroutine MeasureHeavyQuarkoniumCorrelators_oneT
 
     use, intrinsic :: iso_fortran_env
     use precision
@@ -41,21 +41,19 @@ contains
     real(fp) :: GluonSaturationScale !qs
     real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
     real(fp) :: GluonCoupling
-    real(fp) :: tmin
     real(fp) :: HeavyQuarkmass
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
 
     ! Time coordinates
-    real(fp) :: t, trange
+    real(fp) :: t, smax, s, t1, t2, trange
+    integer(int64) :: it, is, it1, it2, t1steps, t2steps
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf
-    type(NRQCDField)         :: HeavyField
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2
+    type(NRQCDField)         :: HeavyField_t1, HeavyField_t2
 
     ! Counting
     integer :: i
-    
-    integer(int64) :: it, TimeSteps
     
     ! Output
     real(fp) :: norm_quark, norm_antiq
@@ -63,30 +61,40 @@ contains
     integer(int8) :: FileID_Norm, FileID_Correlator
 
     character(len=80) :: FileMesonCorrelator, FileNorm
-
-    ! Format builder
-    character(len=100) :: form
-    character(len=1) :: auxd, auxw
-    integer :: d, p, w
+    
+    ! Measurement of progression
+    integer(int64) :: iwork, nwork
     
     call InitSimulation
 
+
+    ! Measure amount of work
+    trange = smax/2
+    t1steps = nint(abs(trange)/LatticeSpacings(0),int64)
+    nwork = 0
+    do it1=1,t1steps
+       t2steps = it1
+       do it2=1,t2steps
+          nwork = nwork + 1
+       end do
+    end do
+    
     ! Initialisation, defining the point t=0
-    !call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-    !     GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call Gaugeconf%ColdInit
-    call HeavyField%InitSinglePoint(&
+    call GaugeConf_t1%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+    !call Gaugeconf_t1%ColdInit
+    call HeavyField_t1%InitSinglePoint(&
          latticeindex_quark=1,&
          latticeindex_antiq=1)
 
-    t = 0
-    do it=1,nint(abs(tmin)/LatticeSpacings(0))
-       call GaugeConf%Update(sign(1._fp,tmin))
-       t = t + sign(LatticeSpacings(0),tmin)
+    ! Evolution to t
+    do it=1,nint(abs(t)/LatticeSpacings(0))
+       call GaugeConf_t1%Update(sign(1._fp,t))
     end do
-
-
     
+    mesoncorrelator = HeavyField_t1%GetMesonCorrelator_3s1_ZeroMomentum()
+    norm_quark = HeavyField_t1%GetNorm_Quark()
+    norm_antiq = HeavyField_t1%GetNorm_AntiQ()
     if(ThisProc()==0) then
        ! Opening files
        fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
@@ -99,30 +107,37 @@ contains
 
        ! Write first line
        write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-            t,0._fp,1._fp
+            t,real(mesoncorrelator,fp), aimag(mesoncorrelator)
        write(FileID_Norm,'(3(SP,E16.9,1X))') &
-            t,1._fp,1._fp
+            t,norm_quark,norm_antiq
     end if
 
-    TimeSteps = nint(trange/LatticeSpacings(0))
-    do it=1,TimeSteps
-       if(ThisProc()==0) then
-          write(output_unit,'(F5.1,A1)') real(it)/TimeSteps*100,'%'
-       end if
-       t = t + LatticeSpacings(0)
+    iwork = 0
+    do it1=1,t1steps
+       t2steps = it1
+       HeavyField_t2 = HeavyField_t1
+       GaugeConf_t2 = GaugeConf_t1
+       do it2=1,t2steps
+          call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
+          call GaugeConf_t2%Update
 
-       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients)
-       call GaugeConf%Update
-
-       mesoncorrelator = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
-       norm_quark = HeavyField%GetNorm_Quark()
-       norm_antiq = HeavyField%GetNorm_AntiQ()
+          iwork = iwork + 1
+          if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+       end do
+       
+       mesoncorrelator = HeavyField_t2%GetMesonCorrelator_3s1_ZeroMomentum()
+       norm_quark = HeavyField_t2%GetNorm_Quark()
+       norm_antiq = HeavyField_t2%GetNorm_AntiQ()
        if(ThisProc()==0) then
+          s = LatticeSpacings(0)*(t2steps + it1)
           write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-               t,real(mesoncorrelator,fp), aimag(mesoncorrelator)
+               s,real(mesoncorrelator,fp), aimag(mesoncorrelator)
           write(FileID_Norm,'(3(SP,E16.9,1X))') &
-               t,norm_quark,norm_antiq
+               s,norm_quark,norm_antiq
        end if
+
+       ! Bring gauge configuration to next t1
+       call GaugeConf_t1%Update(-1._fp)
     end do
 
     if(ThisProc()==0) then
@@ -180,10 +195,10 @@ contains
 
       ! Start time for quarkonium correlator (t1)
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tmin
+      read(arg,'(F10.13)') t
       ! t2-t1
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') trange
+      read(arg,'(F10.13)') smax
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
@@ -253,7 +268,7 @@ contains
       STOP
     end subroutine EndSimulation
 
-  end subroutine MeasureHeavyQuarkoniumCorrelators_nonWigner
+  end subroutine MeasureHeavyQuarkoniumCorrelators_oneT
 
   
   impure subroutine MeasurePotential_Equilibrium
@@ -3335,6 +3350,8 @@ program simulation
      call MeasureEnergyAndGaussLawDeviation
   case(3)
      call MeasureHeavyQuarkoniumCorrelators
+  case (31)
+     call MeasureHeavyQuarkoniumCorrelators_oneT
   case(4)
      call ComputeSpectrum
   case (5)
@@ -3349,8 +3366,6 @@ program simulation
      call DeterminePotential_oneTimePoint
   case (10)
      call MeasurePotential_Equilibrium
-  case (11)
-     call MeasureHeavyQuarkoniumCorrelators_nonWigner
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
