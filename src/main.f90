@@ -105,11 +105,12 @@ contains
        write(FileID_Correlator,'(A1,1X,A2,1X,A2)') 's','Re','Im'
        write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
 
+       s = 0
        ! Write first line
        write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-            t,real(mesoncorrelator,fp), aimag(mesoncorrelator)
+            s,real(mesoncorrelator,fp), aimag(mesoncorrelator)
        write(FileID_Norm,'(3(SP,E16.9,1X))') &
-            t,norm_quark,norm_antiq
+            s,norm_quark,norm_antiq
     end if
 
     iwork = 0
