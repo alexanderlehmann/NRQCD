@@ -8,10 +8,7 @@ PETSC_LIB=${PETSC_DIR}/lib/libpetsc.so
 #### Compiler options
 
 #### Optimization
-FFLAGS = -O3
-
-# Inter-file inlining optimization
-FFLAGS += -ipo
+FFLAGS = -O3 -ipo
 
 # Suppressing warning about too long routine names
 FFLAGS += -diag-disable 5462 -diag-disable 6536

@@ -272,7 +272,7 @@ contains
   end subroutine MeasureHeavyQuarkoniumCorrelators_oneT
 
   
-  impure subroutine MeasurePotential_Equilibrium
+  impure subroutine MeasureWilsonLines_Equilibrium
 
     use, intrinsic :: iso_fortran_env
     use precision
@@ -319,10 +319,10 @@ contains
     real(fp) :: time
     integer(int64) :: TimePoints
     ! Output
-    integer(int8) :: FileID_WilsonLoops, FileID_TimeDerivativeWilsonLoops, FileID_Potential
+    integer(int8) :: FileID_WilsonLoops!, FileID_TimeDerivativeWilsonLoops, FileID_Potential
 
     character(len=80) :: &
-         FileName_WilsonLoops, FileName_TimeDerivativeWilsonLoops, FileName_Potential
+         FileName_WilsonLoops!, FileName_TimeDerivativeWilsonLoops, FileName_Potential
 
     integer(intmpi) :: proc
 
@@ -337,8 +337,8 @@ contains
     
     allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
     WilsonLoops = 0
-    allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
-    TimeDerivativeWilsonLoops = 0
+    !allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
+    !TimeDerivativeWilsonLoops = 0
 
     do measurement=1,nMeasurement
 
@@ -349,6 +349,7 @@ contains
 
        ! initialisation of config ....
        call GaugeConf_initial%EquilibriumInit(Beta)
+       
        if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
        GaugeConf = GaugeConf_initial
 
@@ -360,12 +361,12 @@ contains
           if(thisproc()==0) write(output_unit,*) it
           do r=1,rmax
              WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             TimeDerivativeWilsonLoop = &
-                  GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+             !TimeDerivativeWilsonLoop = &
+             !     GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
              !GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
 
              WilsonLoops(measurement,r,it) = WilsonLoop
-             TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
+             !TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
           end do
 
           call GaugeConf%Update
@@ -374,10 +375,10 @@ contains
     if(ThisProc()==0) then
        fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Potential = OpenFile(filename=FileName_Potential,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
+       !fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
+       !     st='REPLACE',fm='FORMATTED',act='WRITE')
+       !fileID_Potential = OpenFile(filename=FileName_Potential,&
+       !     st='REPLACE',fm='FORMATTED',act='WRITE')
        do it=0,nint(TimeRange/LatticeSpacings(0)),+1
 
           time = tstart + it*LatticeSpacings(0)
@@ -408,46 +409,46 @@ contains
              end if
 
              
-             if(r==1) then
-                write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
-             iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
+             !if(r==1) then
+             !   write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             !end if
+             !rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
+             !iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
 
-             rMean = GetMean(rObservable)
-             iMean = GetMean(iObservable)
-             rStdErr = GetStdError(rObservable)
-             iStdErr = GetStdError(iObservable)
+             !rMean = GetMean(rObservable)
+             !iMean = GetMean(iObservable)
+             !rStdErr = GetStdError(rObservable)
+             !iStdErr = GetStdError(iObservable)
 
-             TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
+             !TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
              
-             if(r<rmax) then
-                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
-                     rMean,rStdErr,iMean,iStderr
-             else
-                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
-                     rMean,rStdErr,iMean,iStderr
-             end if
+             !if(r<rmax) then
+             !   write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+             !        rMean,rStdErr,iMean,iStderr
+             !else
+             !   write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+             !        rMean,rStdErr,iMean,iStderr
+             !end if
 
              ! Assume uncorrelated data (incorrect, but anyhow)
-             potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
-             if(r==1) then
-                write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             if(r<rmax) then
-                write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
-                     real(potential),aimag(potential)
-             else
-                write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(potential),aimag(potential)
-             end if
+             !potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
+             !if(r==1) then
+             !   write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
+             !end if
+             !if(r<rmax) then
+             !   write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
+             !        real(potential),aimag(potential)
+             !else
+             !   write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
+             !        real(potential),aimag(potential)
+             !end if
 
           end do
        end do
 
        call CloseFile(FileID_WilsonLoops)
-       call CloseFile(FileID_TimeDerivativeWilsonLoops)
-       call CloseFile(FileID_Potential)
+       !call CloseFile(FileID_TimeDerivativeWilsonLoops)
+       !call CloseFile(FileID_Potential)
     end if
 
     call EndSimulation
@@ -505,19 +506,20 @@ contains
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') RandomNumberSeed
-
+      if(thisproc()==0) print*,'seed'
       ! Initial gluon distribution (box): Saturation scale
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
+      if(thisproc()==0) print*,'beta'
       
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') nMeasurement
-      
+      if(thisproc()==0) print*,'nmeasurement'
       
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
+     !arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
+      !arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
@@ -546,7 +548,7 @@ contains
       if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
-  end subroutine MeasurePotential_Equilibrium
+  end subroutine MeasureWilsonLines_Equilibrium
   
   impure subroutine DeterminePotential_oneTimePoint
     use, intrinsic :: iso_fortran_env
@@ -2980,6 +2982,8 @@ contains
     type(GaugeConfiguration) :: gaugeconf_gaugefixed
 
     call InitSimulation
+
+    if(ThisProc()==0) print*,GaugefixingCoefficient
     
     allocate(AA_correlator_ensemble(GetLocalLatticeSize(),&
          0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
@@ -3297,7 +3301,7 @@ contains
       read(arg,'(E15.7)') GaugefixingTolerance
       ! Tolerance for coulomb gauge fixing
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F5.7)') GaugefixingCoefficient
+      read(arg,'(F10.13)') GaugefixingCoefficient
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
@@ -3357,6 +3361,8 @@ program simulation
      call ComputeSpectrum
   case (5)
      call MeasureWilsonLines
+  case (51)
+     call MeasureWilsonLines_Equilibrium
   case (6)
      call DeterminePotentials
   case (7)
@@ -3365,8 +3371,6 @@ program simulation
      call DeterminePotential
   case (9)
      call DeterminePotential_oneTimePoint
-  case (10)
-     call MeasurePotential_Equilibrium
   case default
      call MPIStop('Invalid simulation mode selected')
   end select

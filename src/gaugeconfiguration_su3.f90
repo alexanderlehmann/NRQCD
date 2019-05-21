@@ -403,17 +403,17 @@ contains ! Module procedures
 
     integer(int64) :: i
     
-    sigma = 1/(2*beta)
+    sigma = 1/sqrt(2*beta)
 
     call GaugeConf%ColdInit
     
     ! Start thermalizing gauge links
 
     !if(thisproc()==0) &
-    !     fileID = OpenFile(filename="energy.txt",&
+    !    fileID = OpenFile(filename="energy.txt",&
     !     st='REPLACE',fm='FORMATTED',act='WRITE')
     do iefieldinit=1,nefieldinit
-       if(ThisProc()==0) write(output_unit,*) iefieldinit
+       !if(ThisProc()==0) write(output_unit,*) iefieldinit
        ! Redrawing E-field
        gaugeconf%efield = 0
        do MemoryIndex=1,GetMemorySize()
@@ -1510,7 +1510,7 @@ contains ! Module procedures
   impure real(fp) function GetEnergy(GaugeConf)
     use precision, only: fp
     use matrixoperations, only: GetTrace
-    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetProc_M
+    use lattice, only: nDim, GetLatticeSpacing, GetMemorySize, GetProc_M, GetLatticeIndex_M
     use mpiinterface, only: intmpi, GetRealSendType, ThisProc
     use mpi
     implicit none
@@ -1531,7 +1531,7 @@ contains ! Module procedures
     local_contribution = 0
     do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
        
-       efield = GaugeConf%GetElectricField_AlgebraCoordinate([1_int8:ngen],i,MemoryIndex)
+       efield = GaugeConf%GetElectricField_AlgebraCoordinate([1_int8:ngen],i,GetLatticeIndex_M(MemoryIndex))
 
        local_contribution = local_contribution &
                                 ! Electric energy
@@ -2157,7 +2157,7 @@ contains ! Module procedures
          call flush(output_unit)
   contains
     impure logical function IsCoulombGauged(Divergence,Tolerance)
-      use mpiinterface, only: intmpi, ThisProc, NumProcs
+      use mpiinterface, only: intmpi, ThisProc, NumProcs, SyncAll, GetRealSendType
       use lattice, only: GetProc_M
       use matrixoperations, only: FrobeniusNorm
       use mpi
@@ -2172,8 +2172,10 @@ contains ! Module procedures
       logical, allocatable :: IsCoulombGauged_allProcs(:)
       integer(intmpi) :: mpierr
 
-      allocate(deviation(size(Divergence,rank(Divergence))))
+      real(fp), allocatable :: maxdeviation(:)
 
+      allocate(deviation(size(Divergence,rank(Divergence))))
+      
       deviation = -1 ! Default value, important for mask in local check
       forall(MemoryIndex=1:size(deviation),ThisProc()==GetProc_M(MemoryIndex))
          Deviation(MemoryIndex) = FrobeniusNorm(Divergence(:,:,MemoryIndex))/nsun**2
@@ -2185,6 +2187,10 @@ contains ! Module procedures
            ThisProc()==GetProc_M(MemoryIndex).and.deviation(MemoryIndex)>Tolerance)
          IsCoulombGauged_local = .false.
       end do
+      
+      allocate(maxdeviation(NumProcs()))
+      call MPI_ALLGATHER(maxval(deviation),1_intmpi,GetRealSendType(),maxdeviation,1_intmpi,GetRealSendType(),MPI_COMM_WORLD,mpierr)
+      if(thisproc()==0) write(output_unit,*) maxval(maxdeviation)
       deallocate(deviation)
 
       ! Gathering information about local check from the other processes

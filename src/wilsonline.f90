@@ -277,7 +277,7 @@ contains ! Module procedures
     ! MPI stuff
     integer(intmpi) :: proc, mpierr
 
-    GetWilsonLine = GetUnitMatrix(nDoF)
+    GetWilsonLine = GetUnitMatrix(nColours)
     xk = origin
     do k=1,distance,+1
        proc = GetProc_G(xk)
@@ -320,7 +320,7 @@ contains ! Module procedures
     integer(int8) :: k
     integer(int64) :: DerivativeIndex, LatticeIndex
     
-    GetTimeDerivativeWilsonLine = GetUnitMatrix(nDoF)
+    GetTimeDerivativeWilsonLine = GetUnitMatrix(nColours)
 
     DerivativeIndex = origin
     do k=1,distance ! Sum over positions where the derivative is evaluated
@@ -357,6 +357,7 @@ contains ! Module procedures
        GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
     use matrixoperations, only: GetTrace
     use lattice, only: GetLatticeSize
+    use mpiinterface, only: ThisProc
     implicit none
     !> SU(3)-Gauge configuration at \f$t=t_1\f$
     type(SU3GaugeConfiguration), intent(in) :: GaugeField_t1
@@ -384,7 +385,6 @@ contains ! Module procedures
        WholeProduct = matmul(LinkProduct_t1,conjg(transpose(LinkProduct_t2)))
 
        res = res + GetTrace(WholeProduct)/nColours
-       
     end do
     res = res / GetLatticeSize()
   end function GetWilsonLoop
