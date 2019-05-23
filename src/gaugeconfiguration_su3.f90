@@ -403,7 +403,7 @@ contains ! Module procedures
 
     integer(int64) :: i
     
-    sigma = 1/sqrt(2*beta)
+    sigma = sqrt((2*nsun)/(2*beta))
 
     call GaugeConf%ColdInit
     

@@ -271,6 +271,322 @@ contains
 
   end subroutine MeasureHeavyQuarkoniumCorrelators_oneT
 
+  impure subroutine MeasureWilsonAndHybridLines_Equilibrium
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+    use halocomm
+    use wilsonline
+    use random
+    use nrqcd
+    use statistics
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: TimeSteps
+    integer(int64) :: RandomNumberSeed
+
+    real(fp) :: Beta
+    real(fp) :: tstart
+    real(fp) :: TimeRange
+    
+    real(fp) :: HeavyQuarkmass
+    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
+
+    real(fp) :: kspTol
+    
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial
+    type(NRQCDField)         :: HeavyField
+    
+    ! Counting
+    integer :: i
+
+    integer(int64) :: it
+
+    ! Wilson loop parameters
+    integer(int8), parameter :: messdir=nDim
+    integer(int64) :: meanMaxLatticeIndex=20
+    integer(int64) :: x0, xr
+    integer(int64) :: rmax, r
+    ! Indices
+    integer(int64) :: LatticeIndex_distance, shiftstep
+    
+    ! Observables
+    complex(fp) :: WilsonLoop, HybridLoop
+
+    complex(fp), allocatable :: WilsonLoops(:,:,:), HybridLoops(:,:,:)
+    real(fp), allocatable :: rObservable(:), iObservable(:)
+    real(fp) :: rMean, rStderr,iMean,iStderr
+    real(fp) :: time
+    integer(int64) :: TimePoints
+    ! Output
+    integer(int8) :: FileID_WilsonLoops, FileID_HybridLoops
+
+    character(len=80) :: &
+         FileName_WilsonLoops, FileName_HybridLoops
+
+    integer(intmpi) :: proc
+
+    integer(int64) :: measurement
+    integer(int64) :: nMeasurement
+
+    call InitSimulation
+
+    rmax = LatticeExtensions(messdir)/2
+
+    TimePoints = nint(TimeRange/LatticeSpacings(0))
+    
+    allocate(WilsonLoops(nMeasurement,0:rmax,0:TimePoints))
+    WilsonLoops = 0
+    allocate(HybridLoops(nMeasurement,0:rmax,0:TimePoints))
+    HybridLoops = 0
+
+    do measurement=1,nMeasurement
+
+       if(ThisProc()==0) write(output_unit,*)&
+            int(measurement,int16),'of',&
+            int(nMeasurement,int16),'configurations';&
+            call flush(output_unit)
+
+       ! initialisation of config ....
+       call GaugeConf_initial%EquilibriumInit(Beta)
+       if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
+       GaugeConf_t1 = GaugeConf_initial
+       
+       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
+          call GaugeConf_t1%Update(sign(+1._real64,tstart))
+       end do
+
+       
+       do r=0,rmax
+          if(ThisProc()==0) then
+             write(output_unit,*) 'r=',r,'of',rmax
+          end if
+          GaugeConf_t2 = GaugeConf_t1
+          
+          ! Initialising quark-antiquark-pair
+          ! with quark at variable remote point xr
+          ! and antiquark at fixed (origin) point x0
+          meanMaxLatticeIndex=10
+          do x0=1,meanMaxLatticeIndex
+             if(thisproc()==0) print*,x0
+             
+             ! Getting xr
+             xr = x0
+             do shiftstep=1,r
+                xr=GetNeib_G(messdir,xr)
+             end do
+             
+             call HeavyField%InitSinglePoint(&
+                  latticeindex_quark=x0,&
+                  latticeindex_antiq=xr)
+             do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+                if(x0==1) then
+                   WilsonLoop = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
+                   WilsonLoops(measurement,r,it) = WilsonLoop
+                end if
+                
+                HybridLoop = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
+                HybridLoops(measurement,r,it) = HybridLoops(measurement,r,it) &
+                     + HybridLoop/meanMaxLatticeIndex
+
+                call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
+                call GaugeConf_t2%Update
+             end do
+          end do
+       end do
+    end do
+    if(ThisProc()==0) then
+       fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       fileID_HybridLoops = OpenFile(filename=FileName_HybridLoops,&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+       
+       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+
+          time = tstart + it*LatticeSpacings(0)
+          if(ThisProc()==0) then
+             write(output_unit,*) real(time,real32)
+             call flush(output_unit)
+          end if
+          do r=0,rmax
+             if(r==0) then
+                write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(WilsonLoops(:,r,it))
+             iObservable = aimag(WilsonLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             WilsonLoop = cmplx(rMean,iMean)
+             
+             if(r<rmax) then
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+
+
+             
+             if(r==0) then
+                write(FileID_HybridLoops,'(1(SP,E16.9,1X))',advance='no') time
+             end if
+             rObservable = real(HybridLoops(:,r,it))
+             iObservable = aimag(HybridLoops(:,r,it))
+
+             rMean = GetMean(rObservable)
+             iMean = GetMean(iObservable)
+             rStdErr = GetStdError(rObservable)
+             iStdErr = GetStdError(iObservable)
+
+             HybridLoop = cmplx(rMean,iMean)
+             
+             if(r<rmax) then
+                write(FileID_HybridLoops,'(4(SP,E16.9,1X))',advance='no') &
+                     rMean,rStdErr,iMean,iStderr
+             else
+                write(FileID_HybridLoops,'(4(SP,E16.9,1X))',advance='yes') &
+                     rMean,rStdErr,iMean,iStderr
+             end if
+          end do
+       end do
+
+       call CloseFile(FileID_WilsonLoops)
+       call CloseFile(FileID_HybridLoops)
+    end if
+
+    call EndSimulation
+
+  contains
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      use NRQCD,              only: InitModule_NRQCD              => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+      
+      real(fp) :: c_re, c_im
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! start time
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') tstart
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') Beta
+
+      ! Tolerance for iterative PETSc solver
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') kspTol
+      
+      ! Heavy quark mass
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') HeavyQuarkmass
+      
+      ! Wilson coefficents
+      do i=1,nWilsonCoefficients
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_re
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_im
+
+         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
+      end do
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') nMeasurement
+      
+      ! Output filenames
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_HybridLoops);
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_NRQCD
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine MeasureWilsonAndHybridLines_Equilibrium
   
   impure subroutine MeasureWilsonLines_Equilibrium
 
@@ -3363,6 +3679,8 @@ program simulation
      call MeasureWilsonLines
   case (51)
      call MeasureWilsonLines_Equilibrium
+  case (52)
+     call MeasureWilsonAndHybridLines_Equilibrium
   case (6)
      call DeterminePotentials
   case (7)

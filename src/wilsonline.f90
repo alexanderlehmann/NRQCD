@@ -34,7 +34,7 @@ module WilsonLine
   PRIVATE
 
   public GetFermionicWilsonLoop, GetGluonicWilsonLoop, GetPointSplitCorrelator,&
-       GetPotentialWilsonLoop,GetWilsonLoop, GetTimeDerivativeWilsonLoop
+       GetPotentialWilsonLoop,GetWilsonLoop, GetTimeDerivativeWilsonLoop, GetHybridLoop
        
 
 contains ! Module procedures
@@ -250,50 +250,11 @@ contains ! Module procedures
     end do
   end function GetLinkProduct
 
-
-  impure function GetWilsonLine(GaugeField,origin,distance,proddir)
-    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
-    use mpi
-    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
-    use matrixoperations, only: GetUnitMatrix
-    implicit none
-    !> SU(3)-Gauge configuration
-    type(SU3GaugeConfiguration), intent(in) :: GaugeField
-    !> Lattice index at origin of link product
-    integer(int64),              intent(in) :: origin
-    !> Distance in lattice units in direction (proddir)
-    integer(int64),              intent(in) :: distance
-    !> Direction into which to take the product
-    integer(int8),               intent(in) :: proddir
-    !> Link product
-    complex(fp), dimension(nColours,nColours) :: GetWilsonLine
-
-    ! Link at a site
-    complex(fp), dimension(nColours,nColours) :: Link
-    
-    ! Indices
-    integer(int64) :: k, xk
-
-    ! MPI stuff
-    integer(intmpi) :: proc, mpierr
-
-    GetWilsonLine = GetUnitMatrix(nColours)
-    xk = origin
-    do k=1,distance,+1
-       proc = GetProc_G(xk)
-
-       if(ThisProc()==proc) then
-          Link = GaugeField%GetLink_G(proddir,xk)
-          GetWilsonLine = matmul(GetWilsonLine,Link)
-       end if
-       
-       call mpi_bcast(GetWilsonLine,size(GetWilsonLine),GetComplexSendType(),&
-            proc,mpi_comm_world,mpierr)
-       
-       xk = GetNeib_G(proddir,xk)
-    end do
-  end function GetWilsonLine
-
+  !
+  !
+  !----------------------------------------------------------------------------------------------
+  !
+  !
 
   impure function GetTimeDerivativeWilsonLine(GaugeField,origin,distance,proddir)
     use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
@@ -352,6 +313,51 @@ contains ! Module procedures
     end do
   end function GetTimeDerivativeWilsonLine
 
+  
+
+
+  impure function GetWilsonLine(GaugeField,origin,distance,proddir)
+    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
+    use mpi
+    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
+    use matrixoperations, only: GetUnitMatrix
+    implicit none
+    !> SU(3)-Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField
+    !> Lattice index at origin of link product
+    integer(int64),              intent(in) :: origin
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    !> Link product
+    complex(fp), dimension(nColours,nColours) :: GetWilsonLine
+
+    ! Link at a site
+    complex(fp), dimension(nColours,nColours) :: Link
+    
+    ! Indices
+    integer(int64) :: k, xk
+
+    ! MPI stuff
+    integer(intmpi) :: proc, mpierr
+
+    GetWilsonLine = GetUnitMatrix(nColours)
+    xk = origin
+    do k=1,distance,+1
+       proc = GetProc_G(xk)
+
+       if(ThisProc()==proc) then
+          Link = GaugeField%GetLink_G(proddir,xk)
+          GetWilsonLine = matmul(GetWilsonLine,Link)
+       end if
+       
+       call mpi_bcast(GetWilsonLine,size(GetWilsonLine),GetComplexSendType(),&
+            proc,mpi_comm_world,mpierr)
+       
+       xk = GetNeib_G(proddir,xk)
+    end do
+  end function GetWilsonLine
 
   impure function GetWilsonLoop(&
        GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
@@ -442,4 +448,73 @@ contains ! Module procedures
          /GetWilsonLoop(GaugeField_t1, GaugeField_t2,distance, proddir)
 
   end function GetPotentialWilsonLoop
+
+  impure function GetHybridLoop(&
+       GaugeField_t1, GaugeField_t2, HeavyField, origin, distance, proddir) result(res)
+    use mpiinterface, only: ThisProc, intmpi, GetComplexSendType
+    use mpi
+    use matrixoperations, only: GetTrace
+    use lattice, only: nDim, GetLatticeIndex, GetProc_G, GetNeib_G
+    use mpiinterface, only: ThisProc
+    implicit none
+    !> SU(3)-Gauge configuration at \f$t=t_1\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t1
+    !> SU(3)-Gauge configuration at \f$t=t_2\f$
+    type(SU3GaugeConfiguration), intent(in) :: GaugeField_t2
+    !> NRQCD heavy field with quarkpropagator initialised at origin and antiquark at origin+r
+    type(NRQCDField),            intent(in) :: HeavyField
+    !> Origin at which quark was initialised
+    integer(int64),              intent(in) :: origin
+    !> Distance in lattice units in direction (proddir)
+    integer(int64),              intent(in) :: distance
+    !> Direction into which to take the product
+    integer(int8),               intent(in) :: proddir
+    complex(fp) :: res
+    
+    complex(fp), dimension(nColours,nColours) :: LinkProduct_t1, LinkProduct_t2
+    complex(fp), dimension(nDoF,nDoF) :: quarkprop, antiqprop
+    complex(fp), dimension(nDoF,nDoF) :: LinkProduct_t1_cs, LinkProduct_t2_cs, WholeProduct
+
+    ! MPI stuff
+    integer(intmpi) :: proc, mpierr
+    
+    ! Indices
+    integer(int64) :: LatticeIndex_distance, shiftstep
+
+    ! Getting link product
+    LinkProduct_t1 = GetWilsonLine(GaugeField_t1,origin,distance,proddir)
+    LinkProduct_t2 = GetWilsonLine(GaugeField_t2,origin,distance,proddir)
+
+    LinkProduct_t1_cs = C2CS(LinkProduct_t1)
+    LinkProduct_t2_cs = C2CS(LinkProduct_t2)
+
+    ! Getting propagators
+    proc = GetProc_G(origin)
+    if(ThisProc()==proc) then
+       AntiQProp = HeavyField%GetAntiQProp_G(origin)
+    end if
+    call mpi_bcast(AntiQProp,size(AntiQProp),GetComplexSendType(),&
+         proc,mpi_comm_world,mpierr)
+
+    LatticeIndex_distance = origin
+    do shiftstep=1,distance
+       LatticeIndex_distance=GetNeib_G(proddir,LatticeIndex_distance)
+    end do
+    proc = GetProc_G(LatticeIndex_distance)
+    if(ThisProc()==proc) then
+       QuarkProp = HeavyField%GetQuarkProp_G(LatticeIndex_distance)
+    end if
+    call mpi_bcast(QuarkProp,size(QuarkProp),GetComplexSendType(),&
+         proc,mpi_comm_world,mpierr)
+    
+    ! Final multiplication step
+    WholeProduct = matmul(matmul(matmul(&
+         LinkProduct_t1_cs,&
+         QuarkProp),&
+         conjg(transpose(LinkProduct_t2_cs))),&
+         ! Transforming from t1->t2 with c* into t2->t1 propagator with c [c=wilsoncoefficients]
+         conjg(transpose(AntiQProp)))
+    
+    res = res + GetTrace(WholeProduct)
+  end function GetHybridLoop
 end module WilsonLine
