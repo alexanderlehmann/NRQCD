@@ -68,14 +68,14 @@ module su2
   complex(fp), dimension(nsun,nsun,1:ngen), parameter, public :: &
        Generators = reshape(&
        [&                      ! First generator
-       cmplx(00,00,fp),        cmplx(+0.5_fp,00,fp), & 
-       cmplx(+0.5_fp,00,fp),   cmplx(00,00,fp)&
+       cmplx(00,00,fp),        cmplx(+1._fp,00,fp), & 
+       cmplx(+1._fp,00,fp),   cmplx(00,00,fp)&
        ,&                      ! Second generator
-       & cmplx(00,00,fp),      cmplx(00,-0.5_fp,fp),& 
-       cmplx(00,+0.5_fp,fp),   cmplx(00,00,fp)&
+       & cmplx(00,00,fp),      cmplx(00,-1._fp,fp),& 
+       cmplx(00,+1._fp,fp),   cmplx(00,00,fp)&
        ,&                      ! Third generator
-       & cmplx(+0.5_fp,00,fp), cmplx(00,00,fp),& 
-       cmplx(00,00,fp),        cmplx(-0.5_fp,00,fp)&
+       & cmplx(+1._fp,00,fp), cmplx(00,00,fp),& 
+       cmplx(00,00,fp),        cmplx(-1._fp,00,fp)&
        ],shape=[nsun,nsun,ngen])
 
     !>@brief Exponential from Lie-algebra to Lie-group
@@ -303,7 +303,7 @@ contains
     integer(int8),         intent(in) :: a
     !> Input matrix \f$M\f$
     complex(fp), intent(in) :: matrix(nsun,nsun)
-    GetAlgebraCoordinate = 2._fp*real(GetTraceWithGenerator(a,matrix),fp)
+    GetAlgebraCoordinate = real(GetTraceWithGenerator(a,matrix),fp)/2
   end function GetAlgebraCoordinate
   
   !>@brief

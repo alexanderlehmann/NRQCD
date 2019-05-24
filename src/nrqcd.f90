@@ -22,7 +22,8 @@ module nrqcd
        nGluons       => nGen
   use su2, only: &
        SU2Generators => Generators, &
-       nSpins        => nSUN
+       nSpins        => nSUN, &
+       nSpinGenerators => nGen
 
 #include <petsc/finclude/petscksp.h>
   use petscksp
@@ -88,6 +89,7 @@ module nrqcd
      procedure, private :: Update_CrankNicholson
 
      ! Mesoncorrelators
+     procedure, public :: GetMesoncorrelator_1S0_ZeroMomentum
      procedure, public :: GetMesoncorrelator_3S1_ZeroMomentum
 
      ! Access function
@@ -1438,12 +1440,51 @@ use lattice
     end do
   end subroutine LoadPropagatorFromPETSc
 
+  !>@brief Computes \f$^1\text{S}_0\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$^1\text{S}_0\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.05.2019
+  !!@version 1.1
+  impure complex(fp) function GetMesoncorrelator_1S0_ZeroMomentum(HeavyField)
+    use mpi
+    use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
+    use lattice, only: nDim, GetProc_M, GetMemorySize
+    use matrixoperations, only: GetTrace
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+
+    integer(intmpi) :: mpierr
+    complex(fp) :: Correlator(nDof,nDof)
+    integer(int64) :: MemoryIndex
+    complex(fp) :: LocalValue
+    
+    LocalValue = 0
+    do concurrent(MemoryIndex=1:GetMemorySize(),GetProc_M(MemoryIndex)==ThisProc())
+       Correlator = &
+            + cmplx(0,1,fp)*matmul(&
+            conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))),&
+            HeavyField%QuarkProp(:,:,MemoryIndex))
+       
+       LocalValue = LocalValue + GetTrace(Correlator)
+    end do
+
+    call MPI_ALLREDUCE(&
+         LocalValue,&
+         GetMesoncorrelator_1S0_ZeroMomentum,&
+         1_intmpi,&
+         GetComplexSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetMesoncorrelator_1S0_ZeroMomentum
+  
   !>@brief Computes \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
   !!@returns \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 19.03.2019
-  !!@version 1.0
+  !!@date 24.05.2019
+  !!@version 1.1
   impure complex(fp) function GetMesoncorrelator_3S1_ZeroMomentum(HeavyField)
     use mpi
     use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
@@ -1465,26 +1506,14 @@ use lattice
        do concurrent(i=1:nDim)
           PauliMatrix_CS = S2CS(SU2Generators(:,:,i))
 
-          !Correlator = Correlator &
-          !     + cmplx(0,1,fp)*matmul(matmul(matmul(&
-          !     PauliMatrix_CS,&
-          !     HeavyField%QuarkProp(:,:,MemoryIndex)),&
-          !     PauliMatrix_CS),&
-          !     conjg(HeavyField%AntiQProp(:,:,MemoryIndex)))
-
-          
           Correlator = Correlator &
                + cmplx(0,1,fp)*matmul(matmul(matmul(&
-               PauliMatrix_CS,&
+               conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))),&
+               PauliMatrix_CS),&
                HeavyField%QuarkProp(:,:,MemoryIndex)),&
-               conjg(PauliMatrix_CS)),&
-               conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))))
+               PauliMatrix_CS)/nSpinGenerators
        end do
-       !LocalValue = LocalValue &
-       !     + GetTrace(Correlator)*nspins**2/ncolours
-
-       
-       LocalValue = LocalValue + GetTrace(Correlator)/(2*ncolours)
+       LocalValue = LocalValue + GetTrace(Correlator)
     end do
 
     call MPI_ALLREDUCE(&
