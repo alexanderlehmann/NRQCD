@@ -370,26 +370,24 @@ contains
           if(ThisProc()==0) then
              write(output_unit,*) 'r=',r,'of',rmax
           end if
-          GaugeConf_t2 = GaugeConf_t1
           
           ! Initialising quark-antiquark-pair
           ! with quark at variable remote point xr
           ! and antiquark at fixed (origin) point x0
-          meanMaxLatticeIndex=10
+          meanMaxLatticeIndex=1
           do x0=1,meanMaxLatticeIndex
-             if(thisproc()==0) print*,x0
-             
              ! Getting xr
              xr = x0
              do shiftstep=1,r
                 xr=GetNeib_G(messdir,xr)
              end do
              
+             GaugeConf_t2 = GaugeConf_t1
              call HeavyField%InitSinglePoint(&
-                  latticeindex_quark=x0,&
-                  latticeindex_antiq=xr)
+                  latticeindex_quark=xr,&
+                  latticeindex_antiq=x0)
              do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-
+                if(ThisProc()==0) write(output_unit,'(I5,1X,A2,1X,I5)')it,'of',nint(TimeRange/LatticeSpacings(0))
                 if(x0==1) then
                    WilsonLoop = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
                    WilsonLoops(measurement,r,it) = WilsonLoop
@@ -405,19 +403,19 @@ contains
           end do
        end do
     end do
+1   continue
     if(ThisProc()==0) then
        fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
        fileID_HybridLoops = OpenFile(filename=FileName_HybridLoops,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
-       
+
+       allocate(rObservable(size(WilsonLoops,1)))
+       allocate(iObservable(size(WilsonLoops,1)))
+
        do it=0,nint(TimeRange/LatticeSpacings(0)),+1
 
           time = tstart + it*LatticeSpacings(0)
-          if(ThisProc()==0) then
-             write(output_unit,*) real(time,real32)
-             call flush(output_unit)
-          end if
           do r=0,rmax
              if(r==0) then
                 write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
@@ -430,7 +428,7 @@ contains
              rStdErr = GetStdError(rObservable)
              iStdErr = GetStdError(iObservable)
 
-             WilsonLoop = cmplx(rMean,iMean)
+             !WilsonLoop = cmplx(rMean,iMean)
              
              if(r<rmax) then
                 write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
@@ -453,7 +451,7 @@ contains
              rStdErr = GetStdError(rObservable)
              iStdErr = GetStdError(iObservable)
 
-             HybridLoop = cmplx(rMean,iMean)
+             !HybridLoop = cmplx(rMean,iMean)
              
              if(r<rmax) then
                 write(FileID_HybridLoops,'(4(SP,E16.9,1X))',advance='no') &

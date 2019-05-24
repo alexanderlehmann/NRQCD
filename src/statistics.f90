@@ -92,14 +92,18 @@ contains
   !! @version
   !! 1.0
   pure function GetStdError(data) result(stdError)
+    use, intrinsic :: ieee_arithmetic
     implicit none
     real(fp), intent(in) :: data(:)
     real(fp)             :: stdError
 
     real(fp) :: mean
 
-    stdError = GetStdDeviation(data)/sqrt(real(size(data),fp))
-
+    if(size(data)>1) then
+       stdError = GetStdDeviation(data)/sqrt(real(size(data),fp))
+    else
+       stdError = ieee_value(stdError, ieee_quiet_nan)
+    end if
   end function GetStdError
 
   !> @brief Standard deviation of double input

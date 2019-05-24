@@ -515,6 +515,6 @@ contains ! Module procedures
          ! Transforming from t1->t2 with c* into t2->t1 propagator with c [c=wilsoncoefficients]
          conjg(transpose(AntiQProp)))
     
-    res = res + GetTrace(WholeProduct)
+    res = GetTrace(WholeProduct)
   end function GetHybridLoop
 end module WilsonLine

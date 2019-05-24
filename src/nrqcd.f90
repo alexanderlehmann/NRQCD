@@ -1465,15 +1465,26 @@ use lattice
        do concurrent(i=1:nDim)
           PauliMatrix_CS = S2CS(SU2Generators(:,:,i))
 
+          !Correlator = Correlator &
+          !     + cmplx(0,1,fp)*matmul(matmul(matmul(&
+          !     PauliMatrix_CS,&
+          !     HeavyField%QuarkProp(:,:,MemoryIndex)),&
+          !     PauliMatrix_CS),&
+          !     conjg(HeavyField%AntiQProp(:,:,MemoryIndex)))
+
+          
           Correlator = Correlator &
                + cmplx(0,1,fp)*matmul(matmul(matmul(&
                PauliMatrix_CS,&
                HeavyField%QuarkProp(:,:,MemoryIndex)),&
-               PauliMatrix_CS),&
-               conjg(HeavyField%AntiQProp(:,:,MemoryIndex)))
+               conjg(PauliMatrix_CS)),&
+               conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))))
        end do
-       LocalValue = LocalValue &
-            + GetTrace(Correlator)*nspins**2/ncolours
+       !LocalValue = LocalValue &
+       !     + GetTrace(Correlator)*nspins**2/ncolours
+
+       
+       LocalValue = LocalValue + GetTrace(Correlator)/(2*ncolours)
     end do
 
     call MPI_ALLREDUCE(&

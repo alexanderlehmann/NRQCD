@@ -26,7 +26,7 @@ FFLAGS += -I${MKLROOT}/include -I${PETSC_DIR}/include
 #FFLAGS += -O0 -traceback -g -implicitnone -check uninit -check bounds -ftrapuv #-check arg_temp_created
 
 # Robust debug result
-#FFLAGS = -init=snan -traceback -warn interfaces -fp-speculation safe -traceback -check uninit -check bounds -ftrapuv -g
+#FFLAGS += -init=snan -traceback -warn interfaces -fp-speculation safe -check uninit -check bounds -ftrapuv -g
 
 ## -- Disables optimizations. Default is -O2
 #FFLAGS += -O0
