@@ -56,8 +56,6 @@ contains
     integer :: i
     
     ! Output
-    real(fp) :: norm_quark, norm_antiq
-    complex(fp) :: mesoncorrelator
     integer(int8) :: FileID_Norm, FileID_Correlator
 
     character(len=80) :: FileMesonCorrelator, FileNorm
@@ -91,28 +89,10 @@ contains
     do it=1,nint(abs(t)/LatticeSpacings(0))
        call GaugeConf_t1%Update(sign(1._fp,t))
     end do
+
+    call OpenObservableFiles
+    call PrintObservables(s=0._fp,HeavyField=HeavyField_t1,GaugeConf=GaugeConf_t1)
     
-    mesoncorrelator = HeavyField_t1%GetMesonCorrelator_3s1_ZeroMomentum()
-    norm_quark = HeavyField_t1%GetNorm_Quark()
-    norm_antiq = HeavyField_t1%GetNorm_AntiQ()
-    if(ThisProc()==0) then
-       ! Opening files
-       fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Norm = OpenFile(filename=FileNorm,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-
-       write(FileID_Correlator,'(A1,1X,A2,1X,A2)') 's','Re','Im'
-       write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
-
-       s = 0
-       ! Write first line
-       write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-            s,real(mesoncorrelator,fp), aimag(mesoncorrelator)
-       write(FileID_Norm,'(3(SP,E16.9,1X))') &
-            s,norm_quark,norm_antiq
-    end if
-
     iwork = 0
     do it1=1,t1steps
        t2steps = it1
@@ -126,16 +106,8 @@ contains
           if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
        end do
        
-       mesoncorrelator = HeavyField_t2%GetMesonCorrelator_3s1_ZeroMomentum()
-       norm_quark = HeavyField_t2%GetNorm_Quark()
-       norm_antiq = HeavyField_t2%GetNorm_AntiQ()
-       if(ThisProc()==0) then
-          s = LatticeSpacings(0)*(t2steps + it1)
-          write(FileID_Correlator,'(3(SP,E16.9,1X))') &
-               s,real(mesoncorrelator,fp), aimag(mesoncorrelator)
-          write(FileID_Norm,'(3(SP,E16.9,1X))') &
-               s,norm_quark,norm_antiq
-       end if
+       call PrintObservables(s=LatticeSpacings(0)*(t2steps + it1),&
+            HeavyField=HeavyField_t2,GaugeConf=GaugeConf_t2)
 
        ! Bring gauge configuration to next t1
        call GaugeConf_t1%Update(-1._fp)
@@ -149,6 +121,61 @@ contains
     
     call EndSimulation
   contains
+    impure subroutine OpenObservableFiles
+      ! Opening files and printing header
+      if(ThisProc()==0) then
+         ! Opening files
+         fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+         fileID_Norm = OpenFile(filename=FileNorm,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+
+         write(FileID_Correlator,'(A1)',advance='no') 's'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O1(1S0))','Im(O1(1S0))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O1(3S1))','Im(O1(3S1))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O8(1S0))','Im(O8(1S0))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='yes') 'Re(O8(3S1))','Im(O8(3S1))'
+
+         write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
+      end if
+    end subroutine OpenObservableFiles
+    
+    impure subroutine PrintObservables(s,HeavyField,GaugeConf)
+      implicit none
+      !> relative time difference s in Wigner coordinates
+      real(fp), intent(in) :: s
+      !> Heavy quark field
+      type(NRQCDField), intent(in) :: HeavyField
+      !> Gauge configuration
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+      
+      real(fp) :: norm_quark, norm_antiq
+      complex(fp) :: O1_1S0, O1_3S1, O8_1S0, O8_3S1
+      
+      
+      norm_quark = HeavyField%GetNorm_Quark()
+      norm_antiq = HeavyField%GetNorm_AntiQ()
+
+      O1_1S0 = HeavyField%GetMesonCorrelator_O1_1s0_ZeroMomentum()
+      O1_3S1 = HeavyField%GetMesonCorrelator_O1_3s1_ZeroMomentum()
+      O8_1S0 = HeavyField%GetMesonCorrelator_O8_1s0_ZeroMomentum()
+      O8_3S1 = HeavyField%GetMesonCorrelator_O8_3s1_ZeroMomentum()
+
+      if(ThisProc()==0) then
+         ! Norm
+         write(FileID_Norm,'((SP,E16.9))') s,norm_quark,norm_antiq
+
+
+         ! Correlators
+         write(FileID_Correlator,'(9(SP,E16.9,1X))') &
+              s,&
+              real(O1_1S0,fp), aimag(O1_1S0),&
+              real(O1_3S1,fp), aimag(O1_3S1),&
+              real(O8_1S0,fp), aimag(O8_1S0),&
+              real(O8_3S1,fp), aimag(O8_3S1)
+      end if
+    end subroutine PrintObservables
+    
     !>@brief Initialisation of the simulation
     !!@details
     !! MPI\n
@@ -2172,7 +2199,7 @@ contains
              time(it) = it*LatticeSpacings(0)
              
              mesoncorrelators(it) &
-                  = HeavyField%GetMesonCorrelator_3s1_ZeroMomentum()
+                  = HeavyField%GetMesonCorrelator_O1_3s1_ZeroMomentum()
           end if
 
           quarknorms(it,r) = HeavyField%GetNorm_Quark()
@@ -2857,7 +2884,7 @@ contains
              it = nint(t/ds)
              is = nint(s/ds)
              
-             correlator(is,it) = HeavyField_t2%GetMesonCorrelator_3s1_ZeroMomentum()
+             correlator(is,it) = HeavyField_t2%GetMesonCorrelator_O1_3s1_ZeroMomentum()
              qnorm(is,it) = HeavyField_t2%GetNorm_Quark()
              anorm(is,it) = HeavyField_t2%GetNorm_AntiQ()
              

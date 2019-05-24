@@ -88,9 +88,16 @@ module nrqcd
      generic, public :: Update => Update_CrankNicholson
      procedure, private :: Update_CrankNicholson
 
-     ! Mesoncorrelators
-     procedure, public :: GetMesoncorrelator_1S0_ZeroMomentum
-     procedure, public :: GetMesoncorrelator_3S1_ZeroMomentum
+     ! Mesoncorrelators ...
+     ! ... Colour singlets
+     !     ... S-Waves
+     procedure, public :: GetMesoncorrelator_O1_1S0_ZeroMomentum
+     procedure, public :: GetMesoncorrelator_O1_3S1_ZeroMomentum
+
+     ! ... Colour octets
+     !     ... S-Waves
+     procedure, public :: GetMesoncorrelator_O8_1S0_ZeroMomentum
+     procedure, public :: GetMesoncorrelator_O8_3S1_ZeroMomentum
 
      ! Access function
      procedure, public :: GetQuarkProp_G
@@ -1192,7 +1199,7 @@ use lattice
     ! .. -c1/2m D^2
     !goto 1 ! Leave out diffusion term which corresponds to p²/(2m)
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
-       do i=1,nDim
+       do i=1,nSpinGenerators
           ! + delta_{x,y}/(ai**2)/m
           SpatialCol = SpatialRow
           
@@ -1224,7 +1231,7 @@ use lattice
     
     ! .. -c3/8m^2.[D_i,g.at.E_i]
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
-       do i=1,nDim
+       do i=1,nSpinGenerators
           ! + delta_{x,y}/2m ( F(x,jk)-F(x,kj) )/2
           SpatialCol = SpatialRow
           LatticeIndex = GetLatticeIndex_PETSc(SpatialCol)
@@ -1249,7 +1256,7 @@ use lattice
 
     ! .. -c2.g/2m B.sigma
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
-       do i=1,nDim
+       do i=1,nSpinGenerators
           ! + delta_{x,y}/2m ( F(x,jk)-F(x,kj) )/2
           SpatialCol = SpatialRow
           LatticeIndex = GetLatticeIndex_PETSc(SpatialCol)
@@ -1262,7 +1269,7 @@ use lattice
     
     ! .. -c4.i/8m^2.eps_ijk sigma_k x {D_i,g.at.E_j}
     do SpatialRow=LocalSpatialMinRow,LocalSpatialMaxRow
-       do i=1,nDim
+       do i=1,nSpinGenerators
           LatticeIndex = GetLatticeIndex_PETSc(SpatialRow)
           neib_p = GetNeib_G(+i,LatticeIndex)
           neib_m = GetNeib_G(-i,LatticeIndex)
@@ -1440,13 +1447,13 @@ use lattice
     end do
   end subroutine LoadPropagatorFromPETSc
 
-  !>@brief Computes \f$^1\text{S}_0\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
-  !!@returns \f$^1\text{S}_0\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !>@brief Computes \f$\text{O}_1(^1\text{S}_0)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$\text{O}_1(^1\text{S}_0)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.05.2019
   !!@version 1.1
-  impure complex(fp) function GetMesoncorrelator_1S0_ZeroMomentum(HeavyField)
+  impure function GetMesoncorrelator_O1_1S0_ZeroMomentum(HeavyField) result(res)
     use mpi
     use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
     use lattice, only: nDim, GetProc_M, GetMemorySize
@@ -1454,6 +1461,8 @@ use lattice
     implicit none
     !> NRQCD heavy field
     class(NRQCDField), intent(in) :: HeavyField
+
+    complex(fp) :: res
 
     integer(intmpi) :: mpierr
     complex(fp) :: Correlator(nDof,nDof)
@@ -1472,20 +1481,20 @@ use lattice
 
     call MPI_ALLREDUCE(&
          LocalValue,&
-         GetMesoncorrelator_1S0_ZeroMomentum,&
+         res,&
          1_intmpi,&
          GetComplexSendType(),&
          MPI_SUM,&
          MPI_COMM_WORLD,mpierr)
-  end function GetMesoncorrelator_1S0_ZeroMomentum
+  end function GetMesoncorrelator_O1_1S0_ZeroMomentum
   
-  !>@brief Computes \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
-  !!@returns \f$^3\text{S}_1\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !>@brief Computes \f$\text{O}_1(^3\text{S}_1)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$\text{O}_1(^3\text{S}_1)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 24.05.2019
   !!@version 1.1
-  impure complex(fp) function GetMesoncorrelator_3S1_ZeroMomentum(HeavyField)
+  impure function GetMesoncorrelator_O1_3S1_ZeroMomentum(HeavyField) result(res)
     use mpi
     use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
     use lattice, only: nDim, GetProc_M, GetMemorySize
@@ -1494,6 +1503,8 @@ use lattice
     !> NRQCD heavy field
     class(NRQCDField), intent(in) :: HeavyField
 
+    complex(fp) :: res
+    
     integer(intmpi) :: mpierr
     complex(fp) :: PauliMatrix_CS(nDof,nDof), Correlator(nDof,nDof)
     integer(int64) :: MemoryIndex
@@ -1503,7 +1514,7 @@ use lattice
     LocalValue = 0
     do concurrent(MemoryIndex=1:GetMemorySize(),GetProc_M(MemoryIndex)==ThisProc())
        Correlator = 0
-       do concurrent(i=1:nDim)
+       do concurrent(i=1:nSpinGenerators)
           PauliMatrix_CS = S2CS(SU2Generators(:,:,i))
 
           Correlator = Correlator &
@@ -1518,13 +1529,109 @@ use lattice
 
     call MPI_ALLREDUCE(&
          LocalValue,&
-         GetMesoncorrelator_3S1_ZeroMomentum,&
+         res,&
          1_intmpi,&
          GetComplexSendType(),&
          MPI_SUM,&
          MPI_COMM_WORLD,mpierr)
-  end function GetMesoncorrelator_3S1_ZeroMomentum
+  end function GetMesoncorrelator_O1_3S1_ZeroMomentum
 
+  !>@brief Computes \f$\text{O}_8(^1\text{S}_0)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$\text{O}_8(^1\text{S}_0)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.05.2019
+  !!@version 1.1
+  impure function GetMesoncorrelator_O8_1S0_ZeroMomentum(HeavyField) result(res)
+    use mpi
+    use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
+    use lattice, only: nDim, GetProc_M, GetMemorySize
+    use matrixoperations, only: GetTrace, GetKronProd
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+
+    complex(fp) :: res
+    
+    integer(intmpi) :: mpierr
+    complex(fp) :: Correlator(nDoF,nDoF), M(nDoF,nDoF)
+    integer(int64) :: MemoryIndex
+    integer(int8) :: a
+    complex(fp) :: LocalValue
+    
+    LocalValue = 0
+    do concurrent(MemoryIndex=1:GetMemorySize(),GetProc_M(MemoryIndex)==ThisProc())
+       Correlator = 0
+       do concurrent(a=1:nGluons)
+          M = C2CS(SU3Generators(:,:,a))
+          
+          Correlator = Correlator &
+               + cmplx(0,1,fp)*matmul(matmul(matmul(&
+               conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))),&
+               M),&
+               HeavyField%QuarkProp(:,:,MemoryIndex)),&
+               M)*(2*nColours)/(nGluons)
+       end do
+       LocalValue = LocalValue + GetTrace(Correlator)
+    end do
+
+    call MPI_ALLREDUCE(&
+         LocalValue,&
+         res,&
+         1_intmpi,&
+         GetComplexSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetMesoncorrelator_O8_1S0_ZeroMomentum
+  
+  !>@brief Computes \f$\text{O}_8(^3\text{S}_1)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@returns \f$\text{O}_8(^3\text{S}_1)\f$-Quarkonium-correlator at \f$\vec{p}=\vec{0}\f$
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 24.05.2019
+  !!@version 1.1
+  impure function GetMesoncorrelator_O8_3S1_ZeroMomentum(HeavyField) result(res)
+    use mpi
+    use mpiinterface, only: intmpi, ThisProc, GetComplexSendType
+    use lattice, only: nDim, GetProc_M, GetMemorySize
+    use matrixoperations, only: GetTrace, GetKronProd
+    implicit none
+    !> NRQCD heavy field
+    class(NRQCDField), intent(in) :: HeavyField
+
+    complex(fp) :: res
+    
+    integer(intmpi) :: mpierr
+    complex(fp) :: Correlator(nDoF,nDoF), M(nDoF,nDoF)
+    integer(int64) :: MemoryIndex
+    integer(int8) :: i, a
+    complex(fp) :: LocalValue
+    
+    LocalValue = 0
+    do concurrent(MemoryIndex=1:GetMemorySize(),GetProc_M(MemoryIndex)==ThisProc())
+       Correlator = 0
+       do concurrent(i=1:nSpinGenerators, a=1:nGluons)
+          M = GetKronProd(SU3Generators(:,:,a),SU2Generators(:,:,i))
+          
+          Correlator = Correlator &
+               + cmplx(0,1,fp)*matmul(matmul(matmul(&
+               conjg(transpose(HeavyField%AntiQProp(:,:,MemoryIndex))),&
+               M),&
+               HeavyField%QuarkProp(:,:,MemoryIndex)),&
+               M)*(2*nColours)/(nGluons*nSpinGenerators)
+       end do
+       LocalValue = LocalValue + GetTrace(Correlator)
+    end do
+
+    call MPI_ALLREDUCE(&
+         LocalValue,&
+         res,&
+         1_intmpi,&
+         GetComplexSendType(),&
+         MPI_SUM,&
+         MPI_COMM_WORLD,mpierr)
+  end function GetMesoncorrelator_O8_3S1_ZeroMomentum
+  
   !>@brief Computes chromo-magnetic field
   !!@returns chromo-magnetic field
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
