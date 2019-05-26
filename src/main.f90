@@ -296,9 +296,9 @@ contains
     integer :: i
     
     ! Output
-    integer(int8) :: FileID_Norm, FileID_Correlator
+    integer(int8) :: FileID_Norm, FileID_Correlator, FileID_Correlator_gconjg
 
-    character(len=80) :: FileMesonCorrelator, FileNorm
+    character(len=80) :: FileMesonCorrelator, FileNorm, FileMesonCorrelator_gconjg
     
     ! Measurement of progression
     integer(int64) :: iwork, nwork
@@ -357,6 +357,7 @@ contains
        ! Closing files
        call CloseFile(FileID_Correlator)
        call CloseFile(FileID_Norm)
+       call CloseFile(FileID_Correlator_gconjg)
     end if
     
     call EndSimulation
@@ -377,6 +378,15 @@ contains
          write(FileID_Correlator,'(1X,A11,1X,A11)', advance='yes') 'Re(O8(3S1))','Im(O8(3S1))'
 
          write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
+
+         
+         fileID_Correlator_gconjg = OpenFile(filename=FileMesonCorrelator_gconjg,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+         write(FileID_Correlator_gconjg,'(A1)',advance='no') 's'
+         write(FileID_Correlator_gconjg,'(1X,A11,1X,A11)', advance='no') 'Re(O1(1S0))','Im(O1(1S0))'
+         write(FileID_Correlator_gconjg,'(1X,A11,1X,A11)', advance='no') 'Re(O1(3S1))','Im(O1(3S1))'
+         write(FileID_Correlator_gconjg,'(1X,A11,1X,A11)', advance='no') 'Re(O8(1S0))','Im(O8(1S0))'
+         write(FileID_Correlator_gconjg,'(1X,A11,1X,A11)', advance='yes') 'Re(O8(3S1))','Im(O8(3S1))'
       end if
     end subroutine OpenObservableFiles
     
@@ -391,6 +401,7 @@ contains
       
       real(fp) :: norm_quark, norm_antiq
       complex(fp) :: O1_1S0, O1_3S1, O8_1S0, O8_3S1
+      complex(fp) :: O1_1S0_gconjg, O1_3S1_gconjg, O8_1S0_gconjg, O8_3S1_gconjg
       
       
       norm_quark = HeavyField%GetNorm_Quark()
@@ -401,6 +412,12 @@ contains
       O8_1S0 = HeavyField%GetMesonCorrelator_O8_1s0_ZeroMomentum()
       O8_3S1 = HeavyField%GetMesonCorrelator_O8_3s1_ZeroMomentum()
 
+
+      O1_1S0_gconjg = HeavyField%GetMesonCorrelator_O1_1s0_ZeroMomentum_gconjg()
+      O1_3S1_gconjg = HeavyField%GetMesonCorrelator_O1_3s1_ZeroMomentum_gconjg()
+      O8_1S0_gconjg = HeavyField%GetMesonCorrelator_O8_1s0_ZeroMomentum_gconjg()
+      O8_3S1_gconjg = HeavyField%GetMesonCorrelator_O8_3s1_ZeroMomentum_gconjg()
+      
       if(ThisProc()==0) then
          ! Norm
          write(FileID_Norm,'(3(SP,E16.9))') s,norm_quark,norm_antiq
@@ -413,6 +430,16 @@ contains
               real(O1_3S1,fp), aimag(O1_3S1),&
               real(O8_1S0,fp), aimag(O8_1S0),&
               real(O8_3S1,fp), aimag(O8_3S1)
+
+         
+
+         ! Correlators
+         write(FileID_Correlator_gconjg,'(9(SP,E16.9,1X))') &
+              s,&
+              real(O1_1S0_gconjg,fp), aimag(O1_1S0_gconjg),&
+              real(O1_3S1_gconjg,fp), aimag(O1_3S1_gconjg),&
+              real(O8_1S0_gconjg,fp), aimag(O8_1S0_gconjg),&
+              real(O8_3S1_gconjg,fp), aimag(O8_3S1_gconjg)
       end if
     end subroutine PrintObservables
     
@@ -504,6 +531,7 @@ contains
       
       arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator_gconjg);
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
