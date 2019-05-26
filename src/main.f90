@@ -36,10 +36,7 @@ contains
     integer(int64) :: LatticeExtensions(ndim)
     real(fp)       :: LatticeSpacings(0:ndim)
     integer(int64) :: RandomNumberSeed
-
-    real(fp) :: GluonSaturationScale !qs
-    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-    real(fp) :: GluonCoupling
+    
     real(fp) :: HeavyQuarkmass
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
 
@@ -204,18 +201,6 @@ contains
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') RandomNumberSeed
-
-      ! Initial gluon distribution (box): Saturation scale
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonSaturationScale
-
-      ! Initial gluon distribution (box): Amplitude
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonOccupationAmplitude
-
-      ! Coupling (only relevant in initialisation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
 
       ! Tolerance for iterative PETSc solver
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);

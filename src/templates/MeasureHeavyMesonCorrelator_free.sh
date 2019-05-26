@@ -16,10 +16,7 @@ smax=10.
 
 # Initialisation of gluon field
 RandomSeed=1
-# Given in units of az
-InitialGluonSaturationScale=0.
-InitialGluonOccupationAmplitude=0.
-Coupling=0.
+
 # Quarks
 iterativeTol=1.E-8
 Mass=1.570796
@@ -35,4 +32,4 @@ FileNorm="norm.txt"
 
 mpiexec -n $processes \
 	$exename \
-	$mode $Nx $Ny $Nz $at $ax $ay $az $smax $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm
+	$mode $Nx $Ny $Nz $at $ax $ay $az $smax $RandomSeed $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm
