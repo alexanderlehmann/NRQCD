@@ -83,7 +83,7 @@ contains
        if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it==tsteps) then
           ! Updating quarks only every "UpdateQuarksEveryNsteps" steps
           call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients,&
-               quarkskips*LatticeSpacings(0))
+               real(quarkskips,fp))
           
           quarkskips = 0
 
@@ -355,7 +355,7 @@ contains
           quarkskips = quarkskips + 1
           if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it2==t2steps) then
              call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients,&
-                  quarkskips*LatticeSpacings(0))
+                  real(quarkskips,fp))
              quarkskips = 0
              if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
           end if
