@@ -311,7 +311,7 @@ contains
     t1steps = nint(abs(trange)/LatticeSpacings(0),int64)
     nwork = 0
     do it1=1,t1steps
-       t2steps = it1
+       t2steps = 2*it1
        do it2=1,t2steps
           nwork = nwork + 1
        end do
