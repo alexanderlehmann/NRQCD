@@ -335,7 +335,7 @@ contains
     
     iwork = 0
     do it1=1,t1steps
-       t2steps = it1
+       t2steps = 2*it1
        HeavyField_t2 = HeavyField_t1
        GaugeConf_t2 = GaugeConf_t1
        do it2=1,t2steps

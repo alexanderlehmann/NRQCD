@@ -1053,7 +1053,7 @@ contains ! Module procedures
   impure subroutine Update_CrankNicholson(HeavyField,GaugeConf,Mass,WilsonCoeffs,StepWidth)
     use mpiinterface, only: mpistop, ThisProc
 
-use lattice
+    use lattice
     use mpiinterface, only: numprocs, intmpi, syncall
     implicit none
     !> NRQCD heavy field
