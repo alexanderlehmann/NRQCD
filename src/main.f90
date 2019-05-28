@@ -147,7 +147,7 @@ contains
 
       if(ThisProc()==0) then
          ! Norm
-         write(FileID_Norm,'(3(SP,E16.9,1X))') s,norm_quark,norm_antiq
+         write(FileID_Norm,'(3(SP,E16.9))') s,norm_quark,norm_antiq
 
 
          ! Correlators
@@ -442,7 +442,7 @@ contains
       
       if(ThisProc()==0) then
          ! Norm
-         write(FileID_Norm,'(3(SP,E16.9,1X))') s,norm_quark,norm_antiq
+         write(FileID_Norm,'(3(SP,E16.9))') s,norm_quark,norm_antiq
 
          ! Correlators
          write(FileID_Correlator,'(9(SP,E16.9,1X))') &
