@@ -346,7 +346,7 @@ contains
           if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
        end do
        
-       call PrintObservables(s=LatticeSpacings(0)*(t2steps + it1),&
+       call PrintObservables(s=LatticeSpacings(0)*t2steps,&
             HeavyField=HeavyField_t2,GaugeConf=GaugeConf_t2)
 
        ! Bring gauge configuration to next t1
