@@ -353,9 +353,14 @@ contains
        quarkskips = 0
        do it2=1,t2steps
           iwork = iwork + 1
-          if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it2==t2steps) then
-             call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients,&
-                  real(quarkskips,fp))
+          if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0) then
+             if(t2steps-it2+1.lt.UpdateQuarksEveryNsteps) then
+                call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients,&
+                   real(t2steps-it2+1,fp))
+             else
+                call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients,&
+                   real(UpdateQuarksEveryNsteps,fp))
+             end if
              quarkskips = 0
              if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
           end if
