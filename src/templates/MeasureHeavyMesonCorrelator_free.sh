@@ -12,7 +12,8 @@ ay=1.0
 az=1.0
 
 at=0.1
-smax=10.
+smax=2.
+UpdateQuarksEveryNsteps=5
 
 # Initialisation of gluon field
 RandomSeed=1
@@ -32,4 +33,4 @@ FileNorm="norm.txt"
 
 mpiexec -n $processes \
 	$exename \
-	$mode $Nx $Ny $Nz $at $ax $ay $az $smax $RandomSeed $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm
+	$mode $Nx $Ny $Nz $at $ax $ay $az $smax $UpdateQuarksEveryNsteps $RandomSeed $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm

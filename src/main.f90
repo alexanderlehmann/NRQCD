@@ -49,7 +49,7 @@ contains
     type(NRQCDField)         :: HeavyField_t
 
     ! Counting
-    integer :: i
+    integer :: i, quarkskips, UpdateQuarksEveryNsteps
     
     ! Output
     integer(int8) :: FileID_Norm, FileID_Correlator
@@ -77,15 +77,24 @@ contains
     call PrintObservables(s=0._fp,HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
     
     iwork = 0
+    quarkskips = 0
     do it=1,tsteps
-       call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients)
+       quarkskips = quarkskips + 1
+       if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it==tsteps) then
+          ! Updating quarks only every "UpdateQuarksEveryNsteps" steps
+          call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients,&
+               quarkskips*LatticeSpacings(0))
+          
+          quarkskips = 0
+
+          call PrintObservables(s=LatticeSpacings(0)*it,&
+               HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
+       end if
+       
        call GaugeConf_t%Update
 
        iwork = iwork + 1
        if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
-
-       call PrintObservables(s=LatticeSpacings(0)*it,&
-            HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
     end do
 
     if(ThisProc()==0) then
@@ -197,6 +206,9 @@ contains
 
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') smax
+
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I3)') UpdateQuarksEveryNsteps
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
@@ -293,7 +305,7 @@ contains
     type(NRQCDField)         :: HeavyField_t1, HeavyField_t2
 
     ! Counting
-    integer :: i
+    integer :: i, quarkskips, UpdateQuarksEveryNsteps
     
     ! Output
     integer(int8) :: FileID_Norm, FileID_Correlator, FileID_Correlator_gconjg
@@ -304,7 +316,6 @@ contains
     integer(int64) :: iwork, nwork
     
     call InitSimulation
-
 
     ! Measure amount of work
     trange = smax/2
@@ -338,12 +349,19 @@ contains
        t2steps = 2*it1
        HeavyField_t2 = HeavyField_t1
        GaugeConf_t2 = GaugeConf_t1
+       
+       quarkskips = 0
        do it2=1,t2steps
-          call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
+          quarkskips = quarkskips + 1
+          if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it2==t2steps) then
+             call HeavyField_t2%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients,&
+                  quarkskips*LatticeSpacings(0))
+             quarkskips = 0
+             if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+          end if
           call GaugeConf_t2%Update
 
           iwork = iwork + 1
-          if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
        end do
        
        call PrintObservables(s=LatticeSpacings(0)*t2steps,&
@@ -422,7 +440,6 @@ contains
          ! Norm
          write(FileID_Norm,'(3(SP,E16.9,1X))') s,norm_quark,norm_antiq
 
-
          ! Correlators
          write(FileID_Correlator,'(9(SP,E16.9,1X))') &
               s,&
@@ -430,8 +447,6 @@ contains
               real(O1_3S1,fp), aimag(O1_3S1),&
               real(O8_1S0,fp), aimag(O8_1S0),&
               real(O8_3S1,fp), aimag(O8_3S1)
-
-         
 
          ! Correlators
          write(FileID_Correlator_gconjg,'(9(SP,E16.9,1X))') &
@@ -495,6 +510,9 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') smax
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I3)') UpdateQuarksEveryNsteps
+      
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') RandomNumberSeed
