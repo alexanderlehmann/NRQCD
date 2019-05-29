@@ -611,7 +611,7 @@ contains
     
     ! Physical fields
     type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf
-    type(NRQCDField)         :: HeavyField, HeavyField_freeStep
+    type(NRQCDField)         :: HeavyField, HeavyField_freeStep, HeavyField_free
     
     ! Counting
     integer :: i
@@ -627,15 +627,18 @@ contains
     integer(int64) :: LatticeIndex_distance, shiftstep
 
     ! Observables
-    complex(fp), allocatable :: WilsonLoops(:,:), HybridLoops(:,:), FreeStepHybridLoops(:,:)
+    complex(fp), allocatable :: WilsonLoops(:,:), HybridLoops(:,:), FreeStepHybridLoops(:,:),&
+         FreeHybridLoops(:,:)
 
     real(fp) :: time
     integer(int64) :: TimePoints
     ! Output
-    integer(int8) :: FileID_WilsonLoops, FileID_HybridLoops, FileID_FreeStepHybridLoops
+    integer(int8) :: FileID_WilsonLoops, FileID_HybridLoops, FileID_FreeStepHybridLoops,&
+         FileID_FreeHybridLoops
 
     character(len=80) :: &
-         FileName_WilsonLoops, FileName_HybridLoops, FileName_FreeStepHybridLoops
+         FileName_WilsonLoops, FileName_HybridLoops, FileName_FreeStepHybridLoops,&
+         FileName_FreeHybridLoops
 
     integer(intmpi) :: proc
     
@@ -649,6 +652,7 @@ contains
     allocate(WilsonLoops(0:TimePoints,0:rmax))
     allocate(HybridLoops(0:TimePoints,0:rmax))
     allocate(FreeStepHybridLoops(0:TimePoints,0:rmax))
+    allocate(FreeHybridLoops(0:TimePoints,0:rmax))
     
     ! initialisation of config ....
     call ColdGaugeConf%ColdInit
@@ -688,7 +692,7 @@ contains
           call HeavyField%InitSinglePoint(&
                latticeindex_quark=xr,&
                latticeindex_antiq=x0)
-
+          HeavyField_free = HeavyField
           HeavyField_freeStep = HeavyField
           do it=0,TimeSteps,+1
              iwork = iwork + 1
@@ -700,11 +704,18 @@ contains
                 WilsonLoops(it,r) = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
              end if
 
-             HybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
-             FreeStepHybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField_freeStep,x0,r,messdir)
-             
+             ! Hybrid loop with update under dynamic gauge conf
+             HybridLoops(it,r) &
+                  = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
+             ! Hybrid loop with one update step under cold gauge conf (free step)
+             FreeStepHybridLoops(it,r) &
+                  = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField_freeStep,x0,r,messdir)
+             ! Hybrid loop with full updates under cold gauge conf only (free)
+             FreeHybridLoops(it,r) &
+                  = GetHybridLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_free,x0,r,messdir)
              call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
+             call HeavyField_free%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
              call GaugeConf_t2%Update
           end do
        end do
@@ -737,10 +748,13 @@ contains
               st='REPLACE',fm='FORMATTED',act='WRITE')
          FileID_FreeStepHybridLoops = OpenFile(filename=FileName_FreeStepHybridLoops,&
               st='REPLACE',fm='FORMATTED',act='WRITE')
+         FileID_FreeHybridLoops = OpenFile(filename=FileName_FreeHybridLoops,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
 
          write(FileID_WilsonLoops,'(A1,1X)',advance='no') 't'
          write(FileID_HybridLoops,'(A1,1X)',advance='no') 't'
          write(FileID_FreeStepHybridLoops,'(A1,1X)',advance='no') 't'
+         write(FileID_FreeHybridLoops,'(A1,1X)',advance='no') 't'
          
          do r=0,rmax
             if(r<rmax) then
@@ -755,6 +769,8 @@ contains
             write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
             write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
             write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
+            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
          end do
 
          do it=lbound(WilsonLoops,1),ubound(WilsonLoops,1)
@@ -763,6 +779,7 @@ contains
             write(FileID_WilsonLoops,'(SP,E16.9,1X)',advance='no') time
             write(FileID_HybridLoops,'(SP,E16.9,1X)',advance='no') time
             write(FileID_FreeStepHybridLoops,'(SP,E16.9,1X)',advance='no') time
+            write(FileID_FreeHybridLoops,'(SP,E16.9,1X)',advance='no') time
             do r=lbound(WilsonLoops,2),ubound(WilsonLoops,2)
                if(r<ubound(WilsonLoops,2)) then
                   adv='no'
@@ -779,12 +796,15 @@ contains
                write(FileID_FreeStepHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
                     real(FreeStepHybridLoops(it,r)),aimag(FreeStepHybridLoops(it,r))
                
+               write(FileID_FreeHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                    real(FreeHybridLoops(it,r)),aimag(FreeHybridLoops(it,r))
             end do
          end do
              
          call CloseFile(FileID_WilsonLoops)
          call CloseFile(FileID_HybridLoops)
          call CloseFile(FileID_FreeStepHybridLoops)
+         call CloseFile(FileID_FreeHybridLoops)
       end if
     end subroutine PrintObservables
 
@@ -872,6 +892,7 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_HybridLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_FreeStepHybridLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_FreeHybridLoops);
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
