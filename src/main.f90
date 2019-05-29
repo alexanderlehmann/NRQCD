@@ -49,7 +49,7 @@ contains
     type(NRQCDField)         :: HeavyField_t
 
     ! Counting
-    integer :: i, quarkskips, UpdateQuarksEveryNsteps
+    integer :: i
     
     ! Output
     integer(int8) :: FileID_Norm, FileID_Correlator
@@ -77,21 +77,14 @@ contains
     call PrintObservables(s=0._fp,HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
     
     iwork = 0
-    quarkskips = 0
     do it=1,tsteps
-       quarkskips = quarkskips + 1
-       if(modulo(quarkskips,UpdateQuarksEveryNsteps)==0 .or. it==tsteps) then
-          ! Updating quarks only every "UpdateQuarksEveryNsteps" steps
-          call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients,&
-               real(quarkskips,fp))
-          
-          quarkskips = 0
-
-          call PrintObservables(s=LatticeSpacings(0)*it,&
-               HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
-       end if
+       ! Updating quarks only every "UpdateQuarksEveryNsteps" steps
+       call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients)
        
        call GaugeConf_t%Update
+
+       call PrintObservables(s=LatticeSpacings(0)*it,&
+            HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
 
        iwork = iwork + 1
        if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
@@ -206,9 +199,6 @@ contains
 
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') smax
-
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I3)') UpdateQuarksEveryNsteps
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
