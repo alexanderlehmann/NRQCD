@@ -701,7 +701,7 @@ contains
              end if
 
              HybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
-             FreeStepHybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
+             FreeStepHybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField_freeStep,x0,r,messdir)
              
              call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
@@ -716,6 +716,11 @@ contains
 
   contains
 
+    !>@brief Output of observables
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 29.05.2019
+    !!@version 1.0
     impure subroutine PrintObservables
       implicit none
       
@@ -781,19 +786,8 @@ contains
          call CloseFile(FileID_HybridLoops)
          call CloseFile(FileID_FreeStepHybridLoops)
       end if
-      
-             !if(x0==1) then
-             !   WilsonLoop = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
-             !   WilsonLoops(measurement,r,it) = WilsonLoop
-             !end if
-
-             !HybridLoop = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
-             !HybridLoops(measurement,r,it) = HybridLoops(measurement,r,it) &
-             !     + HybridLoop/meanMaxLatticeIndex
     end subroutine PrintObservables
 
-
-      
     !>@brief Initialisation of the simulation
     !!@details
     !! MPI\n
