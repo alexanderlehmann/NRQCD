@@ -638,10 +638,11 @@ contains
          FileName_WilsonLoops, FileName_HybridLoops, FileName_FreeStepHybridLoops
 
     integer(intmpi) :: proc
+    
+    ! Measurement of progression
+    integer(int64) :: iwork, nwork
 
     call InitSimulation
-
-    rmax = LatticeExtensions(messdir)/2
 
     TimePoints = nint(TimeRange/LatticeSpacings(0))
 
@@ -659,6 +660,12 @@ contains
        call GaugeConf_t1%Update(sign(+1._real64,tstart))
     end do
 
+    ! Measure amount of work
+    meanMaxLatticeIndex=1
+    
+    nwork = meanMaxLatticeIndex*(TimePoints+1)*(rmax+1)
+
+    iwork = 0
     do r=0,rmax
        if(ThisProc()==0) then
           write(output_unit,*) 'r=',r,'of',rmax
@@ -667,26 +674,25 @@ contains
        ! Initialising quark-antiquark-pair
        ! with quark at variable remote point xr
        ! and antiquark at fixed (origin) point x0
-       meanMaxLatticeIndex=1
+       
        do x0=1,meanMaxLatticeIndex
+          ! Setting time of gauge conf to t1
+          GaugeConf_t2 = GaugeConf_t1
+
+          ! Setting time of quarks to t1, using distance r between quark and antiquark
           ! Getting xr
           xr = x0
           do shiftstep=1,r
              xr=GetNeib_G(messdir,xr)
           end do
-
-          ! Setting time of gauge conf to t1
-          GaugeConf_t2 = GaugeConf_t1
-
-          ! Setting time of quarks to t1, using distance r between quark and antiquark
           call HeavyField%InitSinglePoint(&
                latticeindex_quark=xr,&
                latticeindex_antiq=x0)
 
           HeavyField_freeStep = HeavyField
           do it=0,TimeSteps,+1
-             if(ThisProc()==0) &
-                  write(output_unit,'(I5,1X,A2,1X,I5)')it,'of',nint(TimeRange/LatticeSpacings(0))
+             iwork = iwork + 1
+             if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
 
              if(x0==1) then
                 ! No additional average over lattice points needed
@@ -695,7 +701,7 @@ contains
              end if
 
              HybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
-             FreeStepHybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,ColdGaugeConf,HeavyField,x0,r,messdir)
+             FreeStepHybridLoops(it,r) = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
              
              call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
@@ -840,6 +846,9 @@ contains
 
       TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') rmax
+      
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') RandomNumberSeed
