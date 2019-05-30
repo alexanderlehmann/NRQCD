@@ -615,16 +615,17 @@ contains
     ! Observables
     complex(fp), allocatable :: WilsonLoops(:,:), HybridLoops(:,:), FreeStepHybridLoops(:,:),&
          FreeHybridLoops(:,:)
+    real(fp), allocatable :: qnorm(:,:), anorm(:,:)
 
     real(fp) :: time
     integer(int64) :: TimePoints
     ! Output
     integer(int8) :: FileID_WilsonLoops, FileID_HybridLoops, FileID_FreeStepHybridLoops,&
-         FileID_FreeHybridLoops
+         FileID_FreeHybridLoops, FileID_Anorm, FileID_Qnorm
 
     character(len=80) :: &
          FileName_WilsonLoops, FileName_HybridLoops, FileName_FreeStepHybridLoops,&
-         FileName_FreeHybridLoops
+         FileName_FreeHybridLoops, FileName_Anorm, FileName_Qnorm
 
     integer(intmpi) :: proc
     
@@ -639,6 +640,9 @@ contains
     allocate(HybridLoops(0:TimePoints,0:rmax))
     allocate(FreeStepHybridLoops(0:TimePoints,0:rmax))
     allocate(FreeHybridLoops(0:TimePoints,0:rmax))
+    allocate(qnorm(0:TimePoints,0:rmax))
+    allocate(anorm(0:TimePoints,0:rmax))
+
     
     ! initialisation of config ....
     call ColdGaugeConf%ColdInit
@@ -664,7 +668,6 @@ contains
        ! Initialising quark-antiquark-pair
        ! with quark at variable remote point xr
        ! and antiquark at fixed (origin) point x0
-       
        do x0=1,meanMaxLatticeIndex
           ! Setting time of gauge conf to t1
           GaugeConf_t2 = GaugeConf_t1
@@ -699,6 +702,10 @@ contains
              ! Hybrid loop with full updates under cold gauge conf only (free)
              FreeHybridLoops(it,r) &
                   = GetHybridLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_free,x0,r,messdir)
+             ! Norm of heavy field, evolved under interacting gauge field
+             qnorm(it,r) = HeavyField%GetNorm_Quark()
+             anorm(it,r) = HeavyField%GetNorm_AntiQ()
+             
              call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_free%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
@@ -736,11 +743,18 @@ contains
               st='REPLACE',fm='FORMATTED',act='WRITE')
          FileID_FreeHybridLoops = OpenFile(filename=FileName_FreeHybridLoops,&
               st='REPLACE',fm='FORMATTED',act='WRITE')
+         FileID_qnorm = OpenFile(filename=FileName_qnorm,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+         FileID_anorm = OpenFile(filename=FileName_anorm,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+         
 
          write(FileID_WilsonLoops,'(A1,1X)',advance='no') 't'
          write(FileID_HybridLoops,'(A1,1X)',advance='no') 't'
          write(FileID_FreeStepHybridLoops,'(A1,1X)',advance='no') 't'
          write(FileID_FreeHybridLoops,'(A1,1X)',advance='no') 't'
+         write(FileID_qnorm,'(A1,1X)',advance='no') 't'
+         write(FileID_anorm,'(A1,1X)',advance='no') 't'
          
          do r=0,rmax
             if(r<rmax) then
@@ -757,6 +771,8 @@ contains
             write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
             write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
             write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+            write(FileID_qnorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
+            write(FileID_anorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
          end do
 
          do it=lbound(WilsonLoops,1),ubound(WilsonLoops,1)
@@ -766,6 +782,8 @@ contains
             write(FileID_HybridLoops,'(SP,E16.9,1X)',advance='no') time
             write(FileID_FreeStepHybridLoops,'(SP,E16.9,1X)',advance='no') time
             write(FileID_FreeHybridLoops,'(SP,E16.9,1X)',advance='no') time
+            write(FileID_qnorm,'(SP,E16.9,1X)',advance='no') time
+            write(FileID_anorm,'(SP,E16.9,1X)',advance='no') time
             do r=lbound(WilsonLoops,2),ubound(WilsonLoops,2)
                if(r<ubound(WilsonLoops,2)) then
                   adv='no'
@@ -784,6 +802,11 @@ contains
                
                write(FileID_FreeHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
                     real(FreeHybridLoops(it,r)),aimag(FreeHybridLoops(it,r))
+
+               write(FileID_qnorm,'(SP,E16.9,1X)',advance=trim(adv)) &
+                    qnorm(it,r)
+               write(FileID_anorm,'(SP,E16.9,1X)',advance=trim(adv)) &
+                    anorm(it,r)
             end do
          end do
              
@@ -791,6 +814,8 @@ contains
          call CloseFile(FileID_HybridLoops)
          call CloseFile(FileID_FreeStepHybridLoops)
          call CloseFile(FileID_FreeHybridLoops)
+         call CloseFile(FileID_qnorm)
+         call CloseFile(FileID_anorm)
       end if
     end subroutine PrintObservables
 
@@ -879,6 +904,8 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_HybridLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_FreeStepHybridLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_FreeHybridLoops);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_qnorm);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_anorm);
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
