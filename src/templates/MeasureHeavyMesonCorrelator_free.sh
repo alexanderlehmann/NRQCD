@@ -12,7 +12,7 @@ ay=1.0
 az=1.0
 
 at=0.1
-smax=20.
+smax=0.4
 
 # Initialisation of gluon field
 RandomSeed=1
