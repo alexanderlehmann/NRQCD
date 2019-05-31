@@ -596,7 +596,7 @@ contains
     real(fp) :: kspTol
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf, GaugeConf_old
     type(NRQCDField)         :: HeavyField, HeavyField_freeStep, HeavyField_free
     
     ! Counting
@@ -683,6 +683,7 @@ contains
                latticeindex_antiq=x0)
           HeavyField_free = HeavyField
           HeavyField_freeStep = HeavyField
+          GaugeConf_old = GaugeConf_t2
           do it=0,TimeSteps,+1
              iwork = iwork + 1
              if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
@@ -698,7 +699,7 @@ contains
                   = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
              ! Hybrid loop with one update step under cold gauge conf (free step)
              FreeStepHybridLoops(it,r) &
-                  = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField_freeStep,x0,r,messdir)
+                  = GetHybridLoop(GaugeConf_t1,GaugeConf_old,HeavyField_freeStep,x0,r,messdir)
              ! Hybrid loop with full updates under cold gauge conf only (free)
              FreeHybridLoops(it,r) &
                   = GetHybridLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_free,x0,r,messdir)
@@ -709,6 +710,7 @@ contains
              call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
              call HeavyField_free%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
+             GaugeConf_old = GaugeConf_t2
              call GaugeConf_t2%Update
           end do
        end do
@@ -763,13 +765,13 @@ contains
                adv='yes'
             end if
             
-            write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
+            write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
             write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
+            write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
             write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
+            write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
             write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Re(r=',r,')'
+            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
             write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
             write(FileID_qnorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
             write(FileID_anorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
