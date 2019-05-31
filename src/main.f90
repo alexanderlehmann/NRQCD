@@ -15,6 +15,253 @@ module programs
   PUBLIC
 
 contains
+  impure subroutine MeasureHeavyQuarkoniumCorrelators_Equilibrium
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+
+    use nrqcd
+
+    use tolerances, only: GetZeroTol
+    use, intrinsic :: ieee_arithmetic
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: RandomNumberSeed
+    
+    real(fp) :: HeavyQuarkmass
+    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
+
+    ! Time coordinates
+    real(fp) :: smax
+    integer(int64) :: it, tsteps
+    
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf_t
+    type(NRQCDField)         :: HeavyField_t
+
+    real(fp) :: Beta
+    
+    ! Counting
+    integer :: i
+    
+    ! Output
+    integer(int8) :: FileID_Norm, FileID_Correlator
+
+    character(len=80) :: FileMesonCorrelator, FileNorm
+    
+    ! Measurement of progression
+    integer(int64) :: iwork, nwork
+    
+    call InitSimulation
+
+    ! Measure amount of work
+    tsteps = nint(abs(smax)/LatticeSpacings(0),int64)
+    nwork = tsteps
+    
+    ! Initialisation, defining the point t=0
+    call Gaugeconf_t%EquilibriumInit(Beta)
+    call HeavyField_t%InitSinglePoint(&
+         latticeindex_quark=1,&
+         latticeindex_antiq=1)
+
+    ! Evolution to t
+    call OpenObservableFiles
+    call PrintObservables(s=0._fp,HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
+    
+    iwork = 0
+    do it=1,tsteps
+       ! Updating quarks only every "UpdateQuarksEveryNsteps" steps
+       call HeavyField_t%Update(GaugeConf_t,HeavyQuarkMass,WilsonCoefficients)
+       
+       call GaugeConf_t%Update
+
+       call PrintObservables(s=LatticeSpacings(0)*it,&
+            HeavyField=HeavyField_t,GaugeConf=GaugeConf_t)
+
+       iwork = iwork + 1
+       if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+    end do
+
+    if(ThisProc()==0) then
+       ! Closing files
+       call CloseFile(FileID_Correlator)
+       call CloseFile(FileID_Norm)
+    end if
+    
+    call EndSimulation
+  contains
+    impure subroutine OpenObservableFiles
+      ! Opening files and printing header
+      if(ThisProc()==0) then
+         ! Opening files
+         fileID_Correlator = OpenFile(filename=FileMesonCorrelator,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+         fileID_Norm = OpenFile(filename=FileNorm,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+
+         write(FileID_Correlator,'(A1)',advance='no') 's'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O1(1S0))','Im(O1(1S0))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O1(3S1))','Im(O1(3S1))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='no') 'Re(O8(1S0))','Im(O8(1S0))'
+         write(FileID_Correlator,'(1X,A11,1X,A11)', advance='yes') 'Re(O8(3S1))','Im(O8(3S1))'
+
+         write(fileID_Norm,'(A1,1X,A5,1X,A5)') 's','Quark','Antiq'
+      end if
+    end subroutine OpenObservableFiles
+    
+    impure subroutine PrintObservables(s,HeavyField,GaugeConf)
+      implicit none
+      !> relative time difference s in Wigner coordinates
+      real(fp), intent(in) :: s
+      !> Heavy quark field
+      type(NRQCDField), intent(in) :: HeavyField
+      !> Gauge configuration
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+      
+      real(fp) :: norm_quark, norm_antiq
+      complex(fp) :: O1_1S0, O1_3S1, O8_1S0, O8_3S1
+      
+      
+      norm_quark = HeavyField%GetNorm_Quark()
+      norm_antiq = HeavyField%GetNorm_AntiQ()
+
+      O1_1S0 = HeavyField%GetMesonCorrelator_O1_1s0_ZeroMomentum()
+      O1_3S1 = HeavyField%GetMesonCorrelator_O1_3s1_ZeroMomentum()
+      O8_1S0 = HeavyField%GetMesonCorrelator_O8_1s0_ZeroMomentum()
+      O8_3S1 = HeavyField%GetMesonCorrelator_O8_3s1_ZeroMomentum()
+
+      if(ThisProc()==0) then
+         ! Norm
+         write(FileID_Norm,'(3(SP,E16.9,1X))') s,norm_quark,norm_antiq
+
+
+         ! Correlators
+         write(FileID_Correlator,'(9(SP,E16.9,1X))') &
+              s,&
+              real(O1_1S0,fp), aimag(O1_1S0),&
+              real(O1_3S1,fp), aimag(O1_3S1),&
+              real(O8_1S0,fp), aimag(O8_1S0),&
+              real(O8_3S1,fp), aimag(O8_3S1)
+      end if
+    end subroutine PrintObservables
+    
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      use NRQCD,              only: InitModule_NRQCD              => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+
+      real(fp) :: c_re, c_im
+      real(fp) :: kspTol
+      
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+      
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') smax
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+      
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') Beta
+
+      ! Tolerance for iterative PETSc solver
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') kspTol
+      
+      ! Heavy quark mass
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') HeavyQuarkmass
+      
+      ! Wilson coefficents
+      do i=1,nWilsonCoefficients
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_re
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') c_im
+
+         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
+      end do
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
+      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
+      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
+      implicit none
+
+      call FinalizeModule_NRQCD
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+      
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine MeasureHeavyQuarkoniumCorrelators_Equilibrium
+  
   impure subroutine MeasureHeavyQuarkoniumCorrelators_free
     use, intrinsic :: iso_fortran_env
     use precision
@@ -3794,6 +4041,8 @@ program simulation
      call MeasureHeavyQuarkoniumCorrelators_oneT
   case (32)
      call MeasureHeavyQuarkoniumCorrelators_free
+  case (33)
+     call MeasureHeavyQuarkoniumCorrelators_Equilibrium
   case(4)
      call ComputeSpectrum
   case (5)
