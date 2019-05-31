@@ -3798,7 +3798,7 @@ program simulation
      call ComputeSpectrum
   case (5)
      call MeasureWilsonLines
-  case (52)
+  case (51)
      call MeasureWilsonAndHybridLines_Equilibrium
   case (6)
      call DeterminePotentials
