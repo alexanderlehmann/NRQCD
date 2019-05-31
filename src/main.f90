@@ -594,6 +594,7 @@ contains
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
 
     real(fp) :: kspTol
+    logical :: MeasureHybridLoops
     
     ! Physical fields
     type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf, GaugeConf_old
@@ -637,15 +638,19 @@ contains
     TimePoints = nint(TimeRange/LatticeSpacings(0))
 
     allocate(WilsonLoops(0:TimePoints,0:rmax))
-    allocate(HybridLoops(0:TimePoints,0:rmax))
-    allocate(FreeStepHybridLoops(0:TimePoints,0:rmax))
-    allocate(FreeHybridLoops(0:TimePoints,0:rmax))
-    allocate(qnorm(0:TimePoints,0:rmax))
-    allocate(anorm(0:TimePoints,0:rmax))
-
+    if(MeasureHybridLoops) then
+       allocate(HybridLoops(0:TimePoints,0:rmax))
+       allocate(FreeStepHybridLoops(0:TimePoints,0:rmax))
+       allocate(FreeHybridLoops(0:TimePoints,0:rmax))
+       allocate(qnorm(0:TimePoints,0:rmax))
+       allocate(anorm(0:TimePoints,0:rmax))
+    end if
     
     ! initialisation of config ....
-    call ColdGaugeConf%ColdInit
+    if(MeasureHybridLoops) then
+       call ColdGaugeConf%ColdInit
+    end if
+    
     call GaugeConf_initial%EquilibriumInit(Beta)
     if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
     GaugeConf_t1 = GaugeConf_initial
@@ -655,66 +660,83 @@ contains
     end do
 
     ! Measure amount of work
-    meanMaxLatticeIndex=1
-    
-    nwork = meanMaxLatticeIndex*(TimePoints+1)*(rmax+1)
+    if(MeasureHybridLoops) then
+       meanMaxLatticeIndex=1
+       nwork = meanMaxLatticeIndex*(TimePoints+1)*(rmax+1)
 
-    iwork = 0
-    do r=0,rmax
-       if(ThisProc()==0) then
-          write(output_unit,*) 'r=',r,'of',rmax
-       end if
+       iwork = 0
+       do r=0,rmax
+          if(ThisProc()==0) then
+             write(output_unit,*) 'r=',r,'of',rmax
+          end if
 
-       ! Initialising quark-antiquark-pair
-       ! with quark at variable remote point xr
-       ! and antiquark at fixed (origin) point x0
-       do x0=1,meanMaxLatticeIndex
-          ! Setting time of gauge conf to t1
-          GaugeConf_t2 = GaugeConf_t1
+          ! Initialising quark-antiquark-pair
+          ! with quark at variable remote point xr
+          ! and antiquark at fixed (origin) point x0
+          do x0=1,meanMaxLatticeIndex
+             ! Setting time of gauge conf to t1
+             GaugeConf_t2 = GaugeConf_t1
 
-          ! Setting time of quarks to t1, using distance r between quark and antiquark
-          ! Getting xr
-          xr = x0
-          do shiftstep=1,r
-             xr=GetNeib_G(messdir,xr)
-          end do
-          call HeavyField%InitSinglePoint(&
-               latticeindex_quark=xr,&
-               latticeindex_antiq=x0)
-          HeavyField_free = HeavyField
-          HeavyField_freeStep = HeavyField
-          GaugeConf_old = GaugeConf_t2
-          do it=0,TimeSteps,+1
-             iwork = iwork + 1
-             if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
-
-             if(x0==1) then
-                ! No additional average over lattice points needed
-                ! because it is already included in the routine
-                WilsonLoops(it,r) = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
-             end if
-
-             ! Hybrid loop with update under dynamic gauge conf
-             HybridLoops(it,r) &
-                  = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
-             ! Hybrid loop with one update step under cold gauge conf (free step)
-             FreeStepHybridLoops(it,r) &
-                  = GetHybridLoop(GaugeConf_t1,GaugeConf_old,HeavyField_freeStep,x0,r,messdir)
-             ! Hybrid loop with full updates under cold gauge conf only (free)
-             FreeHybridLoops(it,r) &
-                  = GetHybridLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_free,x0,r,messdir)
-             ! Norm of heavy field, evolved under interacting gauge field
-             qnorm(it,r) = HeavyField%GetNorm_Quark()
-             anorm(it,r) = HeavyField%GetNorm_AntiQ()
-             
-             call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
-             call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
-             call HeavyField_free%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
+             ! Setting time of quarks to t1, using distance r between quark and antiquark
+             ! Getting xr
+             xr = x0
+             do shiftstep=1,r
+                xr=GetNeib_G(messdir,xr)
+             end do
+             call HeavyField%InitSinglePoint(&
+                  latticeindex_quark=xr,&
+                  latticeindex_antiq=x0)
+             HeavyField_free = HeavyField
+             HeavyField_freeStep = HeavyField
              GaugeConf_old = GaugeConf_t2
-             call GaugeConf_t2%Update
+             do it=0,TimeSteps,+1
+                iwork = iwork + 1
+                if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+
+                if(x0==1) then
+                   ! No additional average over lattice points needed
+                   ! because it is already included in the routine
+                   WilsonLoops(it,r) = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
+                end if
+
+                ! Hybrid loop with update under dynamic gauge conf
+                HybridLoops(it,r) &
+                     = GetHybridLoop(GaugeConf_t1,GaugeConf_t2,HeavyField,x0,r,messdir)
+                ! Hybrid loop with one update step under cold gauge conf (free step)
+                FreeStepHybridLoops(it,r) &
+                     = GetHybridLoop(GaugeConf_t1,GaugeConf_old,HeavyField_freeStep,x0,r,messdir)
+                ! Hybrid loop with full updates under cold gauge conf only (free)
+                FreeHybridLoops(it,r) &
+                     = GetHybridLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_free,x0,r,messdir)
+                ! Norm of heavy field, evolved under interacting gauge field
+                qnorm(it,r) = HeavyField%GetNorm_Quark()
+                anorm(it,r) = HeavyField%GetNorm_AntiQ()
+
+                call HeavyField%Update(GaugeConf_t2,HeavyQuarkMass,WilsonCoefficients)
+                call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
+                call HeavyField_free%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients)
+                GaugeConf_old = GaugeConf_t2
+                call GaugeConf_t2%Update
+             end do
           end do
        end do
-    end do
+    else
+       nwork = TimePoints+1
+
+       iwork = 0
+       ! Setting time of gauge conf to t1
+       GaugeConf_t2 = GaugeConf_t1
+
+       do it=0,TimeSteps,+1
+          do r=0,rmax
+
+             WilsonLoops(it,r) = GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)
+          end do
+          call GaugeConf_t2%Update
+          iwork = iwork + 1
+          if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+       end do
+    end if
 
     call PrintObservables
 
@@ -739,24 +761,28 @@ contains
          ! Opening files
          FileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
               st='REPLACE',fm='FORMATTED',act='WRITE')
-         FileID_HybridLoops = OpenFile(filename=FileName_HybridLoops,&
-              st='REPLACE',fm='FORMATTED',act='WRITE')
-         FileID_FreeStepHybridLoops = OpenFile(filename=FileName_FreeStepHybridLoops,&
-              st='REPLACE',fm='FORMATTED',act='WRITE')
-         FileID_FreeHybridLoops = OpenFile(filename=FileName_FreeHybridLoops,&
-              st='REPLACE',fm='FORMATTED',act='WRITE')
-         FileID_qnorm = OpenFile(filename=FileName_qnorm,&
-              st='REPLACE',fm='FORMATTED',act='WRITE')
-         FileID_anorm = OpenFile(filename=FileName_anorm,&
-              st='REPLACE',fm='FORMATTED',act='WRITE')
-         
+         if(MeasureHybridLoops) then
+            FileID_HybridLoops = OpenFile(filename=FileName_HybridLoops,&
+                 st='REPLACE',fm='FORMATTED',act='WRITE')
+            FileID_FreeStepHybridLoops = OpenFile(filename=FileName_FreeStepHybridLoops,&
+                 st='REPLACE',fm='FORMATTED',act='WRITE')
+            FileID_FreeHybridLoops = OpenFile(filename=FileName_FreeHybridLoops,&
+                 st='REPLACE',fm='FORMATTED',act='WRITE')
+            FileID_qnorm = OpenFile(filename=FileName_qnorm,&
+                 st='REPLACE',fm='FORMATTED',act='WRITE')
+            FileID_anorm = OpenFile(filename=FileName_anorm,&
+                 st='REPLACE',fm='FORMATTED',act='WRITE')
+         end if
 
          write(FileID_WilsonLoops,'(A1,1X)',advance='no') 't'
-         write(FileID_HybridLoops,'(A1,1X)',advance='no') 't'
-         write(FileID_FreeStepHybridLoops,'(A1,1X)',advance='no') 't'
-         write(FileID_FreeHybridLoops,'(A1,1X)',advance='no') 't'
-         write(FileID_qnorm,'(A1,1X)',advance='no') 't'
-         write(FileID_anorm,'(A1,1X)',advance='no') 't'
+
+         if(MeasureHybridLoops) then
+            write(FileID_HybridLoops,'(A1,1X)',advance='no') 't'
+            write(FileID_FreeStepHybridLoops,'(A1,1X)',advance='no') 't'
+            write(FileID_FreeHybridLoops,'(A1,1X)',advance='no') 't'
+            write(FileID_qnorm,'(A1,1X)',advance='no') 't'
+            write(FileID_anorm,'(A1,1X)',advance='no') 't'
+         end if
          
          do r=0,rmax
             if(r<rmax) then
@@ -767,25 +793,31 @@ contains
             
             write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
             write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
-            write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
-            write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
-            write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
-            write(FileID_qnorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
-            write(FileID_anorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
+
+            if(MeasureHybridLoops) then
+               write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
+               write(FileID_HybridLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+               write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
+               write(FileID_FreeStepHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+               write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance='no') 'Re(r=',r,')'
+               write(FileID_FreeHybridLoops,'(A5,I2.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+               write(FileID_qnorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
+               write(FileID_anorm,'(A2,I2.2,1X)',advance=trim(adv)) 'r=',r
+            end if
          end do
 
          do it=lbound(WilsonLoops,1),ubound(WilsonLoops,1)
             time = tstart + it*LatticeSpacings(0)
             
             write(FileID_WilsonLoops,'(SP,E16.9,1X)',advance='no') time
-            write(FileID_HybridLoops,'(SP,E16.9,1X)',advance='no') time
-            write(FileID_FreeStepHybridLoops,'(SP,E16.9,1X)',advance='no') time
-            write(FileID_FreeHybridLoops,'(SP,E16.9,1X)',advance='no') time
-            write(FileID_qnorm,'(SP,E16.9,1X)',advance='no') time
-            write(FileID_anorm,'(SP,E16.9,1X)',advance='no') time
+
+            if(MeasureHybridLoops) then
+               write(FileID_HybridLoops,'(SP,E16.9,1X)',advance='no') time
+               write(FileID_FreeStepHybridLoops,'(SP,E16.9,1X)',advance='no') time
+               write(FileID_FreeHybridLoops,'(SP,E16.9,1X)',advance='no') time
+               write(FileID_qnorm,'(SP,E16.9,1X)',advance='no') time
+               write(FileID_anorm,'(SP,E16.9,1X)',advance='no') time
+            end if
             do r=lbound(WilsonLoops,2),ubound(WilsonLoops,2)
                if(r<ubound(WilsonLoops,2)) then
                   adv='no'
@@ -795,29 +827,33 @@ contains
                
                write(FileID_WilsonLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
                     real(WilsonLoops(it,r)),aimag(WilsonLoops(it,r))
-               
-               write(FileID_HybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
-                    real(HybridLoops(it,r)),aimag(HybridLoops(it,r))
-               
-               write(FileID_FreeStepHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
-                    real(FreeStepHybridLoops(it,r)),aimag(FreeStepHybridLoops(it,r))
-               
-               write(FileID_FreeHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
-                    real(FreeHybridLoops(it,r)),aimag(FreeHybridLoops(it,r))
 
-               write(FileID_qnorm,'(SP,E16.9,1X)',advance=trim(adv)) &
-                    qnorm(it,r)
-               write(FileID_anorm,'(SP,E16.9,1X)',advance=trim(adv)) &
-                    anorm(it,r)
+               if(MeasureHybridLoops) then
+                  write(FileID_HybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                       real(HybridLoops(it,r)),aimag(HybridLoops(it,r))
+
+                  write(FileID_FreeStepHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                       real(FreeStepHybridLoops(it,r)),aimag(FreeStepHybridLoops(it,r))
+
+                  write(FileID_FreeHybridLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                       real(FreeHybridLoops(it,r)),aimag(FreeHybridLoops(it,r))
+
+                  write(FileID_qnorm,'(SP,E16.9,1X)',advance=trim(adv)) &
+                       qnorm(it,r)
+                  write(FileID_anorm,'(SP,E16.9,1X)',advance=trim(adv)) &
+                       anorm(it,r)
+               end if
             end do
          end do
-             
+
          call CloseFile(FileID_WilsonLoops)
-         call CloseFile(FileID_HybridLoops)
-         call CloseFile(FileID_FreeStepHybridLoops)
-         call CloseFile(FileID_FreeHybridLoops)
-         call CloseFile(FileID_qnorm)
-         call CloseFile(FileID_anorm)
+         if(MeasureHybridLoops) then
+            call CloseFile(FileID_HybridLoops)
+            call CloseFile(FileID_FreeStepHybridLoops)
+            call CloseFile(FileID_FreeHybridLoops)
+            call CloseFile(FileID_qnorm)
+            call CloseFile(FileID_anorm)
+         end if
       end if
     end subroutine PrintObservables
 
@@ -846,7 +882,7 @@ contains
 
       integer(int64) :: arg_count
       character(len=80) :: arg
-      integer(int8) :: i
+      integer(int8) :: i, j
       
       real(fp) :: c_re, c_im
       
@@ -883,6 +919,14 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') j
+      if(j==0) then
+         MeasureHybridLoops=.false.
+      else
+         MeasureHybridLoops=.true.
+      end if
+      
       ! Tolerance for iterative PETSc solver
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(E15.7)') kspTol
@@ -940,284 +984,6 @@ contains
       STOP
     end subroutine EndSimulation
   end subroutine MeasureWilsonAndHybridLines_Equilibrium
-  
-  impure subroutine MeasureWilsonLines_Equilibrium
-
-    use, intrinsic :: iso_fortran_env
-    use precision
-    use mpiinterface
-    use lattice
-    use gaugeconfiguration_su3
-    use mpi
-    use io
-    use halocomm
-    use wilsonline
-    use random
-    use statistics
-
-    implicit none
-
-    ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
-    integer(int64) :: RandomNumberSeed
-
-    real(fp) :: Beta
-    real(fp) :: tstart
-    real(fp) :: TimeRange
-
-    ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
-
-    ! Counting
-    integer :: i
-
-    integer(int64) :: it
-
-    ! Wilson loop parameters
-    integer(int8), parameter :: messdir=nDim
-    integer(int64) :: rmax, r
-
-    ! Observables
-    complex(fp) :: WilsonLoop, TimeDerivativeWilsonLoop, Potential
-
-    complex(fp), allocatable :: WilsonLoops(:,:,:), TimeDerivativeWilsonLoops(:,:,:)
-    real(fp), allocatable :: rObservable(:), iObservable(:)
-    real(fp) :: rMean, rStderr,iMean,iStderr
-    real(fp) :: time
-    integer(int64) :: TimePoints
-    ! Output
-    integer(int8) :: FileID_WilsonLoops!, FileID_TimeDerivativeWilsonLoops, FileID_Potential
-
-    character(len=80) :: &
-         FileName_WilsonLoops!, FileName_TimeDerivativeWilsonLoops, FileName_Potential
-
-    integer(intmpi) :: proc
-
-    integer(int64) :: measurement
-    integer(int64) :: nMeasurement
-
-    call InitSimulation
-
-    rmax = LatticeExtensions(messdir)/2
-
-    TimePoints = nint(TimeRange/LatticeSpacings(0))
-    
-    allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
-    WilsonLoops = 0
-    !allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
-    !TimeDerivativeWilsonLoops = 0
-
-    do measurement=1,nMeasurement
-
-       if(ThisProc()==0) write(output_unit,*)&
-            int(measurement,int16),'of',&
-            int(nMeasurement,int16),'configurations';&
-            call flush(output_unit)
-
-       ! initialisation of config ....
-       call GaugeConf_initial%EquilibriumInit(Beta)
-       
-       if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
-       GaugeConf = GaugeConf_initial
-
-       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-          call GaugeConf%Update(sign(+1._real64,tstart))
-       end do
-
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-          if(thisproc()==0) write(output_unit,*) it
-          do r=1,rmax
-             WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             !TimeDerivativeWilsonLoop = &
-             !     GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             !GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-
-             WilsonLoops(measurement,r,it) = WilsonLoop
-             !TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
-          end do
-
-          call GaugeConf%Update
-       end do
-    end do
-    if(ThisProc()==0) then
-       fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       !fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
-       !     st='REPLACE',fm='FORMATTED',act='WRITE')
-       !fileID_Potential = OpenFile(filename=FileName_Potential,&
-       !     st='REPLACE',fm='FORMATTED',act='WRITE')
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-
-          time = tstart + it*LatticeSpacings(0)
-          if(ThisProc()==0) then
-             write(output_unit,*) real(time,real32)
-             call flush(output_unit)
-          end if
-          do r=1,rmax
-             if(r==1) then
-                write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             rObservable = real(WilsonLoops(:,r,it))
-             iObservable = aimag(WilsonLoops(:,r,it))
-
-             rMean = GetMean(rObservable)
-             iMean = GetMean(iObservable)
-             rStdErr = GetStdError(rObservable)
-             iStdErr = GetStdError(iObservable)
-
-             WilsonLoop = cmplx(rMean,iMean)
-             
-             if(r<rmax) then
-                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
-                     rMean,rStdErr,iMean,iStderr
-             else
-                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
-                     rMean,rStdErr,iMean,iStderr
-             end if
-
-             
-             !if(r==1) then
-             !   write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
-             !end if
-             !rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
-             !iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
-
-             !rMean = GetMean(rObservable)
-             !iMean = GetMean(iObservable)
-             !rStdErr = GetStdError(rObservable)
-             !iStdErr = GetStdError(iObservable)
-
-             !TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
-             
-             !if(r<rmax) then
-             !   write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
-             !        rMean,rStdErr,iMean,iStderr
-             !else
-             !   write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
-             !        rMean,rStdErr,iMean,iStderr
-             !end if
-
-             ! Assume uncorrelated data (incorrect, but anyhow)
-             !potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
-             !if(r==1) then
-             !   write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
-             !end if
-             !if(r<rmax) then
-             !   write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
-             !        real(potential),aimag(potential)
-             !else
-             !   write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
-             !        real(potential),aimag(potential)
-             !end if
-
-          end do
-       end do
-
-       call CloseFile(FileID_WilsonLoops)
-       !call CloseFile(FileID_TimeDerivativeWilsonLoops)
-       !call CloseFile(FileID_Potential)
-    end if
-
-    call EndSimulation
-
-  contains
-    !>@brief Initialisation of the simulation
-    !!@details
-    !! MPI\n
-    !! Lattice-module\n
-    !! Random number generator\n
-    !! etc.
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    impure subroutine InitSimulation
-      use precision, only: fp
-      use, intrinsic :: iso_fortran_env
-
-      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
-      use lattice,            only: InitModule_Lattice            => InitModule, nDim
-      use halocomm,           only: InitModule_HaloComm           => InitModule
-      use random,             only: InitModule_Random             => InitModule
-      use xpfft,              only: InitModule_xpFFT              => InitModule
-      use tolerances,         only: InitModule_tolerances         => InitModule
-      implicit none
-
-      integer(int64) :: arg_count
-      character(len=80) :: arg
-      integer(int8) :: i
-      
-      !..--** Reading simulation parameters **--..
-      arg_count = 1
-
-      ! Spatial lattice parameters (extensions, spacings)
-      do i=1,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(I4)') LatticeExtensions(i)
-      end do
-
-      do i=0,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') LatticeSpacings(i)
-      end do
-
-      ! start time
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
-      ! Center of mass time-range smax
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
-
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
-
-      ! Seed for random number generator
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') RandomNumberSeed
-      if(thisproc()==0) print*,'seed'
-      ! Initial gluon distribution (box): Saturation scale
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') Beta
-      if(thisproc()==0) print*,'beta'
-      
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') nMeasurement
-      if(thisproc()==0) print*,'nmeasurement'
-      
-      ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-     !arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
-      !arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
-
-      !..--** Module initialisations **--..
-      call InitModule_MPIinterface
-      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
-      call InitModule_HaloComm
-      call InitModule_xpFFT
-      call InitModule_Random(RandomNumberSeed + ThisProc())
-      call InitModule_tolerances
-
-      call SyncAll
-    end subroutine InitSimulation
-
-    !>@brief Ending of the simulation
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    subroutine EndSimulation
-      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
-      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      implicit none
-
-      call FinalizeModule_xpFFT
-      call FinalizeModule_MPIinterface
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
-      STOP
-    end subroutine EndSimulation
-  end subroutine MeasureWilsonLines_Equilibrium
   
   impure subroutine DeterminePotential_oneTimePoint
     use, intrinsic :: iso_fortran_env
@@ -4032,8 +3798,6 @@ program simulation
      call ComputeSpectrum
   case (5)
      call MeasureWilsonLines
-  case (51)
-     call MeasureWilsonLines_Equilibrium
   case (52)
      call MeasureWilsonAndHybridLines_Equilibrium
   case (6)
