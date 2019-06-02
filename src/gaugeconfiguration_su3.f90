@@ -405,7 +405,7 @@ contains ! Module procedures
 
     logical, parameter :: MeasureEnergy=.false.
     
-    sigma = sqrt(2*nsun/beta)
+    sigma = sqrt(nsun/beta)
 
     call GaugeConf%ColdInit
 

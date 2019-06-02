@@ -1248,8 +1248,11 @@ contains ! Module procedures
           SpatialCol = SpatialRow
           LatticeIndex = GetLatticeIndex_PETSc(SpatialCol)
 
-          efield_p = GaugeConf%GetElectricField(i,GetNeib_G(+i,LatticeIndex))
-          efield_m = GaugeConf%GetElectricField(i,GetNeib_G(-i,LatticeIndex))
+          !efield_p = GaugeConf%GetElectricField(i,GetNeib_G(+i,LatticeIndex))
+          !efield_m = GaugeConf%GetElectricField(i,GetNeib_G(-i,LatticeIndex))
+          efield_p = -GaugeConf%GetFieldStrengthTensor_G(0_int8,i,GetNeib_G(+i,LatticeIndex))
+          efield_m = -GaugeConf%GetFieldStrengthTensor_G(0_int8,i,GetNeib_G(-i,LatticeIndex))
+          
           link     = GaugeConf%GetLink_G(i,LatticeIndex)
           link_m   = GaugeConf%GetLink_G(i,GetNeib_G(-i,LatticeIndex))
 
@@ -1295,8 +1298,12 @@ contains ! Module procedures
           ! - ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
           SpatialCol = GetSpatialPETScIndex_G(neib_p)
 
-          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
-          efield_p = GaugeConf%GetElectricField(j,neib_p)
+          !efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          !efield_p = GaugeConf%GetElectricField(j,neib_p)
+          
+          efield   = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,LatticeIndex)
+          efield_p = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,neib_p)
+          
           link     = GaugeConf%GetLink_G(i,LatticeIndex)
 
           DerivEfield = ( matmul(efield,link) + matmul(link,efield_p) )/2/GetLatticeSpacing(i)
@@ -1311,8 +1318,12 @@ contains ! Module procedures
           ! + ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
           SpatialCol = GetSpatialPETScIndex_G(neib_m)
 
-          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
-          efield_m = GaugeConf%GetElectricField(j,neib_m)
+          !efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          !efield_m = GaugeConf%GetElectricField(j,neib_m)
+
+          efield   = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,LatticeIndex)
+          efield_m = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,neib_m)
+          
           link_m   = conjg(transpose(GaugeConf%GetLink_G(i,neib_m)))
 
           DerivEfield = ( matmul(efield,link_m) + matmul(link_m,efield_m) )/2/GetLatticeSpacing(i)
@@ -1333,8 +1344,12 @@ contains ! Module procedures
           ! - ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
           SpatialCol = GetSpatialPETScIndex_G(neib_p)
 
-          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
-          efield_p = GaugeConf%GetElectricField(j,neib_p)
+          !efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          !efield_p = GaugeConf%GetElectricField(j,neib_p)
+          
+          efield   = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,LatticeIndex)
+          efield_p = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,neib_p)
+          
           link     = GaugeConf%GetLink_G(i,LatticeIndex)
 
           DerivEfield = ( matmul(efield,link) + matmul(link,efield_p) )/2/GetLatticeSpacing(i)
@@ -1349,8 +1364,12 @@ contains ! Module procedures
           ! + ì ε_{ijk} delta_{x+î,y}/(ai**2)/m
           SpatialCol = GetSpatialPETScIndex_G(neib_m)
 
-          efield   = GaugeConf%GetElectricField(j,LatticeIndex)
-          efield_m = GaugeConf%GetElectricField(j,neib_m)
+          !efield   = GaugeConf%GetElectricField(j,LatticeIndex)
+          !efield_m = GaugeConf%GetElectricField(j,neib_m)
+          
+          efield   = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,LatticeIndex)
+          efield_m = -GaugeConf%GetFieldStrengthTensor_G(0_int8,j,neib_m)
+          
           link_m   = conjg(transpose(GaugeConf%GetLink_G(i,neib_m)))
 
           DerivEfield = ( matmul(efield,link_m) + matmul(link_m,efield_m) )/2/GetLatticeSpacing(i)
@@ -1675,6 +1694,31 @@ contains ! Module procedures
     
     GetMagneticField_CS_G = C2CS(MagneticField)
   end function GetMagneticField_CS_G
+
+  !>@brief Computes chromo-magnetic field
+  !!@returns chromo-magnetic field
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 02.06.2019
+  !!@version 1.0
+  pure function GetElectricField_CS_G(GaugeConf,i,LatticeIndex)
+    use lattice, only: nDim
+    implicit none
+    !> Gauge configuration
+    type(SU3GaugeConfiguration), intent(in) :: GaugeConf
+    !> Spatial direction
+    integer(int8),  intent(in) :: i
+    !> Lattice index
+    integer(int64), intent(in) :: LatticeIndex
+
+    complex(fp), dimension(nDoF,nDoF) :: GetElectricField_CS_G
+
+    complex(fp), dimension(nColours,nColours) :: ElectricField
+
+    ElectricField =  -GaugeConf%GetFieldStrengthTensor_G(0_int8,i,LatticeIndex)
+    
+    GetElectricField_CS_G = C2CS(ElectricField)
+  end function GetElectricField_CS_G
   
   ! -----------------------------------------------------
   
