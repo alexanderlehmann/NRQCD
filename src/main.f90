@@ -49,6 +49,7 @@ contains
     type(NRQCDField)         :: HeavyField_t
 
     real(fp) :: Beta
+    integer(int64) :: nefieldinit,nequilibriumtimesteps
     
     ! Counting
     integer :: i
@@ -68,7 +69,7 @@ contains
     nwork = tsteps
     
     ! Initialisation, defining the point t=0
-    call Gaugeconf_t%EquilibriumInit(Beta)
+    call Gaugeconf_t%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps)
     call HeavyField_t%InitSinglePoint(&
          latticeindex_quark=1,&
          latticeindex_antiq=1)
@@ -209,6 +210,11 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nefieldinit
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nequilibriumtimesteps
+      
       ! Tolerance for iterative PETSc solver
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(E15.7)') kspTol
@@ -842,6 +848,8 @@ contains
 
     real(fp) :: kspTol
     logical :: MeasureHybridLoops
+
+    integer(int64) :: nefieldinit,nequilibriumtimesteps
     
     ! Physical fields
     type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf, GaugeConf_old
@@ -898,7 +906,7 @@ contains
        call ColdGaugeConf%ColdInit
     end if
     
-    call GaugeConf_initial%EquilibriumInit(Beta)
+    call GaugeConf_initial%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps)
     if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
     GaugeConf_t1 = GaugeConf_initial
 
@@ -1166,6 +1174,11 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') Beta
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nefieldinit
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nequilibriumtimesteps
+      
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I1)') j
       if(j==0) then

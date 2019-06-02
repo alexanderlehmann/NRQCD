@@ -368,7 +368,7 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
-  impure subroutine EquilibriumInit(GaugeConf,Beta)
+  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium)
     use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
          ndim, GetNeib_M
     use random, only: GetRandomNormalCmplx
@@ -380,6 +380,8 @@ contains ! Module procedures
     class(GaugeConfiguration), intent(out) :: GaugeConf
     !> \f$\beta_{\text{L}}\f$
     real(fp), intent(in) :: beta
+    integer(int64), intent(in) :: nefieldinit
+    integer(int64), intent(in) :: nequilibrium
 
     real(fp) :: sigma
     
@@ -387,9 +389,7 @@ contains ! Module procedures
     integer(int64) :: MemoryIndex
     complex(fp) :: r(ngen)
 
-    integer, parameter :: nefieldinit=6
     integer :: iefieldinit
-    integer, parameter :: nequilibrium=300
     integer :: iequibstep
 
     
@@ -403,14 +403,14 @@ contains ! Module procedures
 
     integer(int64) :: i
     
-    sigma = sqrt((2*nsun)/(2*beta))
+    sigma = sqrt(2*nsun/beta)
 
     call GaugeConf%ColdInit
     
     ! Start thermalizing gauge links
 
     !if(thisproc()==0) &
-    !    fileID = OpenFile(filename="energy.txt",&
+    !   fileID = OpenFile(filename="energy.txt",&
     !     st='REPLACE',fm='FORMATTED',act='WRITE')
     do iefieldinit=1,nefieldinit
        !if(ThisProc()==0) write(output_unit,*) iefieldinit
@@ -475,6 +475,7 @@ contains ! Module procedures
        !   write(output_unit,*) iefieldinit,energy
        !end if
     end do
+    !call mpistop
   contains
     impure real(fp) function GetGdeviation(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType, ThisProc
