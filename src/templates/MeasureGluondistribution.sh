@@ -4,16 +4,17 @@ processes=4
 exename=./run.exe
 
 mode=1
-Nx=12
-Ny=12
-Nz=12
+Nx=16
+Ny=16
+Nz=16
 ax=1.0
 ay=1.0
 az=1.0
 
 CoMTime=0.
-TimeRange=100.
+TimeRange=0.
 TimeSpacing=0.1
+TimeBetweenGluonMeasurement=1.
 
 Ensemblesize=10
 
@@ -22,10 +23,9 @@ RandomSeed=1
 # Given in units of az
 InitialGluonSaturationScale=1.
 InitialGluonOccupationAmplitude=1.
-Coupling=0.0
-TimeBetweenGluonMeasurement=1.
-GaugefixingMaxSteps=10000
-GaugefixingTolerance=1.E-8
+Coupling=0.001
+GaugefixingMaxSteps=100000
+GaugefixingTolerance=1.E-10
 GaugefixingCoefficient=0.08
 
 mpiexec -n $processes \

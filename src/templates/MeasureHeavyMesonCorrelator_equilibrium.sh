@@ -18,6 +18,8 @@ tmax=10.
 # Initialisation of gluon field
 RandomSeed=1
 Beta=16.
+nefieldinit=30
+nequilibriumtimesteps=300
 
 # Quarks
 iterativeTol=1.E-8
@@ -34,4 +36,4 @@ FileNorm="norm.txt"
 
 mpiexec -n $processes \
 	$exename \
-	$mode $Nx $Ny $Nz $at $ax $ay $az $tmax $RandomSeed $Beta $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm
+	$mode $Nx $Ny $Nz $at $ax $ay $az $tmax $RandomSeed $Beta $nefieldinit $nequilibriumtimesteps $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileMesonCorrelators $FileNorm

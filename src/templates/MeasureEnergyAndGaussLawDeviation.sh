@@ -12,7 +12,7 @@ ay=1.0
 az=1.0
 
 CoMTime=0.
-TimeRange=1.
+TimeRange=30.
 TimeSpacing=0.1
 
 # Initialisation of gluon field
@@ -20,7 +20,7 @@ RandomSeed=1
 # Given in units of az
 InitialGluonSaturationScale=1.
 InitialGluonOccupationAmplitude=1.
-Coupling=0.0
+Coupling=0.001
 
 mpiexec -n $processes \
 	$exename \

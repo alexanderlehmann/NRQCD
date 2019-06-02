@@ -12,7 +12,7 @@ ay=1.0
 az=1.0
 
 StartTime=0.
-TimeRange=1000.
+TimeRange=0.3
 TimeSpacing=0.1
 
 # Initialisation of gluon field

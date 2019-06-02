@@ -3,23 +3,26 @@
 processes=4
 exename=./run.exe
 
-mode=52
-Nx=8
-Ny=8
-Nz=8
+mode=51
+Nx=12
+Ny=12
+Nz=12
 ax=1.0
 ay=1.0
 az=1.0
 
 StartTime=0.
-TimeRange=1.
-TimeSpacing=0.1
-Rmax=8
+TimeRange=30.
+TimeSpacing=0.01
+Rmax=6
 
 # Initialisation of gluon field
 RandomSeed=1
 # Given in units of az
 Beta=16.
+nefieldinit=10
+nequilibriumtimesteps=300
+
 FileName_WilsonLoops="wilsonloops.txt"
 
 # Quarks
@@ -44,4 +47,4 @@ FileName_ANorm="antiquarknorm.txt"
 
 mpirun -n $processes \
 	$exename \
-	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $StartTime $TimeRange $Rmax $RandomSeed $Beta $MeasureHybridLoops $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileName_WilsonLoops $FileName_HybridLoops $FileName_FreeStepHybridLoops $FileName_FreeHybridLoops $FileName_QNorm $FileName_ANorm
+	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $StartTime $TimeRange $Rmax $RandomSeed $Beta $nefieldinit $nequilibriumtimesteps $MeasureHybridLoops $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileName_WilsonLoops $FileName_HybridLoops $FileName_FreeStepHybridLoops $FileName_FreeHybridLoops $FileName_QNorm $FileName_ANorm

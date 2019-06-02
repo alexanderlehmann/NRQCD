@@ -4,15 +4,15 @@ processes=4
 exename=./run.exe
 
 mode=32
-Nx=16
-Ny=16
-Nz=16
+Nx=24
+Ny=24
+Nz=24
 ax=1.0
 ay=1.0
 az=1.0
 
 at=0.1
-smax=0.4
+smax=20.
 
 # Initialisation of gluon field
 RandomSeed=1
