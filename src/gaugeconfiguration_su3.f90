@@ -402,18 +402,21 @@ contains ! Module procedures
     integer(int8) :: fileid
 
     integer(int64) :: i
+
+    logical, parameter :: MeasureEnergy=.false.
     
     sigma = sqrt(2*nsun/beta)
 
     call GaugeConf%ColdInit
-    
+
     ! Start thermalizing gauge links
 
-    !if(thisproc()==0) &
-    !   fileID = OpenFile(filename="energy.txt",&
-    !     st='REPLACE',fm='FORMATTED',act='WRITE')
+    if(MeasureEnergy) then
+       if(thisproc()==0) &
+            fileID = OpenFile(filename="energy.txt",&
+            st='REPLACE',fm='FORMATTED',act='WRITE')
+    end if
     do iefieldinit=1,nefieldinit
-       !if(ThisProc()==0) write(output_unit,*) iefieldinit
        ! Redrawing E-field
        gaugeconf%efield = 0
        do MemoryIndex=1,GetMemorySize()
@@ -421,7 +424,7 @@ contains ! Module procedures
              do k=1,nDim
                 r = sigma*GetRandomNormalCmplx(int(ngen,int64))
 
-                GaugeConf%Efield(:,k,MemoryIndex) = real(r,fp)*GetLatticeSpacing(0_int8)
+                GaugeConf%Efield(:,k,MemoryIndex) = real(r,fp)
              end do
           end if
        end do
@@ -469,13 +472,17 @@ contains ! Module procedures
        end do
        
        ! Print energy to terminal
-       !energy = GaugeConf%GetEnergy()
-       !if(ThisProc()==0) then
-       !   write(fileid,*) iefieldinit,energy
-       !   write(output_unit,*) iefieldinit,energy
-       !end if
+       if(MeasureEnergy) then
+          energy = GaugeConf%GetEnergy()
+          if(ThisProc()==0) then
+             write(fileid,*) iefieldinit,energy
+             write(output_unit,*) iefieldinit,energy
+          end if
+       end if
     end do
-    !call mpistop
+    if(MeasureEnergy) then
+       call mpistop
+    end if
   contains
     impure real(fp) function GetGdeviation(GaugeConf)
     use mpiinterface, only: intmpi, GetRealSendType, ThisProc
@@ -626,7 +633,7 @@ contains ! Module procedures
              GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(r)
 
              ! E-field
-             r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)*GetLatticeSpacing(0_int8)
+             r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)
              GaugeConf%Efield(:,i,MemoryIndex) = r
           end do
        end if
@@ -897,7 +904,7 @@ contains ! Module procedures
           ! E-field
           efield_site = real(efield(MemoryIndex,:,i),fp) &
                                 ! Translation to lattice units
-               *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+               *GetLatticeSpacing(i)
           GaugeConf%Efield(:,i,MemoryIndex) = efield_site
        end if
     end do
@@ -1178,7 +1185,7 @@ contains ! Module procedures
        ! E-field
        efield_site = real(efield(MemoryIndex,:,i),fp) &
                                 ! Translation to lattice units
-            *GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
+            *GetLatticeSpacing(i)
        GaugeConf%Efield(:,i,MemoryIndex) = efield_site
     end do
     !..--**  END : Writing fields to configuration **--..
@@ -1253,7 +1260,7 @@ contains ! Module procedures
             conjg(transpose(Link_Neib)),&
             Mefield_neib),&
             Link_neib))&
-            /GetLatticeSpacing(i)**2/GetLatticeSpacing(0)
+            /GetLatticeSpacing(i)**2
        do concurrent(a=1_int8:ngen)
           local_contribution = local_contribution &
                + 2*Abs(Aimag(GetTraceWithGenerator(a,derivative)))
@@ -1787,7 +1794,7 @@ contains ! Module procedures
     real(fp) :: GetElectricField_AlgebraCoordinate
     
     GetElectricField_AlgebraCoordinate &
-         = conf%GetEfield_G(a,i,latticeindex)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = conf%GetEfield_G(a,i,latticeindex)/GetLatticeSpacing(i)
   end function GetElectricField_AlgebraCoordinate
 
   !>@brief Returns electric field
@@ -1813,7 +1820,7 @@ contains ! Module procedures
     efield = conf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
     
     GetElectricField_AlgebraMatrix &
-         = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)
   end function GetElectricField_AlgebraMatrix
 
   !>@brief Update routine using the Leapfrog algorithm
@@ -1858,7 +1865,7 @@ contains ! Module procedures
   !!@date 27.02.2019
   !!@version 1.0
   pure subroutine Update_Links_Leapfrog(GaugeConf,StepWidth)
-    use lattice, only: ndim, GetMemorySize, GetProc_M
+    use lattice, only: ndim, GetMemorySize, GetProc_M, getlatticespacing
     use mpiinterface, only: ThisProc
     implicit none
     !> Gauge configuration
@@ -1873,7 +1880,7 @@ contains ! Module procedures
     real(fp)    :: efield_times_dt(nGen)
 
     do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
-       efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth
+       efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth*GetLatticeSpacing(0_int8)
        TimeEvolutionOperator = GetGroupExp(efield_times_dt)
 
        GaugeConf%Links(:,:,i,MemoryIndex) =&
@@ -1921,7 +1928,7 @@ contains ! Module procedures
       staplesum = 0
       do concurrent(k=1:ndim, k/=i)
          staplesum = staplesum + &
-              StepWidth*(GetLatticeSpacing(0)/GetLatticeSpacing(k))**2 &
+              StepWidth*GetLatticeSpacing(0)/GetLatticeSpacing(k)**2 &
               *(&
               GetUStaple(GaugeConf,i,k,MemoryIndex) + &
               GetDStaple(GaugeConf,i,k,MemoryIndex) &
