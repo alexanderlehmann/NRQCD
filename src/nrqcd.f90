@@ -1690,7 +1690,7 @@ contains ! Module procedures
     k = modulo(i+1_int8,nDim)+1_int8
 
     MagneticField = ( GaugeConf%GetFieldStrengthTensor_G(j,k,LatticeIndex)&
-         + GaugeConf%GetFieldStrengthTensor_G(k,j,LatticeIndex) ) / 2
+         - GaugeConf%GetFieldStrengthTensor_G(k,j,LatticeIndex) ) / 2
     
     GetMagneticField_CS_G = C2CS(MagneticField)
   end function GetMagneticField_CS_G
