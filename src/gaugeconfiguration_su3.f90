@@ -370,7 +370,7 @@ contains ! Module procedures
 
   impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename)
     use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
-         ndim, GetNeib_M
+         ndim, GetNeib_M, GetLatticeSize
     use random, only: GetRandomNormalCmplx
     use mpiinterface, only: ThisProc, mpistop
     use io
@@ -437,11 +437,11 @@ contains ! Module procedures
        
        call GaugeConf%CommunicateBoundary()
        
-       deviation = GetGdeviation(GaugeConf)
+       deviation = GetGdeviation(GaugeConf)/GetLatticeSize()
        
        ! Projection of the electric field
        i = 0
-       do while(deviation>1E-8)
+       do while(deviation>1E-10)
           i = i + 1
           do MemoryIndex=1,GetMemorySize()
              if(ThisProc()==GetProc_M(MemoryIndex)) then
