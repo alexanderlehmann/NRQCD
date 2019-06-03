@@ -476,8 +476,8 @@ contains ! Module procedures
           call GaugeConf%Update
        end do
 
-       blub = GaugeConf%GetDeviationFromGaussLaw()
-       if(ThisProc()==0) print*,blub
+       !blub = GaugeConf%GetDeviationFromGaussLaw()
+       !if(ThisProc()==0) print*,blub
        
        ! Print energy to terminal
        if(present(MeasureEnergy).and.MeasureEnergy) then
