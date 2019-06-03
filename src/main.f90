@@ -849,6 +849,8 @@ contains
     real(fp) :: kspTol
     logical :: MeasureHybridLoops
 
+    logical :: MeasureEnergy
+    character(len=80) :: EnergyFilename
     integer(int64) :: nefieldinit,nequilibriumtimesteps
     
     ! Physical fields
@@ -906,7 +908,7 @@ contains
        call ColdGaugeConf%ColdInit
     end if
     
-    call GaugeConf_initial%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps)
+    call GaugeConf_initial%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)
     if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
     GaugeConf_t1 = GaugeConf_initial
 
@@ -1212,6 +1214,15 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_FreeHybridLoops);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_qnorm);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_anorm);
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') j
+      if(j==0) then
+         MeasureEnergy=.false.
+      else
+         MeasureEnergy=.true.
+         arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
+      end if
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface

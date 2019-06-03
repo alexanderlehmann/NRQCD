@@ -368,7 +368,7 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
-  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium)
+  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename)
     use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
          ndim, GetNeib_M
     use random, only: GetRandomNormalCmplx
@@ -382,6 +382,9 @@ contains ! Module procedures
     real(fp), intent(in) :: beta
     integer(int64), intent(in) :: nefieldinit
     integer(int64), intent(in) :: nequilibrium
+
+    logical, optional, intent(in) :: MeasureEnergy
+    character(len=*), optional, intent(in) :: filename
 
     real(fp) :: sigma
     
@@ -402,8 +405,6 @@ contains ! Module procedures
     integer(int8) :: fileid
 
     integer(int64) :: i
-
-    logical, parameter :: MeasureEnergy=.false.
     
     sigma = sqrt(nsun/beta)
 
@@ -411,9 +412,12 @@ contains ! Module procedures
 
     ! Start thermalizing gauge links
 
-    if(MeasureEnergy) then
+    if(present(MeasureEnergy).and.MeasureEnergy) then
+       if(MeasureEnergy.and..not.present(filename)) then
+          call MPIStop('Filename for energy output missing')
+       end if
        if(thisproc()==0) &
-            fileID = OpenFile(filename="energy.txt",&
+            fileID = OpenFile(filename=filename,&
             st='REPLACE',fm='FORMATTED',act='WRITE')
     end if
     do iefieldinit=1,nefieldinit
@@ -472,7 +476,7 @@ contains ! Module procedures
        end do
        
        ! Print energy to terminal
-       if(MeasureEnergy) then
+       if(present(MeasureEnergy).and.MeasureEnergy) then
           energy = GaugeConf%GetEnergy()
           if(ThisProc()==0) then
              write(fileid,*) iefieldinit,energy
@@ -480,8 +484,10 @@ contains ! Module procedures
           end if
        end if
     end do
-    if(MeasureEnergy) then
-       call mpistop
+    if(present(MeasureEnergy).and.MeasureEnergy) then
+       if(ThisProc()==0) then
+          call Closefile(fileid)
+       end if
     end if
   contains
     impure real(fp) function GetGdeviation(GaugeConf)
