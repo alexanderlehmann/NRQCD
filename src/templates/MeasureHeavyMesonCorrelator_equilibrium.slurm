@@ -48,6 +48,8 @@ RandomSeed=$SLURM_ARRAY_TASK_ID
 Beta=16.
 nefieldinit=30
 nequilibriumtimesteps=300
+MeasureEnergy=1
+FileName_Energy="thermalization_energy.txt"
 
 # Quarks
 iterativeTol=1.E-8
@@ -97,7 +99,7 @@ cp $PETSC_DIR/lib/libpetsc.so.3.10 .
 ## For IntelMPI (intel toolchain), mpirun is recommended:
 export I_MPI_HYDRA_ENV=$LD_LIBRARY_PATH
 mpirun ./$EXENAME \
-		$mode $Nx $Ny $Nz $at $ax $ay $az $tmax $RandomSeed $Beta $nefieldinit $nequilibriumtimesteps $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileName_MesonCorrelators $FileName_Norm
+		$mode $Nx $Ny $Nz $at $ax $ay $az $tmax $RandomSeed $Beta $nefieldinit $nequilibriumtimesteps $iterativeTol $Mass $c0_re $c0_im $c1_re $c1_im $c2_re $c2_im $c3_re $c3_im $FileName_MesonCorrelators $FileName_Norm $MeasureEnergy $FileName_Energy
 
 cp *.txt ..
 

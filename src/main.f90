@@ -50,6 +50,8 @@ contains
 
     real(fp) :: Beta
     integer(int64) :: nefieldinit,nequilibriumtimesteps
+    logical :: MeasureEnergy
+    character(len=80) :: EnergyFilename
     
     ! Counting
     integer :: i
@@ -69,7 +71,7 @@ contains
     nwork = tsteps
     
     ! Initialisation, defining the point t=0
-    call Gaugeconf_t%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps)
+    call Gaugeconf_t%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)
     call HeavyField_t%InitSinglePoint(&
          latticeindex_quark=1,&
          latticeindex_antiq=1)
@@ -180,7 +182,7 @@ contains
 
       integer(int64) :: arg_count
       character(len=80) :: arg
-      integer(int8) :: i
+      integer(int8) :: i, j
 
       real(fp) :: c_re, c_im
       real(fp) :: kspTol
@@ -235,6 +237,15 @@ contains
       
       arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
       arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') j
+      if(j==0) then
+         MeasureEnergy=.false.
+      else
+         MeasureEnergy=.true.
+         arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
+      end if
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
