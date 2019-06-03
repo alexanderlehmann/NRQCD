@@ -1,6 +1,6 @@
 #!/bin/bash
 
-processes=2
+processes=1
 exename=./run.exe
 
 mode=51
@@ -12,28 +12,30 @@ ay=1.0
 az=1.0
 
 StartTime=0.
-TimeRange=30.
+TimeRange=1.
 TimeSpacing=0.1
-Rmax=6
+Rmax=5
 
 # Initialisation of gluon field
 RandomSeed=1
 # Given in units of az
-Beta=100.
-nefieldinit=30
-nequilibriumtimesteps=100
-
+Beta=16.
+nefieldinit=60
+nequilibriumtimesteps=300
 FileName_WilsonLoops="wilsonloops.txt"
 MeasureEnergy=1
 FileName_Energy="thermalization_energy.txt"
+
 # Quarks
 MeasureHybridLoops=0
-iterativeTol=1.E-10
-Mass=157.0796
+iterativeTol=1.E-8
+Mass=100.
 c0_re=1. ; c0_im=0.
 c1_re=1. ; c1_im=0.
 c2_re=1. ; c2_im=0.
 c3_re=1. ; c3_im=0.
+
+
 
 
 FileName_HybridLoops="hybridloops.txt"

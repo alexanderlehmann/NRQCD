@@ -1223,7 +1223,7 @@ contains
          MeasureEnergy=.true.
          arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
       end if
-
+      
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
       call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
