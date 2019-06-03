@@ -1928,11 +1928,10 @@ contains ! Module procedures
       staplesum = 0
       do concurrent(k=1:ndim, k/=i)
          staplesum = staplesum + &
-              StepWidth*GetLatticeSpacing(0)/GetLatticeSpacing(k)**2 &
-              *(&
+              (&
               GetUStaple(GaugeConf,i,k,MemoryIndex) + &
               GetDStaple(GaugeConf,i,k,MemoryIndex) &
-              )
+              )/GetLatticeSpacing(k)**2
       end do !k
 
       link_times_staplesum = matmul(GaugeConf%Links(:,:,i,MemoryIndex),staplesum)
@@ -1940,10 +1939,10 @@ contains ! Module procedures
       forall(a=1:ngen)
          GaugeConf%efield(a,i,MemoryIndex)&
            = GaugeConf%efield(a,i,MemoryIndex)&
-           - 2*Aimag(GetTraceWithGenerator(a,link_times_staplesum))
+           - 2*StepWidth*GetLatticeSpacing(0)*Aimag(GetTraceWithGenerator(a,link_times_staplesum))
       end forall
-      GaugeConf%efield(:,i,MemoryIndex) = &
-           GetWrappedAlgebraCoordinates(GaugeConf%efield(:,i,MemoryIndex))
+      !GaugeConf%efield(:,i,MemoryIndex) = &
+      !     GetWrappedAlgebraCoordinates(GaugeConf%efield(:,i,MemoryIndex))
     end subroutine Update_Efield_Leapfrog_AtSite_Direction
 
     !>@brief Returns staple
