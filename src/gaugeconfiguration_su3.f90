@@ -370,7 +370,7 @@ contains ! Module procedures
 
   impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename)
     use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
-         ndim, GetNeib_M
+         ndim, GetNeib_M, getvolume
     use random, only: GetRandomNormalCmplx
     use mpiinterface, only: ThisProc, mpistop
     use io
@@ -395,7 +395,7 @@ contains ! Module procedures
     integer :: iefieldinit
     integer :: iequibstep
 
-    
+    real(fp) :: blub
     real(fp) :: energy, deviation
     real(fp), parameter :: kappa=0.12_fp
     real(fp), dimension(ngen) :: ec
@@ -439,7 +439,7 @@ contains ! Module procedures
        
        ! Projection of the electric field
        i = 0
-       do while(deviation>1E-8)
+       do while(deviation>1E-12)
           i = i + 1
           do MemoryIndex=1,GetMemorySize()
              if(ThisProc()==GetProc_M(MemoryIndex)) then
@@ -467,13 +467,17 @@ contains ! Module procedures
           end do
           call GaugeConf%CommunicateBoundary()
           
-          deviation = GetGdeviation(GaugeConf)
+          deviation = GetGdeviation(GaugeConf)/GetVolume()
+          !if(ThisProc()==0) write(output_unit,*) deviation
        end do
        
        ! Evolution of the gauge links
        do iequibstep=1,nequilibrium
           call GaugeConf%Update
        end do
+
+       blub = GaugeConf%GetDeviationFromGaussLaw()
+       if(ThisProc()==0) print*,blub
        
        ! Print energy to terminal
        if(present(MeasureEnergy).and.MeasureEnergy) then
