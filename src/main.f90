@@ -3633,6 +3633,301 @@ contains
   !>@brief Program for measuring the gluon distribution function
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 04.06.2019
+  !!@version 1.0
+  impure subroutine MeasureGluondistribution_Equilibrium
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: RandomNumberSeed
+
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf
+
+    real(fp) :: TimeRange
+
+    real(fp) :: Beta
+    integer(int64) :: nefieldinit,nequilibriumtimesteps
+    logical :: MeasureThermilisationEnergy
+    character(len=80) :: Filename_ThermilisationEnergy
+
+    character(len=80) :: Filename_Gluondist
+    
+    integer(int64) :: GaugeFixingMaxIterations
+    real(fp) :: GaugefixingCoefficient, GaugeFixingTolerance
+    integer(int64) :: Number_of_Measurements_of_Gluondistribution
+    integer(int64) :: TimePoints_between_Measurement_of_Gluondistribution
+    real(fp) :: TimeBetweenGluonMeasurements
+
+    integer(int64) :: TimeSteps
+
+    call InitSimulation
+    
+    call Gaugeconf%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureThermilisationEnergy,Filename_ThermilisationEnergy)
+
+    call PrintObservables(GaugeConf=GaugeConf)
+
+    call EndSimulation
+
+  contains
+    impure subroutine PrintObservables(GaugeConf)
+      use lattice
+      implicit none
+      
+      type(GaugeConfiguration), intent(in) :: GaugeConf
+
+      type(GaugeConfiguration) :: GaugeConf_gaugefixed
+
+      real(fp), allocatable :: aa_correlator(:),ee_correlator(:), gluondist(:)
+
+      real(fp), allocatable :: momenta(:)
+      
+      integer(int64) :: MemoryIndex, LatticeIndex, i, is
+
+      ! MPI
+      integer(intmpi) :: mpierr, mpistatus(mpi_status_size), tag, src, buffersize
+      
+      ! Output
+      integer(int8) :: FileID
+      character(len=128) :: filename,time_tag
+      integer(intmpi), allocatable :: mpisendrequest(:), mpisendstatus(:,:)
+
+      integer(intmpi) :: proc
+
+      integer(intmpi), parameter :: dest=0_intmpi
+      
+      GaugeConf_gaugefixed = GaugeConf
+      
+      call gaugeconf_gaugefixed%CoulombGaugefixing(&
+           Tolerance_    =GaugeFixingTolerance,&
+           alpha_        =GaugefixingCoefficient,&
+           MaxIterations_=GaugefixingMaxIterations)
+
+      
+      call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator)
+      call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator)
+
+      allocate(gluondist(size(aa_correlator)))
+      allocate(Momenta(GetLocalLatticeSize()))
+      allocate(mpisendrequest(2))
+      
+      if(ThisProc()==dest) then
+          fileID = OpenFile(filename=Filename_Gluondist,st='REPLACE',fm='FORMATTED',act='WRITE')
+       end if
+       do src=0,NumProcs()-1
+          if(ThisProc()==dest .or. ThisProc()==src) then
+             
+             ! Momenta
+             buffersize = size(Momenta)
+             tag = (0+NumProcs())*src
+             if(ThisProc()==src) then
+                is = 0
+                do MemoryIndex=1,GetMemorySize()
+                   LatticeIndex = GetLatticeIndex_M(MemoryIndex)
+                   if(ThisProc()==GetProc_G(LatticeIndex)) then
+                      is = is + 1
+                      Momenta(is) = GetNorm2Momentum_G(LatticeIndex)
+                   end if
+                end do
+                call mpi_isend(&
+                     Momenta,                      & ! What to send
+                     buffersize,                   & ! How many points
+                     MPI_DOUBLE,                   & ! What type
+                     dest,                         & ! Recieving process
+                     tag,                          & ! Tag
+                     MPI_COMM_WORLD,               & ! Communicator
+                     mpisendrequest(1),            & ! Request handle
+                     mpierr)                         ! Error code
+             end if
+             if(ThisProc()==dest) then
+                call mpi_recv(&
+                     Momenta,                      & ! What to recieve
+                     buffersize,                   & ! How many points
+                     MPI_DOUBLE,                   & ! What type
+                     src,                          & ! Sending process
+                     tag,                          & ! Tag
+                     MPI_COMM_WORLD,               & ! Communicator
+                     mpistatus,                    & ! Status
+                     mpierr)                         ! Error code
+             end if
+
+             ! Gluon distribution
+             buffersize = size(gluondist)
+             tag = (1+NumProcs())*src
+             if(src .ne. dest) then
+                if(ThisProc()==src) then
+                   gluondist = sqrt(aa_correlator*ee_correlator)
+                   call mpi_isend(&
+                        GluonDist,& ! What to send
+                        buffersize,                   & ! How many points
+                        MPI_DOUBLE,                   & ! What type
+                        dest,                         & ! Recieving process
+                        tag,                          & ! Tag
+                        MPI_COMM_WORLD,               & ! Communicator
+                        mpisendrequest(2),            & ! Request handle
+                        mpierr)                         ! Error code
+                end if
+                if(ThisProc()==dest) then
+                   call mpi_recv(&
+                        GluonDist,& ! What to recieve
+                        buffersize,                   & ! How many points
+                        MPI_DOUBLE,                   & ! What type
+                        src,                          & ! Sending process
+                        tag,                          & ! Tag
+                        MPI_COMM_WORLD,               & ! Communicator
+                        mpistatus,                    & ! Status
+                        mpierr)                         ! Error code
+                end if
+             else
+                gluondist = sqrt(aa_correlator*ee_correlator)
+             end if
+
+             if(ThisProc()==dest) then
+                do is=1,size(Momenta)
+                   write(fileID,'(2(SP,E13.6,1X))') &
+                        Momenta(is),&
+                        GluonDist(is)
+                end do
+             end if
+          end if
+
+          call SyncAll
+       end do
+       if(ThisProc()==dest) call CloseFile(FileID)
+
+      
+    end subroutine PrintObservables
+    
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use xpfft,              only: InitModule_xpFFT              => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i, j
+
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      ! Initial gluon distribution (box): Saturation scale
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') beta
+
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nefieldinit
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I6)') nequilibriumtimesteps      
+
+      ! Time between gluon measurements
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeBetweenGluonMeasurements
+      Number_of_Measurements_of_Gluondistribution = aint(TimeRange/TimeBetweenGluonMeasurements,int64)
+      TimePoints_between_Measurement_of_Gluondistribution&
+           = int(TimeBetweenGluonMeasurements/LatticeSpacings(0))
+
+      ! Maximum number of iterations for coulomb gauge fixing
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I7)') GaugefixingMaxIterations
+      ! Tolerance for coulomb gauge fixing
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') GaugefixingTolerance
+      ! Tolerance for coulomb gauge fixing
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') GaugefixingCoefficient
+
+      arg_count = arg_count +1; call get_command_argument(arg_count,Filename_Gluondist);
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') j
+      if(j==0) then
+         MeasureThermilisationEnergy=.false.
+      else
+         MeasureThermilisationEnergy=.true.
+         arg_count = arg_count +1; call get_command_argument(arg_count,Filename_ThermilisationEnergy);
+      end if
+      
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_xpFFT
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface, only: ThisProc, FinalizeModule_MPIinterface => FinalizeModule
+      use xpfft,        only: FinalizeModule_xpFFT        => FinalizeModule
+      implicit none
+      
+      call FinalizeModule_xpFFT
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine MeasureGluondistribution_Equilibrium
+
+  
+  !>@brief Program for measuring the gluon distribution function
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
   !!@date 07.03.2019
   !!@version 1.0
   impure subroutine MeasureGluondistribution
@@ -4068,6 +4363,8 @@ program simulation
   select case(mode)
   case(1)
      call MeasureGluondistribution
+  case(11)
+     call MeasureGluondistribution_Equilibrium
   case(2)
      call MeasureEnergyAndGaussLawDeviation
   case(3)
