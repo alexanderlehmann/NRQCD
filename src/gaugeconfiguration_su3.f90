@@ -417,7 +417,7 @@ contains ! Module procedures
              call MPIStop('Filename for energy output missing')
           end if
           if(thisproc()==0) &
-               fileID = OpenFile(filename="energy.txt",&
+               fileID = OpenFile(filename=filename,&
                st='REPLACE',fm='FORMATTED',act='WRITE')
        end if
     end if
