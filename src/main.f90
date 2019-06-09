@@ -2529,11 +2529,11 @@ contains
           nwork = nwork + 1
        end do
     end do
-
+    
     ! Initialisation, defining the point t=0
     call GaugeConf_t1%TransversePolarisedOccupiedInit_Box(&
          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-
+    
     ! Evolution to t
     do it=1,nint(abs(t)/LatticeSpacings(0))
        call GaugeConf_t1%Update(sign(1._fp,t))
@@ -2547,6 +2547,7 @@ contains
     do it1=1,t1steps
        t2steps = 2*it1
        GaugeConf_t2 = GaugeConf_t1
+
        do it2=1,t2steps
           iwork = iwork + 1
 
@@ -2560,10 +2561,7 @@ contains
        call GaugeConf_t1%Update(-1._fp)
     end do
 
-    if(ThisProc()==0) then
-       ! Closing files
-       call CloseFile(FileID_WilsonLoops)
-    end if
+    call CloseObservableFiles
     call EndSimulation
   contains
     impure subroutine OpenObservableFiles
@@ -2591,6 +2589,14 @@ contains
       end if
     end subroutine OpenObservableFiles
 
+    impure subroutine CloseObservableFiles
+      implicit none
+      if(ThisProc()==0) then
+         ! Closing files
+         call CloseFile(FileID_WilsonLoops)
+      end if
+    end subroutine CloseObservableFiles
+
     impure subroutine PrintObservables(s,GaugeConf_t1,GaugeConf_t2)
       implicit none
       real(fp), intent(in) :: s
@@ -2601,28 +2607,27 @@ contains
 
       complex(fp) :: WilsonLoop
       
-
+      
       if(ThisProc()==0) then
          write(FileID_WilsonLoops,'(SP,E16.9,1X)',advance='no') s
+      end if
+      
+      do r=0,rmax
+         WilsonLoop = 0
+         do messdir=1,ndim
+            WilsonLoop = WilsonLoop + GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)/ndim
+         end do
 
-         do r=0,rmax
+         if(ThisProc()==0) then
             if(r<rmax) then
                adv='no'
             else
                adv='yes'
             end if
-
-            WilsonLoop = 0
-            do messdir=1,ndim
-               WilsonLoop = WilsonLoop + GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)/ndim
-            end do
-
             write(FileID_WilsonLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
                  real(WilsonLoop),aimag(WilsonLoop)
-         end do
-      end if
-
-      
+         end if
+      end do
     end subroutine PrintObservables
 
     !>@brief Initialisation of the simulation
