@@ -406,7 +406,7 @@ contains ! Module procedures
 
     integer(int64) :: i
     
-    sigma = sqrt(nsun/beta)
+    sigma = sqrt(4/beta)
 
     call GaugeConf%ColdInit
     

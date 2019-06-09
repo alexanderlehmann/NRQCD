@@ -103,6 +103,7 @@ module lattice
      !module procedure GetMomentum_ForwardDerivative
   end interface GetMomentum_G
 contains
+  
   !>@brief Returns, if module is initialised
   !!@returns module's initialisation status
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)

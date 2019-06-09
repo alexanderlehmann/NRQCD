@@ -2470,9 +2470,9 @@ contains
   !>@brief Program for measuring the various wilson lines
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-  !!@date 02.04.2019
+  !!@date 09.06.2019
   !!@version 1.0
-  impure subroutine MeasureWilsonLines
+  impure subroutine MeasureWilsonLines_nonEquilibrium
     use, intrinsic :: iso_fortran_env
     use precision
     use mpiinterface
@@ -2481,170 +2481,150 @@ contains
     use mpi
     use io
     use halocomm
-    use nrqcd
     use wilsonline
     use random
+    use nrqcd
     
     implicit none
 
     ! Simulation parameters
     integer(int64) :: LatticeExtensions(ndim)
     real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
+    
     integer(int64) :: RandomNumberSeed
-
+    
     real(fp) :: GluonSaturationScale !qs
     real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
     real(fp) :: GluonCoupling
-    real(fp) :: tstart
-    real(fp) :: TimeRange
-    real(fp) :: HeavyQuarkmass
+
     complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
 
+    ! Time coordinates
+    real(fp) :: t, smax, s, t1, t2, trange
+    integer(int64) :: it, is, it1, it2, t1steps, t2steps
+
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_at0
-    type(NRQCDField)         :: HeavyField,HeavyField_at0
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2
 
     ! Counting
     integer :: i
 
-    real(fp) :: tEnd
-    integer(int64) :: it
-
-    ! Wilson line parameters
-    integer(int8), parameter :: messdir=nDim
-    integer(int64), parameter :: x0=1
-    integer(int64) :: rmax, r, xr
-
-    ! Observable
-    complex(fp) :: GluonicWilsonLoop, FermionicWilsonLoop, MesonCorrelator
-    real(fp) :: quarknorm, antiqnorm
-
-    ! Observable-arrays
-    complex(fp),allocatable :: mesoncorrelators(:), GluonicWilsonLoops(:,:), FermionicWilsonLoops(:,:)
-    real(fp),   allocatable :: time(:), quarknorms(:,:), antiqnorms(:,:)
-
-    ! Output
-    integer(int8) :: FileID_GluonicWilsonLoops,FileID_FermionicWilsonLoops,FileID_MesonCorrelator,&
-         FileID_Norm
-
-    character(len=80) :: FileGluonicWilsonLoops, FileFermionicWilsonLoops, FileMesonCorrelator,&
-         FileNorm
+    integer(int64) :: rmax
     
-    integer(intmpi) :: proc
+    ! Measurement of progression
+    integer(int64) :: iwork, nwork
+
+    character(len=80) :: FileName_WilsonLoops
+    integer(int8) :: FileID_WilsonLoops
 
     call InitSimulation
     
-    rmax = LatticeExtensions(messdir)/2
+    ! Measure amount of work
+    trange = smax/2
+    t1steps = nint(abs(trange)/LatticeSpacings(0),int64)
+    nwork = 0
+    do it1=1,t1steps
+       t2steps = 2*it1
+       do it2=1,t2steps
+          nwork = nwork + 1
+       end do
+    end do
 
-    ! Allocating observable arrays
-    allocate(Time(0:nint(TimeRange/LatticeSpacings(0))))
-    allocate(MesonCorrelators(0:nint(TimeRange/LatticeSpacings(0))))
-    allocate(AntiQNorms(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(QuarkNorms(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(GluonicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(FermionicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    
-    call GaugeConf_at0%TransversePolarisedOccupiedInit_Box(&
+    ! Initialisation, defining the point t=0
+    call GaugeConf_t1%TransversePolarisedOccupiedInit_Box(&
          GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
 
-    ! Evolve gauge configuration to t0
-    do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-       call GaugeConf_at0%Update(sign(+1._real64,tstart))
+    ! Evolution to t
+    do it=1,nint(abs(t)/LatticeSpacings(0))
+       call GaugeConf_t1%Update(sign(1._fp,t))
     end do
-    
-    xr = x0
-    do r=0,rmax
-       if(ThisProc()==0) then
-          write(output_unit,*) 'r=',r,'of',rmax
-       end if
-       
-       ! Initialising quark-antiquark-pair
-       ! with quark at variable remote point xr
-       ! and antiquark at fixed (origin) point x0
-       call HeavyField_at0%InitSinglePoint(&
-            latticeindex_quark=xr,&
-            latticeindex_antiq=x0)
-       
-       ! Positive time evolution
-       GaugeConf =GaugeConf_at0
-       HeavyField=HeavyField_at0
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
 
-          if(r==0) then
-             time(it) = it*LatticeSpacings(0)
-             
-             mesoncorrelators(it) &
-                  = HeavyField%GetMesonCorrelator_O1_3s1_ZeroMomentum()
-          end if
+    call OpenObservableFiles
+    call PrintObservables(s=0._fp, GaugeConf_t1=GaugeConf_t1, GaugeConf_t2=GaugeConf_t1)
 
-          quarknorms(it,r) = HeavyField%GetNorm_Quark()
-          antiqnorms(it,r) = HeavyField%GetNorm_AntiQ()
-          
-          GluonicWilsonLoops(it,r) &
-               = GetGluonicWilsonLoop(GaugeConf_at0, GaugeConf, x0, r, messdir)
-          FermionicWilsonLoops(it,r) &
-               = GetFermionicWilsonLoop(GaugeConf_at0, GaugeConf, HeavyField, x0, r, messdir)
-          
-          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-          call GaugeConf%Update(+1._fp)
+    iwork=0
+
+    do it1=1,t1steps
+       t2steps = 2*it1
+       GaugeConf_t2 = GaugeConf_t1
+       do it2=1,t2steps
+          iwork = iwork + 1
+
+          call GaugeConf_t2%Update
+          if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
        end do
-
-       ! Preparing next step
-       xr = GetNeib_G(messdir,xr)
+       call PrintObservables(s=LatticeSpacings(0)*t2steps,&
+            GaugeConf_t1=GaugeConf_t1, GaugeConf_t2=GaugeConf_t2)
+       
+       ! Bring gauge configuration to next t1
+       call GaugeConf_t1%Update(-1._fp)
     end do
 
     if(ThisProc()==0) then
-       ! Opening files
-       fileID_MesonCorrelator = OpenFile(filename=FileMesonCorrelator,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Norm = OpenFile(filename=FileNorm,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_GluonicWilsonLoops  = OpenFile(filename=FileGluonicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_FermionicWilsonLoops= OpenFile(filename=FileFermionicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       
-       do it=lbound(time,1),ubound(time,1)
-          write(FileID_MesonCorrelator,'(3(SP,E16.9,1X))') &
-               time(it),real(mesoncorrelators(it),real64),aimag(mesoncorrelators(it))
-
-          write(fileID_Norm,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_GluonicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_FermionicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
-          
-          do r=0,rmax
-             if(r<rmax) then
-                write(fileID_Norm,'(2(SP,E16.9,1X))',advance='no') &
-                     quarknorms(it,r), antiqnorms(it,r)
-                
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
-                
-                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
-             else
-                write(fileID_Norm,'(2(SP,E16.9,1X))',advance='yes') &
-                     quarknorms(it,r), antiqnorms(it,r)
-                
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
-                
-                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
-             end if
-          end do
-       end do
-
        ! Closing files
-       call CloseFile(fileID_MesonCorrelator)
-       call CloseFile(FileID_Norm)
-       call CloseFile(FileID_GluonicWilsonloops)
-       call CloseFile(FileID_FermionicWilsonLoops)
+       call CloseFile(FileID_WilsonLoops)
     end if
-
     call EndSimulation
   contains
+    impure subroutine OpenObservableFiles
+      implicit none
+      integer(int8) :: r
+      character(len=3) :: adv
+      
+      ! Opening files and printing header
+      if(ThisProc()==0) then
+         ! Opening files
+         fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+
+         write(FileID_WilsonLoops,'(A1,1X)',advance='no') 's'
+         do r=0,rmax
+            if(r<rmax) then
+               adv='no'
+            else
+               adv='yes'
+            end if
+            
+            write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
+            write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+         end do
+      end if
+    end subroutine OpenObservableFiles
+
+    impure subroutine PrintObservables(s,GaugeConf_t1,GaugeConf_t2)
+      implicit none
+      real(fp), intent(in) :: s
+      type(GaugeConfiguration), intent(in) :: GaugeConf_t1, GaugeConf_t2
+      integer(int64) :: r
+      integer(int8) :: messdir
+      character(len=3) :: adv
+
+      complex(fp) :: WilsonLoop
+      
+
+      if(ThisProc()==0) then
+         write(FileID_WilsonLoops,'(SP,E16.9,1X)',advance='no') s
+
+         do r=0,rmax
+            if(r<rmax) then
+               adv='no'
+            else
+               adv='yes'
+            end if
+
+            WilsonLoop = 0
+            do messdir=1,ndim
+               WilsonLoop = WilsonLoop + GetWilsonLoop(GaugeConf_t1,GaugeConf_t2,r,messdir)/ndim
+            end do
+
+            write(FileID_WilsonLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                 real(WilsonLoop),aimag(WilsonLoop)
+         end do
+      end if
+
+      
+    end subroutine PrintObservables
+
     !>@brief Initialisation of the simulation
     !!@details
     !! MPI\n
@@ -2665,15 +2645,11 @@ contains
       use random,             only: InitModule_Random             => InitModule
       use xpfft,              only: InitModule_xpFFT              => InitModule
       use tolerances,         only: InitModule_tolerances         => InitModule
-      use NRQCD,              only: InitModule_NRQCD              => InitModule
       implicit none
 
       integer(int64) :: arg_count
       character(len=80) :: arg
       integer(int8) :: i
-
-      real(fp) :: c_re, c_im
-      real(fp) :: kspTol
       
       !..--** Reading simulation parameters **--..
       arg_count = 1
@@ -2683,20 +2659,22 @@ contains
          arg_count = arg_count +1; call get_command_argument(arg_count,arg);
          read(arg,'(I4)') LatticeExtensions(i)
       end do
-
+      
       do i=0,ndim
          arg_count = arg_count +1; call get_command_argument(arg_count,arg);
          read(arg,'(F10.13)') LatticeSpacings(i)
       end do
 
-      ! start time
+      ! Mean time t in (s,t) diagram
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
-      ! Center of mass time-range smax
+      read(arg,'(F10.13)') t
+      ! t2-t1
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
+      read(arg,'(F10.13)') smax
 
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+      ! rmax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') rmax
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
@@ -2713,30 +2691,8 @@ contains
       ! Coupling (only relevant in initialisation)
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') GluonCoupling
-
-      ! Tolerance for iterative PETSc solver
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(E15.7)') kspTol
       
-      ! Heavy quark mass
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') HeavyQuarkmass
-      
-      ! Wilson coefficents
-      do i=1,nWilsonCoefficients
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_re
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_im
-
-         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
-      end do
-
-      ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileFermionicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileMesonCorrelator);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileNorm);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
 
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
@@ -2745,7 +2701,6 @@ contains
       call InitModule_xpFFT
       call InitModule_Random(RandomNumberSeed + ThisProc())
       call InitModule_tolerances
-      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
 
       call SyncAll
     end subroutine InitSimulation
@@ -2758,18 +2713,16 @@ contains
     subroutine EndSimulation
       use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
       use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
       implicit none
 
-      call FinalizeModule_NRQCD
       call FinalizeModule_xpFFT
       call FinalizeModule_MPIinterface
 
       if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
-  end subroutine MeasureWilsonLines
-  
+  end subroutine MeasureWilsonLines_NonEquilibrium
+
   !>@brief Program for computing the spectral function out of a correlator
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
   !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
@@ -4378,7 +4331,7 @@ program simulation
   case(4)
      call ComputeSpectrum
   case (5)
-     call MeasureWilsonLines
+     call MeasureWilsonLines_nonEquilibrium
   case (51)
      call MeasureWilsonAndHybridLines_Equilibrium
   case (6)
