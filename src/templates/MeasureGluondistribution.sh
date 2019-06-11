@@ -12,11 +12,9 @@ ay=1.0
 az=1.0
 
 CoMTime=0.
-TimeRange=0.
 TimeSpacing=0.1
-TimeBetweenGluonMeasurement=1.
 
-Ensemblesize=10
+FileNameGluondist="gluondist.txt"
 
 # Initialisation of gluon field
 RandomSeed=1
@@ -30,4 +28,4 @@ GaugefixingCoefficient=0.08
 
 mpiexec -n $processes \
 	$exename \
-	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $CoMTime $TimeRange $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $Ensemblesize $TimeBetweenGluonMeasurement $GaugefixingMaxSteps $GaugefixingTolerance $GaugefixingCoefficient
+	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $CoMTime $RandomSeed $InitialGluonSaturationScale $InitialGluonOccupationAmplitude $Coupling $GaugefixingMaxSteps $GaugefixingTolerance $GaugefixingCoefficient $FileNameGluondist

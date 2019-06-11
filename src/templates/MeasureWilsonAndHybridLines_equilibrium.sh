@@ -1,6 +1,6 @@
 #!/bin/bash
 
-processes=1
+processes=4
 exename=./run.exe
 
 mode=51
@@ -12,15 +12,15 @@ ay=1.0
 az=1.0
 
 StartTime=0.
-TimeRange=1.
+TimeRange=30.
 TimeSpacing=0.1
-Rmax=5
+Rmax=6
 
 # Initialisation of gluon field
 RandomSeed=1
 # Given in units of az
 Beta=16.
-nefieldinit=60
+nefieldinit=20
 nequilibriumtimesteps=300
 FileName_WilsonLoops="wilsonloops.txt"
 MeasureEnergy=1

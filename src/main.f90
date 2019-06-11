@@ -3903,149 +3903,85 @@ contains
     ! Simulation parameters
     integer(int64) :: LatticeExtensions(ndim)
     real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
     integer(int64) :: RandomNumberSeed
 
     real(fp)   :: GluonSaturationScale !qs
     real(fp)   :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
     real(fp)   :: GluonCoupling
-    integer(int64) :: EnsembleSize
     real(fp)   :: CoMTime
-    real(fp)   :: TimeRange
 
+    character(len=80) :: Filename_Gluondist
+    
     ! Physical fields
     type(GaugeConfiguration) :: GaugeConf
 
-    ! Monitoring variables
-    integer(int64) :: it, idistmeas
-    real(fp) :: time
-
-    integer(int64) :: MemoryIndex, LatticeIndex, i, is
-
-    ! MPI
-    integer(intmpi) :: mpierr, mpistatus(mpi_status_size), tag, src, dest, buffersize
-
-    real(fp), allocatable :: aa_correlator_opt(:),ee_correlator_opt(:)
-    ! Ensemble variables
-    real(fp), allocatable :: AA_correlator_ensemble(:,:,:), EE_correlator_ensemble(:,:,:)
-    real(fp), allocatable :: AA_correlator(:,:), AA_correlator_stderror(:,:)
-    real(fp), allocatable :: EE_correlator(:,:), EE_correlator_stderror(:,:)
-    real(fp), allocatable :: GluonDistribution(:,:), GluonDistribution_stderror(:,:)
-    real(fp), allocatable :: &
-         GluonDistribution_AtTimePoint(:), GluonDistribution_AtTimePoint_stderror(:)
-    integer :: iensemble
-    real(fp), allocatable :: momenta(:)
-
-    integer(intmpi) :: proc
-
-    ! Output
-    integer(int8) :: FileID
-    character(len=128) :: filename,time_tag
-    integer(intmpi), allocatable :: mpisendrequest(:), mpisendstatus(:,:)
-    
     integer(int64) :: GaugeFixingMaxIterations
     real(fp) :: GaugefixingCoefficient, GaugeFixingTolerance
-    integer(int64) :: Number_of_Measurements_of_Gluondistribution
-    integer(int64) :: TimePoints_between_Measurement_of_Gluondistribution
-    real(fp) :: TimeBetweenGluonMeasurements
 
-    type(GaugeConfiguration) :: gaugeconf_gaugefixed
+    integer(int64) :: TimeSteps, it
 
     call InitSimulation
 
-    if(ThisProc()==0) print*,GaugefixingCoefficient
+    call GaugeConf%TransversePolarisedOccupiedInit_Box(&
+         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
+
+    do it=1,TimeSteps
+       call GaugeConf%Update(sign(+1._fp,CoMTime))
+    end do
+
+    ! Measuring
+    call PrintObservables(GaugeConf=GaugeConf)
     
-    allocate(AA_correlator_ensemble(GetLocalLatticeSize(),&
-         0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
-    allocate(EE_correlator_ensemble(GetLocalLatticeSize(),&
-         0:Number_of_Measurements_of_Gluondistribution,EnsembleSize))
+    call EndSimulation
+  contains
 
-    ensemble: do iensemble=1,EnsembleSize
-       if(ThisProc()==0) write(output_unit,*)&
-            int(iensemble,int16),'of',&
-            int(EnsembleSize,int16),'configurations';&
-            call flush(output_unit)
+    impure subroutine PrintObservables(GaugeConf)
+      use lattice
+      implicit none
+      
+      type(GaugeConfiguration), intent(in) :: GaugeConf
 
-       !call GaugeConf%SemicoldInit
-       call GaugeConf%TransversePolarisedOccupiedInit_Box(&
-            GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling&
-       !,aa_correlator_opt,ee_correlator_opt&
-            )
-       TimeEvolution: do it=0,TimeSteps
+      type(GaugeConfiguration) :: GaugeConf_gaugefixed
 
-          if(modulo(it,TimePoints_between_Measurement_of_Gluondistribution)==0) then
-             if(ThisProc()==0) write(output_unit,*)&
-                  it,'of',&
-                  TimeSteps,'time steps';&
-                  call flush(output_unit)
+      real(fp), allocatable :: aa_correlator(:),ee_correlator(:), gluondist(:)
 
-             idistmeas = it/TimePoints_between_Measurement_of_Gluondistribution
+      real(fp), allocatable :: momenta(:)
+      
+      integer(int64) :: MemoryIndex, LatticeIndex, i, is
 
-             gaugeconf_gaugefixed = GaugeConf
-             call gaugeconf_gaugefixed%CoulombGaugefixing(&
-                  Tolerance_    =GaugeFixingTolerance,&
-                  alpha_        =GaugefixingCoefficient,&
-                  MaxIterations_=GaugefixingMaxIterations)
-             call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator_opt)
-             call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator_opt)
+      ! MPI
+      integer(intmpi) :: mpierr, mpistatus(mpi_status_size), tag, src, buffersize
+      
+      ! Output
+      integer(int8) :: FileID
+      integer(intmpi), allocatable :: mpisendrequest(:), mpisendstatus(:,:)
 
-             AA_correlator_ensemble(:,idistmeas,iensemble) = aa_correlator_opt
-             EE_correlator_ensemble(:,idistmeas,iensemble) = ee_correlator_opt
+      integer(intmpi) :: proc
 
-          end if
+      integer(intmpi), parameter :: dest=0_intmpi
 
-          call GaugeConf%Update
-       end do TimeEvolution
-    end do ensemble
 
-    ! ..--** Start: Statistics and output **--..
-    it = 0
-    idistmeas = 0
-    call StatisticsCorrelator(AA_correlator_ensemble,AA_correlator,AA_correlator_stderror,0)
-    call StatisticsCorrelator(EE_correlator_ensemble,EE_correlator,EE_correlator_stderror,0)
+      GaugeConf_gaugefixed = GaugeConf
+      
+      call gaugeconf_gaugefixed%CoulombGaugefixing(&
+           Tolerance_    =GaugeFixingTolerance,&
+           alpha_        =GaugefixingCoefficient,&
+           MaxIterations_=GaugefixingMaxIterations)
 
-    allocate(GluonDistribution(&
-         lbound(AA_correlator,1):ubound(AA_correlator,1),&
-         lbound(AA_correlator,2):ubound(AA_correlator,2)))
-    allocate(GluonDistribution_stderror(&
-         lbound(AA_correlator,1):ubound(AA_correlator,1),&
-         lbound(AA_correlator,2):ubound(AA_correlator,2)))
+      
+      call gaugeconf_gaugefixed%GetTransverseAACorrelator(aa_correlator)
+      call gaugeconf_gaugefixed%GetTransverseEECorrelator(ee_correlator)
 
-    GluonDistribution = &
-                                !AA_correlator
-         sqrt(AA_correlator*EE_correlator)
-    GluonDistribution_stderror = &
-                                !AA_correlator_stderror
-         sqrt(&
-         + (AA_correlator_stderror*EE_correlator)**2 &
-         + (EE_correlator_stderror*AA_correlator)**2&
-         )
-
-    ! Printing to file
-    dest=0
-
-    allocate(GluonDistribution_AtTimePoint(GetLocalLatticeSize()))
-    allocate(GluonDistribution_AtTimePoint_stderror(GetLocalLatticeSize()))
-    allocate(Momenta(GetLocalLatticeSize()))
-    is=0
-    allocate(mpisendrequest(3))
-    do idistmeas=lbound(GluonDistribution,2),ubound(GluonDistribution,2)
-       if(ThisProc()==dest) then
-          write(filename,"(A18,I0.3,A1,I0.3,A1,I0.3)") 'gluondistribution_', &
-               LatticeExtensions(1),'x',LatticeExtensions(2),'x',&
-               LatticeExtensions(3)
-
-          time = (idistmeas - lbound(GluonDistribution,2)) &
-               * TimeBetweenGluonMeasurements
-          write(time_tag,"(F12.3)") time
-          time_tag = '_t' // trim(ADJUSTL(time_tag))
-          filename = trim(filename) // trim(time_tag) // '.txt'
-
-          fileID = OpenFile(filename=filename,st='REPLACE',fm='FORMATTED',act='WRITE')
+      allocate(gluondist(size(aa_correlator)))
+      allocate(Momenta(GetLocalLatticeSize()))
+      allocate(mpisendrequest(2))
+      
+      if(ThisProc()==dest) then
+          fileID = OpenFile(filename=Filename_Gluondist,st='REPLACE',fm='FORMATTED',act='WRITE')
        end if
        do src=0,NumProcs()-1
           if(ThisProc()==dest .or. ThisProc()==src) then
-
+             
              ! Momenta
              buffersize = size(Momenta)
              tag = (0+NumProcs())*src
@@ -4081,111 +4017,50 @@ contains
              end if
 
              ! Gluon distribution
-             buffersize = size(GluonDistribution_atTimePoint)
+             buffersize = size(gluondist)
              tag = (1+NumProcs())*src
-             if(ThisProc()==src) then
-                GluonDistribution_atTimePoint = GluonDistribution(:,idistmeas)
-                call mpi_isend(&
-                     GluonDistribution_atTimePoint,& ! What to send
-                     buffersize,                   & ! How many points
-                     MPI_DOUBLE,                   & ! What type
-                     dest,                         & ! Recieving process
-                     tag,                          & ! Tag
-                     MPI_COMM_WORLD,               & ! Communicator
-                     mpisendrequest(2),            & ! Request handle
-                     mpierr)                         ! Error code
+             if(src .ne. dest) then
+                if(ThisProc()==src) then
+                   gluondist = sqrt(aa_correlator*ee_correlator)
+                   call mpi_isend(&
+                        GluonDist,& ! What to send
+                        buffersize,                   & ! How many points
+                        MPI_DOUBLE,                   & ! What type
+                        dest,                         & ! Recieving process
+                        tag,                          & ! Tag
+                        MPI_COMM_WORLD,               & ! Communicator
+                        mpisendrequest(2),            & ! Request handle
+                        mpierr)                         ! Error code
+                end if
+                if(ThisProc()==dest) then
+                   call mpi_recv(&
+                        GluonDist,& ! What to recieve
+                        buffersize,                   & ! How many points
+                        MPI_DOUBLE,                   & ! What type
+                        src,                          & ! Sending process
+                        tag,                          & ! Tag
+                        MPI_COMM_WORLD,               & ! Communicator
+                        mpistatus,                    & ! Status
+                        mpierr)                         ! Error code
+                end if
+             else
+                gluondist = sqrt(aa_correlator*ee_correlator)
              end if
-             if(ThisProc()==dest) then
-                call mpi_recv(&
-                     GluonDistribution_atTimePoint,& ! What to recieve
-                     buffersize,                   & ! How many points
-                     MPI_DOUBLE,                   & ! What type
-                     src,                          & ! Sending process
-                     tag,                          & ! Tag
-                     MPI_COMM_WORLD,               & ! Communicator
-                     mpistatus,                    & ! Status
-                     mpierr)                         ! Error code
-             end if
-
-             ! Standard error of gluon distribution
-             buffersize = size(GluonDistribution_atTimePoint)
-             tag = (2+NumProcs())*src
-             if(ThisProc()==src) then
-                GluonDistribution_atTimePoint_stderror = GluonDistribution_stderror(:,idistmeas)
-                call mpi_isend(&
-                     GluonDistribution_atTimePoint_stderror,& ! What to send
-                     buffersize,                   & ! How many points
-                     MPI_DOUBLE,                   & ! What type
-                     dest,                         & ! Recieving process
-                     tag,                          & ! Tag
-                     MPI_COMM_WORLD,               & ! Communicator
-                     mpisendrequest(3),            & ! Request handle
-                     mpierr)                         ! Error code
-             end if
-             if(ThisProc()==dest) then
-                call mpi_recv(&
-                     GluonDistribution_atTimePoint_stderror,& ! What to recieve
-                     buffersize,                   & ! How many points
-                     MPI_DOUBLE,                   & ! What type
-                     src,                          & ! Sending process
-                     tag,                          & ! Tag
-                     MPI_COMM_WORLD,               & ! Communicator
-                     mpistatus,                    & ! Status
-                     mpierr)                         ! Error code
-             end if
-
 
              if(ThisProc()==dest) then
                 do is=1,size(Momenta)
-                   write(fileID,'(3(SP,E13.6,1X))') &
+                   write(fileID,'(2(SP,E13.6,1X))') &
                         Momenta(is),&
-                        GluonDistribution_AtTimePoint(is),&
-                        GluonDistribution_AtTimePoint_stderror(is)
+                        GluonDist(is)
                 end do
              end if
           end if
 
           call SyncAll
        end do
-       if(ThisProc()==0) call CloseFile(FileID)
-    end do
-    call endsimulation
-  contains
-    pure subroutine StatisticsCorrelator(&
-         correlator_ensemble,correlator,correlator_stderror,lbound_time)
-      use precision, only: fp
-      use statistics, only: GetMean, GetStdError
-
-      implicit none
-      real(fp),intent(in) :: correlator_ensemble(:,lbound_time:,:)
-      real(fp),allocatable,intent(out):: correlator(:,:)
-      real(fp),allocatable,intent(out):: correlator_stderror(:,:)
-      integer, intent(in) :: lbound_time
-
-      integer :: latticeindex, it
-
-      allocate(correlator(&
-           lbound(correlator_ensemble,1):ubound(correlator_ensemble,1),&
-           lbound(correlator_ensemble,2):ubound(correlator_ensemble,2)))
-
-      allocate(correlator_stderror(&
-           lbound(correlator_ensemble,1):ubound(correlator_ensemble,1),&
-           lbound(correlator_ensemble,2):ubound(correlator_ensemble,2)))
-
-      forall(&
-           it          =lbound(correlator_ensemble,2):ubound(correlator_ensemble,2),&
-           latticeindex=lbound(correlator_ensemble,1):ubound(correlator_ensemble,1))&
-           correlator(latticeindex,it) = GetMean(correlator_ensemble(latticeindex,it,:))
-
-      if(size(correlator_ensemble,3)>1) then
-         forall(&
-              it          =lbound(correlator_ensemble,2):ubound(correlator_ensemble,2),&
-              latticeindex=lbound(correlator_ensemble,1):ubound(correlator_ensemble,1))&
-              correlator_stderror(latticeindex,it) = GetStdError(correlator_ensemble(latticeindex,it,:))
-      else
-         correlator_stderror = 0
-      end if
-    end subroutine StatisticsCorrelator
+       if(ThisProc()==dest) call CloseFile(FileID)
+      
+    end subroutine PrintObservables
 
     !>@brief Initialisation of the simulation
     !!@details
@@ -4230,11 +4105,8 @@ contains
       ! Center of mass time T
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') CoMTime
-      ! Center of mass time-range smax
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
 
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+      TimeSteps=ceiling(abs(CoMTime)/LatticeSpacings(0))
 
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
@@ -4252,17 +4124,6 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') GluonCoupling
 
-      ! Ensemble size (statistical average of classical statistical simulation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I6)') EnsembleSize
-
-      ! Time between gluon measurements
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeBetweenGluonMeasurements
-      Number_of_Measurements_of_Gluondistribution = aint(TimeRange/TimeBetweenGluonMeasurements,int64)
-      TimePoints_between_Measurement_of_Gluondistribution&
-           = int(TimeBetweenGluonMeasurements/LatticeSpacings(0))
-
       ! Maximum number of iterations for coulomb gauge fixing
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I7)') GaugefixingMaxIterations
@@ -4273,6 +4134,9 @@ contains
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') GaugefixingCoefficient
 
+      ! Name of output file
+      arg_count = arg_count +1; call get_command_argument(arg_count,Filename_Gluondist);
+      
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
       call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
