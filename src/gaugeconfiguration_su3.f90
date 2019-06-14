@@ -1956,8 +1956,8 @@ contains ! Module procedures
            = GaugeConf%efield(a,i,MemoryIndex)&
            - 2*Aimag(GetTraceWithGenerator(a,link_times_staplesum))
       end forall
-      GaugeConf%efield(:,i,MemoryIndex) = &
-           GetWrappedAlgebraCoordinates(GaugeConf%efield(:,i,MemoryIndex))
+      !GaugeConf%efield(:,i,MemoryIndex) = &
+      !     GetWrappedAlgebraCoordinates(GaugeConf%efield(:,i,MemoryIndex))
     end subroutine Update_Efield_Leapfrog_AtSite_Direction
 
     !>@brief Returns staple
