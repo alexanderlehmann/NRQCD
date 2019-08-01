@@ -368,7 +368,8 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
-  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename)
+  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename,&
+       chargedensity)
     use lattice, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
          ndim, GetNeib_M, GetLatticeSize
     use random, only: GetRandomNormalCmplx
@@ -385,6 +386,8 @@ contains ! Module procedures
 
     logical, optional, intent(in) :: MeasureEnergy
     character(len=*), optional, intent(in) :: filename
+
+    real(fp), intent(in), optional :: chargedensity(:,:)
     
     real(fp) :: sigma
     

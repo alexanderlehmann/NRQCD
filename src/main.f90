@@ -1266,8 +1266,8 @@ contains
       STOP
     end subroutine EndSimulation
   end subroutine MeasureWilsonAndHybridLines_Equilibrium
-  
-  impure subroutine DeterminePotential_oneTimePoint
+
+  impure subroutine MeasureWilsonLines_Equilibrium_StaticMeson
     use, intrinsic :: iso_fortran_env
     use precision
     use mpiinterface
@@ -1278,226 +1278,9 @@ contains
     use halocomm
     use wilsonline
     use random
-    use statistics, only: GetMean, GetStdError
-    implicit none
-
-    ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: RandomNumberSeed
-
-    real(fp) :: GluonSaturationScale !qs
-    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-    real(fp) :: GluonCoupling
-    real(fp) :: tstart
-    
-    ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
-    
-    ! Counting
-    integer :: i
-
-    real(fp) :: tEnd
-    integer(int64) :: it
-
-    ! Wilson loop parameters
-    integer(int8), parameter :: messdir=nDim
-    integer(int64) :: rmax, r
-
-    ! Observables
-    complex(fp), allocatable :: WilsonLoops(:,:), PotentialWilsonLoops(:,:)
-    real(fp), allocatable :: rObservable(:), iObservable(:)
-    real(fp) :: rMean, rStderr,iMean,iStderr
-    real(fp) :: time
-    
-    ! Output
-    integer(int8) :: FileID
-
-    character(len=80) :: &
-         FileName_WilsonLoops, FileName_PotentialWilsonLoops
-
-    integer(intmpi) :: proc
-
-    integer(int64) :: measurement
-    integer(int64), parameter :: nMeasurement=100
-
-    call InitSimulation
-
-    rmax = LatticeExtensions(messdir)/2
-
-    allocate(WilsonLoops(nMeasurement,rmax))
-    WilsonLoops = 0
-    allocate(PotentialWilsonLoops(nMeasurement,rmax))
-    PotentialWilsonLoops = 0
-
-    do measurement=1,nMeasurement
-       if(ThisProc()==0) write(output_unit,*)&
-            int(measurement,int16),'of',&
-            int(nMeasurement,int16),'configurations';&
-            call flush(output_unit)
-       
-       ! initialisation of config ....
-       call GaugeConf_initial%TransversePolarisedOccupiedInit_Box(&
-            GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-       GaugeConf = GaugeConf_initial
-
-       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-          call GaugeConf%Update(sign(+1._real64,tstart))
-       end do
-
-       do r=1,rmax
-          WilsonLoops(measurement,r) = &
-               GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-          
-          PotentialWilsonLoops(measurement,r) = &
-               GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-       end do
-    end do
-
-    if(ThisProc()==0) then
-       allocate(rObservable(rmax))
-       allocate(iObservable(rmax))
-       
-       fileID = OpenFile(filename=FileName_WilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       do r=1,rmax
-          rObservable = real(WilsonLoops(:,r))
-          iObservable = aimag(WilsonLoops(:,r))
-          
-          rMean = GetMean(rObservable)
-          iMean = GetMean(iObservable)
-          rStdErr = GetStdError(rObservable)
-          iStdErr = GetStdError(iObservable)
-          
-          write(FileID,'(1(I2,1X),4(SP,E16.9,1X))') r,rMean,rStdErr,iMean,iStderr
-       end do
-       call CloseFile(FileID)
-
-       
-       fileID = OpenFile(filename=FileName_PotentialWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       do r=1,rmax
-          rObservable = real(PotentialWilsonLoops(:,r))
-          iObservable = aimag(PotentialWilsonLoops(:,r))
-          
-          rMean = GetMean(rObservable)
-          iMean = GetMean(iObservable)
-          rStdErr = GetStdError(rObservable)
-          iStdErr = GetStdError(iObservable)
-          
-          write(FileID,'(1(I2,1X),4(SP,E16.9,1X))') r,rMean,rStdErr,iMean,iStderr
-       end do
-       call CloseFile(FileID)
-    end if
-    
-    call EndSimulation
-
-  contains
-    !>@brief Initialisation of the simulation
-    !!@details
-    !! MPI\n
-    !! Lattice-module\n
-    !! Random number generator\n
-    !! etc.
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    impure subroutine InitSimulation
-      use precision, only: fp
-      use, intrinsic :: iso_fortran_env
-
-      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
-      use lattice,            only: InitModule_Lattice            => InitModule, nDim
-      use halocomm,           only: InitModule_HaloComm           => InitModule
-      use random,             only: InitModule_Random             => InitModule
-      use xpfft,              only: InitModule_xpFFT              => InitModule
-      use tolerances,         only: InitModule_tolerances         => InitModule
-      implicit none
-
-      integer(int64) :: arg_count
-      character(len=80) :: arg
-      integer(int8) :: i
-      
-      !..--** Reading simulation parameters **--..
-      arg_count = 1
-
-      ! Spatial lattice parameters (extensions, spacings)
-      do i=1,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(I4)') LatticeExtensions(i)
-      end do
-
-      do i=0,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') LatticeSpacings(i)
-      end do
-
-      ! start time
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
-
-      ! Seed for random number generator
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') RandomNumberSeed
-
-      ! Initial gluon distribution (box): Saturation scale
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonSaturationScale
-
-      ! Initial gluon distribution (box): Amplitude
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonOccupationAmplitude
-
-      ! Coupling (only relevant in initialisation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
-
-      ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_PotentialWilsonLoops);
-
-      !..--** Module initialisations **--..
-      call InitModule_MPIinterface
-      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
-      call InitModule_HaloComm
-      call InitModule_xpFFT
-      call InitModule_Random(RandomNumberSeed + ThisProc())
-      call InitModule_tolerances
-
-      call SyncAll
-    end subroutine InitSimulation
-
-    !>@brief Ending of the simulation
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    subroutine EndSimulation
-      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
-      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      implicit none
-
-      call FinalizeModule_xpFFT
-      call FinalizeModule_MPIinterface
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
-      STOP
-    end subroutine EndSimulation
-  end subroutine DeterminePotential_oneTimePoint
-  
-  impure subroutine DeterminePotential
-    use, intrinsic :: iso_fortran_env
-    use precision
-    use mpiinterface
-    use lattice
-    use gaugeconfiguration_su3
-    use mpi
-    use io
-    use halocomm
-    use wilsonline
-    use random
+    use nrqcd
     use statistics
+    use su3, only: nsun
 
     implicit none
 
@@ -1507,167 +1290,115 @@ contains
     integer(int64) :: TimeSteps
     integer(int64) :: RandomNumberSeed
 
-    real(fp) :: GluonSaturationScale !qs
-    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-    real(fp) :: GluonCoupling
+    real(fp) :: Beta
     real(fp) :: tstart
     real(fp) :: TimeRange
 
+    logical :: MeasureEnergy
+    character(len=80) :: EnergyFilename
+    integer(int64) :: nefieldinit,nequilibriumtimesteps
+    
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_initial
-
+    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf, GaugeConf_old
+    
     ! Counting
     integer :: i
 
     integer(int64) :: it
 
+    integer(intmpi) :: mpierr
+    
     ! Wilson loop parameters
     integer(int8), parameter :: messdir=nDim
-    integer(int64) :: rmax, r
+    integer(int64) :: meanMaxLatticeIndex=20
+    integer(int64) :: x0, xr
+    integer(int64) :: rmax, r, k
+    ! Indices
+    integer(int64) :: LatticeIndex_distance, shiftstep
+    integer(int8) :: colour
 
     ! Observables
-    complex(fp) :: WilsonLoop, TimeDerivativeWilsonLoop, Potential
+    complex(fp), allocatable :: WilsonLoops(:,:)
 
-    complex(fp), allocatable :: WilsonLoops(:,:,:), TimeDerivativeWilsonLoops(:,:,:)
-    real(fp), allocatable :: rObservable(:), iObservable(:)
-    real(fp) :: rMean, rStderr,iMean,iStderr
     real(fp) :: time
     integer(int64) :: TimePoints
     ! Output
-    integer(int8) :: FileID_WilsonLoops, FileID_TimeDerivativeWilsonLoops, FileID_Potential
+    integer(int8) :: FileID_WilsonLoops
 
-    character(len=80) :: &
-         FileName_WilsonLoops, FileName_TimeDerivativeWilsonLoops, FileName_Potential
+    character(len=80) :: FileName_WilsonLoops
 
     integer(intmpi) :: proc
+    
+    ! Measurement of progression
+    integer(int64) :: iwork, nwork
 
-    integer(int64) :: measurement
-    integer(int64), parameter :: nMeasurement=10
+    ! Charge density of static meson
+    real(fp), allocatable :: ChargeDensity(:,:,:)
 
+    real(fp) :: localcharge,totalcharge
+
+    
     call InitSimulation
-
-    rmax = LatticeExtensions(messdir)/2
 
     TimePoints = nint(TimeRange/LatticeSpacings(0))
-    
-    allocate(WilsonLoops(nMeasurement,rmax,0:TimePoints))
-    WilsonLoops = 0
-    allocate(TimeDerivativeWilsonLoops(nMeasurement,rmax,0:TimePoints))
-    TimeDerivativeWilsonLoops = 0
 
-    do measurement=1,nMeasurement
+    allocate(WilsonLoops(0:TimePoints,0:rmax))
 
-       if(ThisProc()==0) write(output_unit,*)&
-            int(measurement,int16),'of',&
-            int(nMeasurement,int16),'configurations';&
-            call flush(output_unit)
+    allocate(ChargeDensity(nsun,nsun,GetMemorySize()))
 
-       ! initialisation of config ....
-       call GaugeConf_initial%TransversePolarisedOccupiedInit_Box(&
-            GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-       GaugeConf = GaugeConf_initial
+    do r=0,rmax
+       x0 = 1
+       xr = x0
 
-       do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-          call GaugeConf%Update(sign(+1._real64,tstart))
+       do k=1,r,+1
+          xr = GetNeib_G(+3,xr)
        end do
+       
+       do colour=1,nsun
+          ChargeDensity=0
 
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
+          if(GetProc_G(x0)==ThisProc()) then
+             ! Colour source
+             ChargeDensity(colour,colour,GetMemoryIndex(x0)) = &
+                  ChargeDensity(colour,colour,GetMemoryIndex(x0)) &
+                  +1
+          end if
 
-          do r=1,rmax
-             WilsonLoop = GetWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             TimeDerivativeWilsonLoop = &
-                  GetTimeDerivativeWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
-             !GetPotentialWilsonLoop(GaugeConf_initial,GaugeConf,r,messdir)
+          if(GetProc_G(xr)==ThisProc()) then
+             ! Colour sink
+             ChargeDensity(colour,colour,GetMemoryIndex(xr)) = &
+                  ChargeDensity(colour,colour,GetMemoryIndex(xr)) &
+                  -1
+          end if
 
-             WilsonLoops(measurement,r,it) = WilsonLoop
-             TimeDerivativeWilsonLoops(measurement,r,it) = TimeDerivativeWilsonLoop
-          end do
+          localcharge=sum(chargedensity)
+          
+          call MPI_AllReduce(LocalCharge,TotalCharge,1_intmpi,&
+               GetRealSendType(),MPI_SUM,MPI_COMM_WORLD,mpierr)
 
-          call GaugeConf%Update
+          if(ThisProc()==0) print*,x0,xr,TotalCharge
        end do
     end do
-    if(ThisProc()==0) then
-       fileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_TimeDerivativeWilsonLoops = OpenFile(filename=FileName_TimeDerivativeWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_Potential = OpenFile(filename=FileName_Potential,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-
-          time = tstart + it*LatticeSpacings(0)
-          if(ThisProc()==0) then
-             write(output_unit,*) real(time,real32)
-             call flush(output_unit)
-          end if
-          do r=1,rmax
-             if(r==1) then
-                write(FileID_WilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             rObservable = real(WilsonLoops(:,r,it))
-             iObservable = aimag(WilsonLoops(:,r,it))
-
-             rMean = GetMean(rObservable)
-             iMean = GetMean(iObservable)
-             rStdErr = GetStdError(rObservable)
-             iStdErr = GetStdError(iObservable)
-
-             WilsonLoop = cmplx(rMean,iMean)
-             
-             if(r<rmax) then
-                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
-                     rMean,rStdErr,iMean,iStderr
-             else
-                write(FileID_WilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
-                     rMean,rStdErr,iMean,iStderr
-             end if
-
-             
-             if(r==1) then
-                write(FileID_TimeDerivativeWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             rObservable = real(TimeDerivativeWilsonLoops(:,r,it))
-             iObservable = aimag(TimeDerivativeWilsonLoops(:,r,it))
-
-             rMean = GetMean(rObservable)
-             iMean = GetMean(iObservable)
-             rStdErr = GetStdError(rObservable)
-             iStdErr = GetStdError(iObservable)
-
-             TimeDerivativeWilsonLoop = cmplx(rMean,iMean)
-             
-             if(r<rmax) then
-                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='no') &
-                     rMean,rStdErr,iMean,iStderr
-             else
-                write(FileID_TimeDerivativeWilsonLoops,'(4(SP,E16.9,1X))',advance='yes') &
-                     rMean,rStdErr,iMean,iStderr
-             end if
-
-             ! Assume uncorrelated data (incorrect, but anyhow)
-             potential = cmplx(0,1)*TimeDerivativeWilsonLoop/WilsonLoop
-             if(r==1) then
-                write(FileID_potential,'(1(SP,E16.9,1X))',advance='no') time
-             end if
-             if(r<rmax) then
-                write(FileID_potential,'(2(SP,E16.9,1X))',advance='no') &
-                     real(potential),aimag(potential)
-             else
-                write(FileID_potential,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(potential),aimag(potential)
-             end if
-
-          end do
-       end do
-
-       call CloseFile(FileID_WilsonLoops)
-       call CloseFile(FileID_TimeDerivativeWilsonLoops)
-       call CloseFile(FileID_Potential)
-    end if
+    
 
     call EndSimulation
 
   contains
+
+    !>@brief Output of observables
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 29.05.2019
+    !!@version 1.0
+    impure subroutine PrintObservables
+      implicit none
+      
+      real(fp) :: t
+
+      character(len=3) :: adv
+
+    end subroutine PrintObservables
+
     !>@brief Initialisation of the simulation
     !!@details
     !! MPI\n
@@ -1692,7 +1423,9 @@ contains
 
       integer(int64) :: arg_count
       character(len=80) :: arg
-      integer(int8) :: i
+      integer(int8) :: i, j
+      
+      real(fp) :: c_re, c_im
       
       !..--** Reading simulation parameters **--..
       arg_count = 1
@@ -1717,27 +1450,33 @@ contains
 
       TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
 
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') rmax
+      
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I4)') RandomNumberSeed
-
       ! Initial gluon distribution (box): Saturation scale
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonSaturationScale
+      read(arg,'(F10.13)') Beta
 
-      ! Initial gluon distribution (box): Amplitude
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonOccupationAmplitude
-
-      ! Coupling (only relevant in initialisation)
+      read(arg,'(I6)') nefieldinit
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
-
+      read(arg,'(I6)') nequilibriumtimesteps
+      
       ! Output filenames
       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_TimeDerivativeWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_Potential)
-
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') j
+      if(j==0) then
+         MeasureEnergy=.false.
+      else
+         MeasureEnergy=.true.
+         arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
+      end if
+      
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
       call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
@@ -1765,707 +1504,8 @@ contains
       if(ThisProc()==0) write(output_unit,*) "Simulation completed"
       STOP
     end subroutine EndSimulation
-
-
-    
-  end subroutine DeterminePotential
-
+  end subroutine MeasureWilsonLines_Equilibrium_StaticMeson
   
-  impure subroutine DetermineCustomPotentials
-    use, intrinsic :: iso_fortran_env
-    use precision
-    use mpiinterface
-    use lattice
-    use gaugeconfiguration_su3
-    use mpi
-    use io
-    use halocomm
-    use nrqcd
-    use wilsonline
-    use random
-
-    implicit none
-
-    ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
-    integer(int64) :: RandomNumberSeed
-
-    real(fp) :: GluonSaturationScale !qs
-    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-    real(fp) :: GluonCoupling
-    real(fp) :: tstart
-    real(fp) :: TimeRange
-    real(fp) :: HeavyQuarkmass
-    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
-
-    ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atStart, ColdGaugeConf
-    type(NRQCDField)         :: HeavyField,HeavyField_atStart,HeavyField_freeStep
-
-    ! Counting
-    integer :: i
-
-    real(fp) :: tEnd
-    integer(int64) :: it
-
-    ! Wilson line parameters
-    integer(int8), parameter :: messdir=nDim
-    integer(int64), parameter :: x0=1
-    integer(int64) :: rmax, r
-
-    ! Observable-arrays
-    real(fp), allocatable :: time(:)
-    complex(fp),allocatable :: &
-         GluonicWilsonLoops(:,:), PointSplitLoops(:,:), FreePointSplitLoops(:,:),&
-         GluonicPotentials(:,:), PointSplitPotentials(:,:)
-    
-    ! Output
-    integer(int8) :: &
-         FileID_GluonicWilsonLoops,&
-         FileID_PointSplitLoops,&
-         FileID_FreePointSplitLoops,&
-         FileID_GluonicPotentials,&
-         FileID_PointSplitPotentials
-
-    character(len=80) ::&
-         FileGluonicWilsonLoops,&
-         FilePointSplitLoops,&
-         FileFreePointSplitLoops,&
-         FileGluonicPotentials,&
-         FilePointSplitPotentials
-    
-    integer(intmpi) :: proc
-
-    call InitSimulation
-    
-    rmax = LatticeExtensions(messdir)/2/2
-    
-    ! Allocating observable arrays
-    allocate(Time(0:nint(TimeRange/LatticeSpacings(0))))
-    allocate(GluonicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(PointSplitLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(FreePointSplitLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(GluonicPotentials(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(PointSplitPotentials(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-
-    call GaugeConf_atStart%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call ColdGaugeConf%ColdInit
-    
-    ! Evolve gauge configuration to t0
-    do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-       call GaugeConf_atStart%Update(sign(+1._real64,tstart))
-    end do
-    
-    
-    ! Initialising quark-antiquark-pair
-    call HeavyField_atStart%InitSinglePoint(&
-         latticeindex_quark=x0,&
-         latticeindex_antiq=x0)
-
-    ! Positive time evolution
-    GaugeConf =GaugeConf_atStart
-    HeavyField=HeavyField_atStart
-
-    ! Opening files
-    if(ThisProc()==0) then
-       ! Opening files
-       fileID_GluonicWilsonLoops  = OpenFile(filename=FileGluonicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_PointSplitLoops= OpenFile(filename=FilePointSplitLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_FreePointSplitLoops= OpenFile(filename=FileFreePointSplitLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       FileID_GluonicPotentials= OpenFile(filename=FileGluonicPotentials,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       FileID_PointSplitPotentials= OpenFile(filename=FilePointSplitPotentials,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-    end if
-
-    
-    do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-       time(it) = tstart + it*LatticeSpacings(0)
-       if(thisproc()==0) then
-          write(output_unit,*) real(time(it),real32)
-          call flush(6)
-       end if
-
-       HeavyField_freeStep = HeavyField
-       
-       do r=0,rmax
-          GluonicWilsonLoops(it,r) &
-               = GetGluonicWilsonLoop(GaugeConf_atStart,GaugeConf,x0, 2*r, messdir)
-          PointSplitLoops(it,r) &
-               = GetPointSplitCorrelator(GaugeConf,HeavyField, x0, 2*r, messdir)
-          FreePointSplitLoops(it,r) &
-               = GetPointSplitCorrelator(ColdGaugeConf,HeavyField_freeStep,x0,2*r,messdir)
-
-          if(it>0) then
-             ! Gluonic potential in analogy to Wilson's static potential definition
-             ! combined with heuristic potential definition
-             GluonicPotentials(it-1,r) &
-                  =cmplx(0,1,fp)*(&
-                  GluonicWilsonLoops(it,r) - GluonicWilsonLoops(it-1,r))&
-                  /GluonicWilsonLoops(it-1,r)&
-                  /LatticeSpacings(0)
-
-             ! Fermionic wilsonloop from Rothkopf's definition
-             ! used as input for heuristic definition of a potential
-             PointSplitPotentials(it-1,r) &
-                  =cmplx(0,1,fp)*(&
-                  PointSplitLoops(it,r) - FreePointSplitLoops(it,r))&
-                  /PointSplitLoops(it-1,r)&
-                  /LatticeSpacings(0)
-          end if
-          
-          if(ThisProc()==0.and.it>0) then
-             if(r==0) then
-                write(fileID_GluonicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                write(fileID_PointSplitLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                write(fileID_FreePointSplitLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-             end if
-             if(r<rmax) then
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(GluonicWilsonLoops(it-1,r)), aimag(GluonicWilsonLoops(it-1,r))
-
-                write(fileID_PointSplitLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(PointSplitLoops(it-1,r)), aimag(PointSplitLoops(it-1,r))
-
-                write(fileID_FreePointSplitLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(FreePointSplitLoops(it-1,r)), aimag(FreePointSplitLoops(it-1,r))
-
-                if(it<ubound(time,1)) then
-                   if(r==0) then
-                      write(fileID_GluonicPotentials,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                      write(fileID_PointSplitPotentials,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                   end if
-                   write(fileID_GluonicPotentials,'(2(SP,E16.9,1X))',advance='no') &
-                        real(GluonicPotentials(it-1,r)), aimag(GluonicPotentials(it-1,r))
-
-                   write(fileID_PointSplitPotentials,'(2(SP,E16.9,1X))',advance='no') &
-                        real(PointSplitPotentials(it-1,r)), aimag(PointSplitPotentials(it-1,r))
-                end if
-             else
-                if(r==0) then
-                   write(fileID_GluonicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                   write(fileID_PointSplitLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                   write(fileID_FreePointSplitLoops,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                end if
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(GluonicWilsonLoops(it-1,r)), aimag(GluonicWilsonLoops(it-1,r))
-
-                write(fileID_PointSplitLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(PointSplitLoops(it-1,r)), aimag(PointSplitLoops(it-1,r))
-
-                write(fileID_FreePointSplitLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(FreePointSplitLoops(it-1,r)), aimag(FreePointSplitLoops(it-1,r))
-
-                if(it<ubound(time,1)) then
-                   
-                   if(r==0) then
-                      write(fileID_GluonicPotentials,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                      write(fileID_PointSplitPotentials,'(1(SP,E16.9,1X))',advance='no') time(it-1)
-                   end if
-                   write(fileID_GluonicPotentials,'(2(SP,E16.9,1X))',advance='yes') &
-                        real(GluonicPotentials(it-1,r)), aimag(GluonicPotentials(it-1,r))
-
-                   write(fileID_PointSplitPotentials,'(2(SP,E16.9,1X))',advance='yes') &
-                        real(PointSplitPotentials(it-1,r)), aimag(PointSplitPotentials(it-1,r))
-                end if
-             end if
-          end if
-       end do
-       
-       call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-       call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-       call GaugeConf%Update(+1._fp)
-    end do
-
-    if(ThisProc()==0) then
-
-       ! Closing files
-       call CloseFile(FileID_GluonicWilsonloops)
-       call CloseFile(FileID_PointSplitLoops)
-       call CloseFile(FileID_FreePointSplitLoops)
-       call CloseFile(FileID_GluonicPotentials)
-       call CloseFile(FileID_PointSplitPotentials)
-    end if
-
-    call EndSimulation
-  contains
-    !>@brief Initialisation of the simulation
-    !!@details
-    !! MPI\n
-    !! Lattice-module\n
-    !! Random number generator\n
-    !! etc.
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    impure subroutine InitSimulation
-      use precision, only: fp
-      use, intrinsic :: iso_fortran_env
-
-      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
-      use lattice,            only: InitModule_Lattice            => InitModule, nDim
-      use halocomm,           only: InitModule_HaloComm           => InitModule
-      use random,             only: InitModule_Random             => InitModule
-      use xpfft,              only: InitModule_xpFFT              => InitModule
-      use tolerances,         only: InitModule_tolerances         => InitModule
-      use NRQCD,              only: InitModule_NRQCD              => InitModule
-      implicit none
-
-      integer(int64) :: arg_count
-      character(len=80) :: arg
-      integer(int8) :: i
-
-      real(fp) :: c_re, c_im
-      real(fp) :: kspTol
-      
-      !..--** Reading simulation parameters **--..
-      arg_count = 1
-
-      ! Spatial lattice parameters (extensions, spacings)
-      do i=1,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(I4)') LatticeExtensions(i)
-      end do
-
-      do i=0,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') LatticeSpacings(i)
-      end do
-
-      ! start time
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
-      ! Center of mass time-range smax
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
-
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
-
-      ! Seed for random number generator
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') RandomNumberSeed
-
-      ! Initial gluon distribution (box): Saturation scale
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonSaturationScale
-
-      ! Initial gluon distribution (box): Amplitude
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonOccupationAmplitude
-
-      ! Coupling (only relevant in initialisation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
-
-      ! Tolerance for iterative PETSc solver
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(E15.7)') kspTol
-      
-      ! Heavy quark mass
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') HeavyQuarkmass
-      
-      ! Wilson coefficents
-      do i=1,nWilsonCoefficients
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_re
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_im
-
-         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
-      end do
-
-      ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FilePointSplitLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileFreePointSplitLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicPotentials);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FilePointSplitPotentials);
-
-      !..--** Module initialisations **--..
-      call InitModule_MPIinterface
-      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
-      call InitModule_HaloComm
-      call InitModule_xpFFT
-      call InitModule_Random(RandomNumberSeed + ThisProc())
-      call InitModule_tolerances
-      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
-
-      call SyncAll
-    end subroutine InitSimulation
-
-    !>@brief Ending of the simulation
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    subroutine EndSimulation
-      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
-      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
-      implicit none
-
-      call FinalizeModule_NRQCD
-      call FinalizeModule_xpFFT
-      call FinalizeModule_MPIinterface
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
-      STOP
-    end subroutine EndSimulation
-  end subroutine DetermineCustomPotentials
-    
-  
-  impure subroutine DeterminePotentials
-    use, intrinsic :: iso_fortran_env
-    use precision
-    use mpiinterface
-    use lattice
-    use gaugeconfiguration_su3
-    use mpi
-    use io
-    use halocomm
-    use nrqcd
-    use wilsonline
-    use random
-
-    implicit none
-
-    ! Simulation parameters
-    integer(int64) :: LatticeExtensions(ndim)
-    real(fp)       :: LatticeSpacings(0:ndim)
-    integer(int64) :: TimeSteps
-    integer(int64) :: RandomNumberSeed
-
-    real(fp) :: GluonSaturationScale !qs
-    real(fp) :: GluonOccupationAmplitude ! Amplitude of box in units of 1/g^2
-    real(fp) :: GluonCoupling
-    real(fp) :: tstart
-    real(fp) :: TimeRange
-    real(fp) :: HeavyQuarkmass
-    complex(fp) :: WilsonCoefficients(nWilsonCoefficients)
-
-    ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf, GaugeConf_atStart, ColdGaugeConf
-    type(NRQCDField)         :: HeavyField,HeavyField_atStart,HeavyField_freeStep
-
-    ! Counting
-    integer :: i
-
-    real(fp) :: tEnd
-    integer(int64) :: it
-
-    ! Wilson line parameters
-    integer(int8), parameter :: messdir=nDim
-    integer(int64), parameter :: x0=1
-    integer(int64) :: rmax, r, xr
-
-    ! Observable-arrays
-    real(fp), allocatable :: time(:)
-    complex(fp),allocatable :: &
-         GluonicWilsonLoops(:,:), FermionicWilsonLoops(:,:), FreeFermionicWilsonLoops(:,:),&
-         GluonicPotentials(:,:), FermionicPotentials(:,:)
-    
-    ! Output
-    integer(int8) :: &
-         FileID_GluonicWilsonLoops,&
-         FileID_FermionicWilsonLoops,&
-         FileID_FreeFermionicWilsonLoops,&
-         FileID_GluonicPotentials,&
-         FileID_FermionicPotentials
-
-    character(len=80) ::&
-         FileGluonicWilsonLoops,&
-         FileFermionicWilsonLoops,&
-         FileFreeFermionicWilsonLoops,&
-         FileGluonicPotentials,&
-         FileFermionicPotentials
-    
-    integer(intmpi) :: proc
-
-    call InitSimulation
-    
-    rmax = LatticeExtensions(messdir)/2
-    
-    ! Allocating observable arrays
-    allocate(Time(0:nint(TimeRange/LatticeSpacings(0))))
-    allocate(GluonicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(FermionicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(FreeFermionicWilsonLoops(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(GluonicPotentials(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-    allocate(FermionicPotentials(0:nint(TimeRange/LatticeSpacings(0)),0:rmax))
-
-    call GaugeConf_atStart%TransversePolarisedOccupiedInit_Box(&
-         GluonSaturationScale,GluonOccupationAmplitude,GluonCoupling)
-    call ColdGaugeConf%ColdInit
-    
-    ! Evolve gauge configuration to t0
-    do it=1,abs(NINT(tstart/LatticeSpacings(0)))
-       call GaugeConf_atStart%Update(sign(+1._real64,tstart))
-    end do
-    
-    xr = x0
-    do r=0,rmax
-       if(ThisProc()==0) then
-          write(output_unit,*) 'r=',r,'of',rmax
-       end if
-       
-       ! Initialising quark-antiquark-pair
-       ! with quark at variable remote point xr
-       ! and antiquark at fixed (origin) point x0
-       call HeavyField_atStart%InitSinglePoint(&
-            latticeindex_quark=xr,&
-            latticeindex_antiq=x0)
-       
-       ! Positive time evolution
-       GaugeConf =GaugeConf_atStart
-       HeavyField=HeavyField_atStart
-
-       do it=0,nint(TimeRange/LatticeSpacings(0)),+1
-          if(r==0) then
-             time(it) = tstart + it*LatticeSpacings(0)
-          end if
-
-          
-          HeavyField_freeStep = HeavyField
-
-          
-          GluonicWilsonLoops(it,r) &
-               = GetGluonicWilsonLoop(GaugeConf_atStart,GaugeConf,x0, r, messdir)
-          FermionicWilsonLoops(it,r) &
-               = GetFermionicWilsonLoop(GaugeConf_atStart,GaugeConf,HeavyField, x0, r, messdir)
-          FreeFermionicWilsonLoops(it,r) &
-               = GetFermionicWilsonLoop(ColdGaugeConf,ColdGaugeConf,HeavyField_freeStep,x0,r,messdir)
-          
-          call HeavyField_freeStep%Update(ColdGaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-          call HeavyField%Update(GaugeConf,HeavyQuarkMass,WilsonCoefficients,+1._fp)
-          call GaugeConf%Update(+1._fp)
-
-          if(it>0) then
-             ! Gluonic potential in analogy to Wilson's static potential definition
-             ! combined with heuristic potential definition
-             GluonicPotentials(it-1,r) &
-                  =cmplx(0,1,fp)*(&
-                  GluonicWilsonLoops(it,r) - GluonicWilsonLoops(it-1,r))&
-                  /GluonicWilsonLoops(it-1,r)&
-                  /LatticeSpacings(0)
-
-             ! Fermionic wilsonloop from Rothkopf's definition
-             ! used as input for heuristic definition of a potential
-             FermionicPotentials(it-1,r) &
-                  =cmplx(0,1,fp)*(&
-                  FermionicWilsonLoops(it,r) - FreeFermionicWilsonLoops(it,r))&
-                  /FermionicWilsonLoops(it-1,r)&
-                  /LatticeSpacings(0)
-          end if
-       end do
-
-       ! Preparing next step
-       xr = GetNeib_G(messdir,xr)
-    end do
-
-    if(ThisProc()==0) then
-       ! Opening files
-       fileID_GluonicWilsonLoops  = OpenFile(filename=FileGluonicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_FermionicWilsonLoops= OpenFile(filename=FileFermionicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       fileID_FreeFermionicWilsonLoops= OpenFile(filename=FileFreeFermionicWilsonLoops,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       FileID_GluonicPotentials= OpenFile(filename=FileGluonicPotentials,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       FileID_FermionicPotentials= OpenFile(filename=FileFermionicPotentials,&
-            st='REPLACE',fm='FORMATTED',act='WRITE')
-       
-       do it=lbound(time,1),ubound(time,1)
-          write(fileID_GluonicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_FermionicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_FreeFermionicWilsonLoops,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_GluonicPotentials,'(1(SP,E16.9,1X))',advance='no') time(it)
-          write(fileID_FermionicPotentials,'(1(SP,E16.9,1X))',advance='no') time(it)
-          
-          do r=0,rmax
-             if(r<rmax) then
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
-                
-                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
-                
-                write(fileID_FreeFermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='no') &
-                     real(FreeFermionicWilsonLoops(it,r)), aimag(FreeFermionicWilsonLoops(it,r))
-
-                if(it<ubound(time,1)) then
-                   write(fileID_GluonicPotentials,'(2(SP,E16.9,1X))',advance='no') &
-                        real(GluonicPotentials(it,r)), aimag(GluonicPotentials(it,r))
-
-                   write(fileID_FermionicPotentials,'(2(SP,E16.9,1X))',advance='no') &
-                        real(FermionicPotentials(it,r)), aimag(FermionicPotentials(it,r))
-                end if
-             else
-                write(fileID_GluonicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(GluonicWilsonLoops(it,r)), aimag(GluonicWilsonLoops(it,r))
-                
-                write(fileID_FermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(FermionicWilsonLoops(it,r)), aimag(FermionicWilsonLoops(it,r))
-                
-                write(fileID_FreeFermionicWilsonLoops,'(2(SP,E16.9,1X))',advance='yes') &
-                     real(FreeFermionicWilsonLoops(it,r)), aimag(FreeFermionicWilsonLoops(it,r))
-
-                if(it<ubound(time,1)) then
-                   write(fileID_GluonicPotentials,'(2(SP,E16.9,1X))',advance='yes') &
-                        real(GluonicPotentials(it,r)), aimag(GluonicPotentials(it,r))
-
-                   write(fileID_FermionicPotentials,'(2(SP,E16.9,1X))',advance='yes') &
-                        real(FermionicPotentials(it,r)), aimag(FermionicPotentials(it,r))
-                end if
-             end if
-          end do
-       end do
-
-       ! Closing files
-       call CloseFile(FileID_GluonicWilsonloops)
-       call CloseFile(FileID_FermionicWilsonLoops)
-       call CloseFile(FileID_FreeFermionicWilsonLoops)
-       call CloseFile(FileID_GluonicPotentials)
-       call CloseFile(FileID_FermionicPotentials)
-    end if
-
-    call EndSimulation
-  contains
-    !>@brief Initialisation of the simulation
-    !!@details
-    !! MPI\n
-    !! Lattice-module\n
-    !! Random number generator\n
-    !! etc.
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    impure subroutine InitSimulation
-      use precision, only: fp
-      use, intrinsic :: iso_fortran_env
-
-      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
-      use lattice,            only: InitModule_Lattice            => InitModule, nDim
-      use halocomm,           only: InitModule_HaloComm           => InitModule
-      use random,             only: InitModule_Random             => InitModule
-      use xpfft,              only: InitModule_xpFFT              => InitModule
-      use tolerances,         only: InitModule_tolerances         => InitModule
-      use NRQCD,              only: InitModule_NRQCD              => InitModule
-      implicit none
-
-      integer(int64) :: arg_count
-      character(len=80) :: arg
-      integer(int8) :: i
-
-      real(fp) :: c_re, c_im
-      real(fp) :: kspTol
-      
-      !..--** Reading simulation parameters **--..
-      arg_count = 1
-
-      ! Spatial lattice parameters (extensions, spacings)
-      do i=1,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(I4)') LatticeExtensions(i)
-      end do
-
-      do i=0,ndim
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') LatticeSpacings(i)
-      end do
-
-      ! start time
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
-      ! Center of mass time-range smax
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') TimeRange
-
-      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
-
-      ! Seed for random number generator
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') RandomNumberSeed
-
-      ! Initial gluon distribution (box): Saturation scale
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonSaturationScale
-
-      ! Initial gluon distribution (box): Amplitude
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonOccupationAmplitude
-
-      ! Coupling (only relevant in initialisation)
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') GluonCoupling
-
-      ! Tolerance for iterative PETSc solver
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(E15.7)') kspTol
-      
-      ! Heavy quark mass
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') HeavyQuarkmass
-      
-      ! Wilson coefficents
-      do i=1,nWilsonCoefficients
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_re
-         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-         read(arg,'(F10.13)') c_im
-
-         WilsonCoefficients(i) = cmplx(c_re,c_im,fp)
-      end do
-
-      ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileFermionicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileFreeFermionicWilsonLoops);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileGluonicPotentials);
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileFermionicPotentials);
-
-      !..--** Module initialisations **--..
-      call InitModule_MPIinterface
-      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
-      call InitModule_HaloComm
-      call InitModule_xpFFT
-      call InitModule_Random(RandomNumberSeed + ThisProc())
-      call InitModule_tolerances
-      call InitModule_NRQCD(HeavyQuarkMass,WilsonCoefficients,1._fp,kspTol)
-
-      call SyncAll
-    end subroutine InitSimulation
-
-    !>@brief Ending of the simulation
-    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
-    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
-    !!@date 15.02.2019
-    !!@version 1.0
-    subroutine EndSimulation
-      use mpiinterface,   only: ThisProc, FinalizeModule_MPIinterface   => FinalizeModule
-      use xpfft,          only: FinalizeModule_xpFFT          => FinalizeModule
-      use NRQCD,          only: FinalizeModule_NRQCD          => FinalizeModule
-      implicit none
-
-      call FinalizeModule_NRQCD
-      call FinalizeModule_xpFFT
-      call FinalizeModule_MPIinterface
-
-      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
-      STOP
-    end subroutine EndSimulation
-    
-  end subroutine DeterminePotentials
-
   
   !>@brief Program for measuring the various wilson lines
   !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
@@ -4203,14 +3243,8 @@ program simulation
      call MeasureWilsonLines_nonEquilibrium
   case (51)
      call MeasureWilsonAndHybridLines_Equilibrium
-  case (6)
-     call DeterminePotentials
-  case (7)
-     call DetermineCustomPotentials
-  case (8)
-     call DeterminePotential
-  case (9)
-     call DeterminePotential_oneTimePoint
+  case (52)
+     call MeasureWilsonLines_Equilibrium_StaticMeson
   case default
      call MPIStop('Invalid simulation mode selected')
   end select
