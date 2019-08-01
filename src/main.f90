@@ -1311,7 +1311,7 @@ contains
     ! Wilson loop parameters
     integer(int8), parameter :: messdir=nDim
     integer(int64) :: meanMaxLatticeIndex=20
-    integer(int64) :: x0, xr
+    integer(int64) :: position_quark, position_antiquark
     integer(int64) :: rmax, r, k
     ! Indices
     integer(int64) :: LatticeIndex_distance, shiftstep
@@ -1347,36 +1347,43 @@ contains
     allocate(ChargeDensity(nsun,nsun,GetMemorySize()))
 
     do r=0,rmax
-       x0 = 1
-       xr = x0
+       position_quark     = 1
+       position_antiquark = position_quark
 
        do k=1,r,+1
-          xr = GetNeib_G(+3,xr)
+          position_antiquark = GetNeib_G(+3,position_antiquark)
        end do
        
        do colour=1,nsun
+          ! Initialising the charge density
+          ! corresponding to a quark with colour
+          ! and an anti-quark with the corresponding anti-colour
+          ! with spatial distance r
           ChargeDensity=0
 
-          if(GetProc_G(x0)==ThisProc()) then
+          if(GetProc_G(position_quark)==ThisProc()) then
              ! Colour source
-             ChargeDensity(colour,colour,GetMemoryIndex(x0)) = &
-                  ChargeDensity(colour,colour,GetMemoryIndex(x0)) &
+             ChargeDensity(colour,colour,GetMemoryIndex(position_quark)) = &
+                  ChargeDensity(colour,colour,GetMemoryIndex(position_quark)) &
                   +1
           end if
 
-          if(GetProc_G(xr)==ThisProc()) then
+          if(GetProc_G(position_antiquark)==ThisProc()) then
              ! Colour sink
-             ChargeDensity(colour,colour,GetMemoryIndex(xr)) = &
-                  ChargeDensity(colour,colour,GetMemoryIndex(xr)) &
+             ChargeDensity(colour,colour,GetMemoryIndex(position_antiquark)) = &
+                  ChargeDensity(colour,colour,GetMemoryIndex(position_antiquark)) &
                   -1
           end if
 
-          localcharge=sum(chargedensity)
-          
-          call MPI_AllReduce(LocalCharge,TotalCharge,1_intmpi,&
-               GetRealSendType(),MPI_SUM,MPI_COMM_WORLD,mpierr)
+          ! Initialising the gauge configuration for the given charge density
 
-          if(ThisProc()==0) print*,x0,xr,TotalCharge
+
+
+          ! Performing update steps while computing energy tensor
+
+
+
+          
        end do
     end do
     
