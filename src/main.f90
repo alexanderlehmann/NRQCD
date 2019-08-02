@@ -1299,7 +1299,7 @@ contains
     integer(int64) :: nefieldinit,nequilibriumtimesteps
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf_t1, GaugeConf_t2, GaugeConf_initial, ColdGaugeConf, GaugeConf_old
+    type(GaugeConfiguration) :: GaugeConf
     
     ! Counting
     integer :: i
@@ -1346,7 +1346,7 @@ contains
 
     allocate(ChargeDensity(nsun,nsun,GetMemorySize()))
 
-    do r=0,rmax
+    do r=1,rmax
        position_quark     = 1
        position_antiquark = position_quark
 
@@ -1374,11 +1374,12 @@ contains
                   ChargeDensity(colour,colour,GetMemoryIndex(position_antiquark)) &
                   -1
           end if
-
+          
           ! Initialising the gauge configuration for the given charge density
+          call GaugeConf%EquilibriumInit(&
+               Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename,ChargeDensity)
 
-
-
+          call MPIstop
           ! Performing update steps while computing energy tensor
 
 
