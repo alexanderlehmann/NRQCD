@@ -1282,6 +1282,9 @@ contains
     use statistics
     use su3, only: nsun
 
+
+    use matrixoperations
+
     implicit none
 
     ! Simulation parameters
@@ -1312,20 +1315,13 @@ contains
     integer(int8), parameter :: messdir=nDim
     integer(int64) :: meanMaxLatticeIndex=20
     integer(int64) :: position_quark, position_antiquark
-    integer(int64) :: rmax, r, k
+    integer(int8) :: rmax, r, k
     ! Indices
     integer(int64) :: LatticeIndex_distance, shiftstep
     integer(int8) :: colour
 
-    ! Observables
-    complex(fp), allocatable :: WilsonLoops(:,:)
-
     real(fp) :: time
     integer(int64) :: TimePoints
-    ! Output
-    integer(int8) :: FileID_WilsonLoops
-
-    character(len=80) :: FileName_WilsonLoops
 
     integer(intmpi) :: proc
     
@@ -1333,61 +1329,19 @@ contains
     integer(int64) :: iwork, nwork
 
     ! Charge density of static meson
-    real(fp), allocatable :: ChargeDensity(:,:,:)
+    real(fp), allocatable :: ChargeDensity(:,:)
 
     real(fp) :: localcharge,totalcharge
-
     
     call InitSimulation
 
     TimePoints = nint(TimeRange/LatticeSpacings(0))
 
-    allocate(WilsonLoops(0:TimePoints,0:rmax))
+    ! Initialising the gauge configuration for the given charge density
+    call GaugeConf%EquilibriumInit(&
+         Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)!,r)!ChargeDensity,r)
 
-    allocate(ChargeDensity(nsun,nsun,GetMemorySize()))
-
-    do r=1,rmax
-       position_quark     = 1
-       position_antiquark = position_quark
-
-       do k=1,r,+1
-          position_antiquark = GetNeib_G(+3,position_antiquark)
-       end do
-       
-       do colour=1,nsun
-          ! Initialising the charge density
-          ! corresponding to a quark with colour
-          ! and an anti-quark with the corresponding anti-colour
-          ! with spatial distance r
-          ChargeDensity=0
-
-          if(GetProc_G(position_quark)==ThisProc()) then
-             ! Colour source
-             ChargeDensity(colour,colour,GetMemoryIndex(position_quark)) = &
-                  ChargeDensity(colour,colour,GetMemoryIndex(position_quark)) &
-                  +1
-          end if
-
-          if(GetProc_G(position_antiquark)==ThisProc()) then
-             ! Colour sink
-             ChargeDensity(colour,colour,GetMemoryIndex(position_antiquark)) = &
-                  ChargeDensity(colour,colour,GetMemoryIndex(position_antiquark)) &
-                  -1
-          end if
-          
-          ! Initialising the gauge configuration for the given charge density
-          call GaugeConf%EquilibriumInit(&
-               Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename,ChargeDensity)
-
-          call MPIstop
-          ! Performing update steps while computing energy tensor
-
-
-
-          
-       end do
-    end do
-    
+    ! Performing update steps while computing energy tensor
 
     call EndSimulation
 
@@ -1434,6 +1388,7 @@ contains
       integer(int8) :: i, j
       
       real(fp) :: c_re, c_im
+      character(len=100) :: FileName_ChargeDensity
       
       !..--** Reading simulation parameters **--..
       arg_count = 1
@@ -1474,8 +1429,6 @@ contains
       read(arg,'(I6)') nequilibriumtimesteps
       
       ! Output filenames
-      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
-      
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I1)') j
       if(j==0) then
@@ -1484,6 +1437,8 @@ contains
          MeasureEnergy=.true.
          arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
       end if
+
+       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_ChargeDensity);
       
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
@@ -1493,8 +1448,51 @@ contains
       call InitModule_Random(RandomNumberSeed + ThisProc())
       call InitModule_tolerances
 
+      ! Read charge density
+      call ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
+
       call SyncAll
     end subroutine InitSimulation
+    
+    impure subroutine ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
+      use mpiinterface
+      use io
+      implicit none
+      real(fp), allocatable, intent(out) :: ChargeDensity(:,:)
+      character(len=*), intent(in) :: FileName_ChargeDensity
+
+      integer(int64) :: position(nDim), latticeindex
+      integer(int8) :: colour
+      real(fp), dimension(nSUN) :: charges
+
+      integer(int8) :: FileID_ChargeDensity
+      integer(int64) :: nLines, iLine
+    
+      allocate(ChargeDensity(nsun,GetMemorySize()))
+      ChargeDensity = 0
+
+      FileID_ChargeDensity = OpenFile(FileName_ChargeDensity,st='OLD',fm='FORMATTED',act='READ')
+      ! Determine number of entries in chargedensity-file
+      nLines = 0
+      do
+         READ(FileID_ChargeDensity,*,END=10)
+         nLines = nLines + 1
+      end do
+10    REWIND(FileID_ChargeDensity)
+      print*,nLines
+      
+      ! Read in charge density
+      do iLine=1,nLines
+         READ(FileID_ChargeDensity,fmt=*) position, charges
+
+         LatticeIndex = GetLatticeIndex(position)
+
+         if(GetProc_G(LatticeIndex)==ThisProc()) then
+            ChargeDensity(:,GetMemoryIndex(LatticeIndex)) = &
+                 ChargeDensity(:,GetMemoryIndex(LatticeIndex)) + Charges
+         end if
+      end do
+    end subroutine ReadChargeDensity
 
     !>@brief Ending of the simulation
     !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)

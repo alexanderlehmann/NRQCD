@@ -36,7 +36,7 @@ module su3
   !>@brief SU(3)-generators aka Gell-Mann-matrices
   !!@details
   !! The SU(3)-generators are chosen as Gell-Mann-matrices times \f$1/2\f$ following the convention
-  !! \f$\Tr(T^a\cdot T^b)=2\delta_{a,b}\f$:
+  !! \f$\Tr(T^a\cdot T^b)=\frac{1}{2}\delta_{a,b}\f$:
   !! \f{align*}{
   !! T_0=\begin{pmatrix}
   !! +1 & 0 & 0 \\
