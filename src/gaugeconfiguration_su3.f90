@@ -369,11 +369,12 @@ contains ! Module procedures
     end forall
   end subroutine ColdInit
 
-  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,MeasureEnergy,filename)
+  impure subroutine EquilibriumInit(GaugeConf,Beta,nefieldinit,nequilibrium,tolerance_Eprojection,ChargeDensity,MeasureEnergy,filename)
     use lattice!, only: GetLatticeSpacing, GetMemorySize, GetProc_M,&
          !ndim, GetNeib_M, GetLatticeSize
     use random, only: GetRandomNormalCmplx
-    use mpiinterface, only: ThisProc, mpistop
+    use mpiinterface, only: ThisProc, mpistop, intmpi, GetRealSendType
+    use mpi
     use io
     use matrixoperations
 
@@ -386,13 +387,15 @@ contains ! Module procedures
     integer(int64), intent(in) :: nefieldinit
     integer(int64), intent(in) :: nequilibrium
 
+    real(fp), optional, intent(in) :: tolerance_Eprojection
+    real(fp), optional, intent(in) :: ChargeDensity(:,:)
     logical, optional, intent(in) :: MeasureEnergy
     character(len=*), optional, intent(in) :: filename
     
     real(fp) :: sigma
     
     integer(int8) :: k, a
-    integer(int64) :: MemoryIndex, x,y,z
+    integer(int64) :: LatticeIndex, MemoryIndex, x,y,z
     complex(fp) :: r(ngen)
 
     integer :: iefieldinit
@@ -400,7 +403,7 @@ contains ! Module procedures
 
     
     real(fp) :: energy, deviation
-    real(fp), parameter :: kappa=0.06_fp!0.12_fp
+    real(fp), parameter :: kappa=0.01_fp!0.12_fp
     real(fp) :: kappa_times_dt
     real(fp), dimension(ngen) :: ec
     complex(fp), dimension(nsun,nsun) :: U, G, Gneib, E, term, uconjg
@@ -416,8 +419,20 @@ contains ! Module procedures
     character(len=80) :: filename_force='force.txt'
     integer(int8) :: fileid_force
 
+    integer(intmpi) :: proc, mpierr,mpistatus(mpi_status_size)
+    real(fp) :: force(nDim)
 
-    
+    real(fp) :: tolerance_Eprojection_
+
+    type(GaugeConfiguration) :: GaugeConf_previous
+
+    if(present(tolerance_Eprojection)) then
+       tolerance_Eprojection_ = tolerance_Eprojection
+    else
+       ! Default tolerance for projection of E-fields
+       tolerance_Eprojection_ = 1E-3
+    end if
+
     sigma = sqrt(4/beta)
 
     kappa_times_dt = kappa*GetLatticeSpacing(0_int8)
@@ -450,22 +465,36 @@ contains ! Module procedures
        end do
        
        call GaugeConf%CommunicateBoundary()
+       if(present(ChargeDensity)) then
+          deviation = GetGdeviation(GaugeConf,ChargeDensity)
+       else
+          deviation = GetGdeviation(GaugeConf)
+       end if
        
-       deviation = GetGdeviation(GaugeConf)!/GetLatticeSize()
-       print*,deviation
+       if(ThisProc()==0) print*,deviation
        ! Projection of the electric field
        i = 0
-       do while(deviation>7E-3)
+       do while(deviation>tolerance_Eprojection_)
           i = i + 1
+          GaugeConf_previous = GaugeConf
+          
           do MemoryIndex=1,GetMemorySize()
              if(ThisProc()==GetProc_M(MemoryIndex)) then
-                G = GetG(GaugeConf,MemoryIndex)
+                if(present(ChargeDensity)) then
+                   G = GetG(GaugeConf_previous,MemoryIndex,ChargeDensity)
+                else
+                   G = GetG(GaugeConf_previous,MemoryIndex)
+                end if
                 do k=1,nDim
-                   ec = GaugeConf%GetEfield_M([1_int8:ngen],k,MemoryIndex)
-                   U = GaugeConf%Links(:,:,k,MemoryIndex)
+                   ec = GaugeConf_previous%GetEfield_M([1_int8:ngen],k,MemoryIndex)
+                   U = GaugeConf_previous%Links(:,:,k,MemoryIndex)
                    E = GetAlgebraMatrix(ec)
 
-                   Gneib = GetG(GaugeConf,GetNeib_M(+k,MemoryIndex))
+                   if(present(ChargeDensity)) then
+                      Gneib = GetG(GaugeConf_previous,GetNeib_M(+k,MemoryIndex),ChargeDensity)
+                   else
+                      Gneib = GetG(GaugeConf_previous,GetNeib_M(+k,MemoryIndex))
+                   end if
                    
                    term = &
                         kappa_times_dt*(matmul(matmul(matmul(&
@@ -482,10 +511,14 @@ contains ! Module procedures
              end if
           end do
           call GaugeConf%CommunicateBoundary()
-          
-          deviation = GetGdeviation(GaugeConf)
+         
+          if(present(ChargeDensity)) then
+             deviation = GetGdeviation(GaugeConf,ChargeDensity)
+          else
+             deviation = GetGdeviation(GaugeConf)
+          end if
 
-          print*,deviation
+          if(ThisProc()==0) print*,deviation
        end do
 
        !energydensity_fileid = OpenFile(energydensity_filename, st='REPLACE',fm='FORMATTED',act='WRITE')
@@ -498,15 +531,51 @@ contains ! Module procedures
        do x=1,GetLatticeExtension(1_int8)
           do y=1,GetLatticeExtension(2_int8)
              do z=1,GetLatticeExtension(3_int8)
+                LatticeIndex = GetLatticeIndex([x,y,z])
+                proc = GetProc_G(LatticeIndex)
+
+                if(Proc==0) then
+                   if(ThisProc()==0) then
+                      ! Root process is sender, i.e. governs that partition of the lattice
+                      force = GetForce_G(GaugeConf,LatticeIndex,[1_int8,2_int8,3_int8])
+                   end if
+                else
+                   ! Sender and Reciever(0) are different
+                   if(ThisProc()==proc) then
+                      ! Sender
+                      force = GetForce_G(GaugeConf,LatticeIndex,[1_int8,2_int8,3_int8])
+                      
+                      call mpi_send(&
+                           force,& ! What to send
+                           int(ndim,intmpi),             & ! How many points
+                           GetRealSendType(),            & ! What type
+                           0_intmpi,                     & ! Recieving process
+                           int(LatticeIndex,intmpi),     & ! Tag
+                           MPI_COMM_WORLD,               & ! Communicator
+                           mpierr)                         ! Error code
+                   elseif(ThisProc()==0) then
+                      ! Reciever(0)
+                      call mpi_recv(&
+                           force,                        & ! What to recieve
+                           int(ndim,intmpi),             & ! How many points
+                           GetRealSendType(),            & ! What type
+                           proc,                         & ! Sending process
+                           LatticeIndex,                 & ! Tag
+                           MPI_COMM_WORLD,               & ! Communicator
+                           mpistatus,                    & ! Status
+                           mpierr)                         ! Error code
+                   end if
+                end if
+
+                if(ThisProc()==0) then
+                   write(FileID_Force,'(3(I2.2,1X))',advance='no') x, y, z
+                   write(FileID_Force,'(3(SP,E13.6,1X))') Force
+                end if
+
+                
                 !write(energydensity_fileid,'(3(I2.2,1X))',advance='no') x, y, z
 
                 !write(energydensity_fileid,'(1(SP,E13.6))') sum(GaugeConf%efield(:,:,GetMemoryIndex(GetLatticeIndex([x,y,z])))**2)/2
-
-                write(FileID_Force,'(3(I2.2,1X))',advance='no') x, y, z
-                write(FileID_Force,'(3(SP,E13.6,1X))') &
-                     GetForce_G(GaugeConf,GetLatticeIndex([x,y,z]),1_int8),&
-                     GetForce_G(GaugeConf,GetLatticeIndex([x,y,z]),2_int8),&
-                     GetForce_G(GaugeConf,GetLatticeIndex([x,y,z]),3_int8)
              end do
           end do
        end do
@@ -538,13 +607,15 @@ contains ! Module procedures
     end if
     
   contains
-    impure real(fp) function GetGdeviation(GaugeConf)
+    impure real(fp) function GetGdeviation(GaugeConf,ChargeDensity)
     use mpiinterface, only: intmpi, GetRealSendType, ThisProc
     use mpi
     use lattice, only: nDim, GetLatticeSpacing,GetNeib_M,GetLatticeIndex_M, GetMemorySize, GetProc_M
     implicit none
     !> Gauge configuration
     type(GaugeConfiguration), intent(in) :: GaugeConf
+
+    real(fp), optional, intent(in) :: ChargeDensity(:,:)
 
     integer(intmpi) :: mpierr
     real(fp) :: local_contribution
@@ -558,30 +629,19 @@ contains ! Module procedures
     ! 1. Calculation of local contribution
     local_contribution = 0
     
-    !do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
     do MemoryIndex=1,GetMemorySize()
-       !do i=1,ndim
-          if(ThisProc()==GetProc_M(MemoryIndex)) then
-             !efield = GaugeConf%GetEfield_M([1_int8:ngen],i,MemoryIndex)
-
-             !neib = GetNeib_M(-i,MemoryIndex)
-             !efield_neib = GaugeConf%GetEfield_M([1_int8:ngen],i,Neib)
-
-             !Mefield = GetAlgebraMatrix(efield)
-             !Mefield_neib = GetAlgebraMatrix(efield_neib)
-
-             !Link_neib = GaugeConf%GetLink_M(i,Neib)
-
+       if(ThisProc()==GetProc_M(MemoryIndex)) then
+          if(present(ChargeDensity)) then
+             G = GetG(GaugeConf,MemoryIndex,ChargeDensity)
+          else
              G = GetG(GaugeConf,MemoryIndex)
-             do concurrent(a=1_int8:ngen)
-                if(2*Abs(GetTraceWithGenerator(a,G))>local_contribution) then
-                   local_contribution = 2*Abs(GetTraceWithGenerator(a,G))
-                end if
-                !local_contribution = local_contribution &
-                !     + 2*Abs(GetTraceWithGenerator(a,G))
-             end do
           end if
-       !end do
+          do concurrent(a=1_int8:ngen)
+             if(2*Abs(GetTraceWithGenerator(a,G))>local_contribution) then
+                local_contribution = 2*Abs(GetTraceWithGenerator(a,G))
+             end if
+          end do
+       end if
     end do
     ! 2. MPI-Sum over all partitions
     call MPI_ALLREDUCE(&
@@ -593,21 +653,20 @@ contains ! Module procedures
          MPI_COMM_WORLD,mpierr)
     end function GetGdeviation
     
-    impure function GetG(GaugeConf,MemoryIndex)
+    impure function GetG(GaugeConf,MemoryIndex,ChargeDensity)
       use lattice!, only: nDim, GetNeib_M
       implicit none
       type(GaugeConfiguration), intent(in) :: GaugeConf
       integer(int64), intent(in) :: MemoryIndex
-
+      real(fp), intent(in), optional :: ChargeDensity(:,:)
+      
       complex(fp), dimension(nsun,nsun) :: GetG, Uneib, E, Eneib
       real(fp), dimension(ngen) :: ec,ecneib
 
-      integer(int8) :: i,a
+      integer(int8) :: i,a,colour
       integer(int64) :: neib
 
-      complex(fp) :: chargedensity(nsun,nsun)
-      integer(int64), dimension(ndim), parameter :: source_pos = [8,8,6], sink_pos = [8,8,10]
-      integer(int64) :: source_index, sink_index
+      complex(fp) :: ChargeMatrix(nsun,nsun)
 
       GetG = 0
       do i=1,ndim
@@ -623,37 +682,17 @@ contains ! Module procedures
               + (E - matmul(matmul(conjg(transpose(Uneib)),Eneib),Uneib))/GetLatticeSpacing(i)
       end do
 
-      source_index = GetMemoryIndex(GetLatticeIndex(source_pos))
-      sink_index = GetMemoryIndex(GetLatticeIndex(sink_pos))
-      
-      if(MemoryIndex==source_index) then
-         chargedensity = 0
-         chargedensity(1,1) = 1/product(GetLatticeSpacing([1_int8,2_int8,3_int8]))
-
-         !print*,GetG
-         !print*
+      if(present(ChargeDensity)) then
+         ChargeMatrix = 0
+         do colour=1,nsun
+            ChargeMatrix(colour,colour) = ChargeDensity(colour,MemoryIndex)&
+                 /product(GetLatticeSpacing([1_int8,2_int8,3_int8]))
+         end do
+         
          do a=1,ngen
             GetG = GetG &
-                 - GetGenerator(a)*GetTrace(matmul(GetGenerator(a),ChargeDensity))
+                 - GetGenerator(a)*GetTrace(matmul(GetGenerator(a),ChargeMatrix))
          end do
-         !print*,GetG
-         !print*,GetLatticePosition(GetLatticeIndex_M(MemoryIndex))
-         !print*
-      end if
-
-      if(MemoryIndex==sink_index) then
-         chargedensity = 0
-         chargedensity(1,1) = -1/product(GetLatticeSpacing([1_int8,2_int8,3_int8]))
-
-         !print*,GetG
-         !print*
-         do a=1,ngen
-            GetG = GetG &
-                 - GetGenerator(a)*GetTrace(matmul(GetGenerator(a),ChargeDensity))
-         end do
-         !print*,GetG
-         !print*,GetLatticePosition(GetLatticeIndex_M(MemoryIndex))
-         !print*
       end if
 
       GetG = GetG/GetLatticeSpacing(0_int8)
@@ -2398,7 +2437,7 @@ contains ! Module procedures
 
 
   
-  pure function GetForce_G(GaugeConf,LatticeIndex,i) result(res)
+  elemental function GetForce_G(GaugeConf,LatticeIndex,i) result(res)
     use lattice
     use mpiinterface
     implicit none
@@ -2414,17 +2453,22 @@ contains ! Module procedures
     real(fp), dimension(nDim) :: as
 
     as = GetLatticeSpacing([1_int8,2_int8,3_int8])
-    
-    res = -( &
-         + GetEMTensor_G(GaugeConf,LatticeIndex,i,1)*as(2)*as(3) &
-         + GetEMTensor_G(GaugeConf,LatticeIndex,i,2)*as(1)*as(3) &
-         + GetEMTensor_G(GaugeConf,LatticeIndex,i,3)*as(1)*as(2) &
+
+    res = ( &
+         + ( GetEMTensor_G(GaugeConf,GetNeib_G(+1_int8,LatticeIndex),i,1) &
+         -   GetEMTensor_G(GaugeConf,GetNeib_G(-1_int8,LatticeIndex),i,1)) *as(2)*as(3) &
+         + ( GetEMTensor_G(GaugeConf,GetNeib_G(+2_int8,LatticeIndex),i,2) &
+         -   GetEMTensor_G(GaugeConf,GetNeib_G(-2_int8,LatticeIndex),i,2))*as(1)*as(3) &
+         + ( GetEMTensor_G(GaugeConf,GetNeib_G(+3_int8,LatticeIndex),i,3) &
+         -   GetEMTensor_G(GaugeConf,GetNeib_G(-3_int8,LatticeIndex),i,3))*as(1)*as(2) &
          ) / (as(1)*as(2)+as(1)*as(3)+as(2)*as(3))
   end function GetForce_G
   
   pure function GetEMTensor_G(GaugeConf,latticeindex,mu,nu) result(res)
     use lattice
     use mpiinterface
+    
+    use srt, only: metric
     implicit none
     !> SU(3)-Gauge configuration
     type(GaugeConfiguration), intent(in) :: GaugeConf
@@ -2435,23 +2479,26 @@ contains ! Module procedures
 
     real(fp) :: res
 
-    integer(int8) :: a, rho, sigma
+    integer(int8) :: a
 
     real(fp) :: fa1,fa2
 
     integer(intmpi) :: proc
 
+    ! metric indices
+    integer(int8) :: alpha,beta
+
     proc = GetProc_G(LatticeIndex)
 
     res = 0
     if(ThisProc()==proc) then
-       ! F(x,a,mu,rho)F(x,a,nu,rho)
+       ! F(x,a,mu,alpha)F(x,a,nu,beta)g(beta,alpha)
        do a=1,ngen
-          do rho=0,ndim
-             fa1 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,mu,rho,LatticeIndex)
-             fa2 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,mu,rho,LatticeIndex)
+          do alpha=0,ndim
+             fa1 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,mu,alpha,LatticeIndex)
+             fa2 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,nu,alpha,LatticeIndex)
 
-             res = res + fa1*fa2
+             res = res + fa1*fa2*metric(alpha,alpha)
           end do
        end do
 
@@ -2459,13 +2506,13 @@ contains ! Module procedures
        ! * F(x,a,rho,sigma)F(x,a,rho,sigma)
        if(mu==nu) then
           do a=1,ngen
-             do rho=0,ndim
-                do sigma=0,ndim
-                   fa1 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G&
-                        (a,rho,sigma,LatticeIndex)
-                   fa2 = fa1
-
-                   res = res - fa1*fa2/4
+             do alpha=0,ndim
+                do beta=0,ndim
+                   fa1 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,&
+                        alpha,beta,LatticeIndex)
+                   fa2 = GaugeConf%GetFieldStrengthTensorAlgebraCoordinate_G(a,&
+                        alpha,beta,LatticeIndex)
+                   res = res - fa1*fa2/4*metric(mu,nu)*metric(alpha,alpha)*metric(beta,beta)
                 end do
              end do
           end do

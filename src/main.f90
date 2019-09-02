@@ -71,7 +71,7 @@ contains
     nwork = tsteps
     
     ! Initialisation, defining the point t=0
-    call Gaugeconf_t%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)
+    call Gaugeconf_t%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy=MeasureEnergy,Filename=EnergyFilename)
     call HeavyField_t%InitSinglePoint(&
          latticeindex_quark=1,&
          latticeindex_antiq=1)
@@ -919,7 +919,7 @@ contains
        call ColdGaugeConf%ColdInit
     end if
     
-    call GaugeConf_initial%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)
+    call GaugeConf_initial%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy=MeasureEnergy,FileName=EnergyFilename)
     if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
     GaugeConf_t1 = GaugeConf_initial
 
@@ -1330,7 +1330,8 @@ contains
 
     ! Charge density of static meson
     real(fp), allocatable :: ChargeDensity(:,:)
-
+    real(fp) :: tolerance_Eprojection
+    
     real(fp) :: localcharge,totalcharge
     
     call InitSimulation
@@ -1339,7 +1340,8 @@ contains
 
     ! Initialising the gauge configuration for the given charge density
     call GaugeConf%EquilibriumInit(&
-         Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy,EnergyFilename)!,r)!ChargeDensity,r)
+         Beta,nefieldinit,nequilibriumtimesteps,tolerance_Eprojection,&
+         ChargeDensity,MeasureEnergy,EnergyFilename)
 
     ! Performing update steps while computing energy tensor
 
@@ -1424,6 +1426,9 @@ contains
       read(arg,'(F10.13)') Beta
 
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(E15.7)') tolerance_Eprojection
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I6)') nefieldinit
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(I6)') nequilibriumtimesteps
@@ -1479,7 +1484,6 @@ contains
          nLines = nLines + 1
       end do
 10    REWIND(FileID_ChargeDensity)
-      print*,nLines
       
       ! Read in charge density
       do iLine=1,nLines
@@ -2677,7 +2681,7 @@ contains
 
     call InitSimulation
     
-    call Gaugeconf%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureThermilisationEnergy,Filename_ThermilisationEnergy)
+    call Gaugeconf%EquilibriumInit(Beta,nefieldinit,nequilibriumtimesteps,MeasureEnergy=MeasureThermilisationEnergy,FileName=Filename_ThermilisationEnergy)
 
     call PrintObservables(GaugeConf=GaugeConf)
 
