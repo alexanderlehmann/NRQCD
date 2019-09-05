@@ -193,7 +193,7 @@ contains
     !> Unitary transform which diagonalizes \f$A\f$
     complex(fp), intent(out), optional :: U(size(A_,1),size(A_,1))
     !> If given, sorting of eigen-values performed according to \f$d_i>d_{i+1}\forall i\f$
-    integer,  intent(in),  optional :: sort
+    logical,  intent(in),  optional :: sort
 
     complex(fp)  :: A(size(A_,1),size(A_,1))
     integer    :: n,p, q, j
@@ -286,26 +286,28 @@ contains
     end do
 
     if( present(sort) ) then
-       do p = 1, n - 1
-          j = p
-          t = d(p)
-          do q = p + 1, n
-             if( (t - d(q)) .gt. 0 ) then
-                j = q
-                t = d(q)
+       if(sort) then
+          do p = 1, n - 1
+             j = p
+             t = d(p)
+             do q = p + 1, n
+                if( (t - d(q)) .gt. 0 ) then
+                   j = q
+                   t = d(q)
+                end if
+             end do
+
+             if( j .ne. p ) then
+                d(j) = d(p)
+                d(p) = t
+                do q = 1, n
+                   x = U(p,q)
+                   U(p,q) = U(j,q)
+                   U(j,q) = x
+                end do
              end if
           end do
-
-          if( j .ne. p ) then
-             d(j) = d(p)
-             d(p) = t
-             do q = 1, n
-                x = U(p,q)
-                U(p,q) = U(j,q)
-                U(j,q) = x
-             end do
-          end if
-       end do
+       end if
     end if
   end subroutine EigenH
 
