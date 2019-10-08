@@ -450,7 +450,8 @@ contains ! Module procedures
        tolerance_Eprojection_ = 1E-3
     end if
 
-    sigma = sqrt(4/beta)
+    !sigma = sqrt(4/beta)
+    sigma = sqrt(1/beta)
 
     kappa_times_dt = kappa*GetLatticeSpacing(0_int8)
 
@@ -476,7 +477,7 @@ contains ! Module procedures
              do k=1,nDim
                 r = sigma*GetRandomNormalCmplx(int(ngen,int64))
 
-                GaugeConf%Efield(:,k,MemoryIndex) = 0 !real(r,fp)*GetLatticeSpacing(0_int8)
+                GaugeConf%Efield(:,k,MemoryIndex) = real(r,fp)*GetLatticeSpacing(0_int8)
              end do
           end if
        end do
@@ -488,7 +489,7 @@ contains ! Module procedures
           deviation = GetGdeviation(GaugeConf)
        end if
 
-       if(ThisProc()==0) print*,deviation
+       !if(ThisProc()==0) print*,deviation
        ! Projection of the electric field
        iprojection = 0
        do while(deviation>tolerance_Eprojection_)
@@ -535,18 +536,10 @@ contains ! Module procedures
              deviation = GetGdeviation(GaugeConf)
           end if
 
-          if(ThisProc()==0) print*,deviation
+          !if(ThisProc()==0) print*,deviation
        end do
 
-       !if(ThisProc()==GetProc_G(1_int64)) then
-       !   EMTensor = GetEMTensor_G(GaugeConf,1_int64,1_int8,1_int8)
-       !
-       !   call GetPrincipalAxes(EMTensor,EigenValues,EigenVectors)
-       !end if
-       !call MPIStop
-
-       !energydensity_fileid = OpenFile(energydensity_filename, st='REPLACE',fm='FORMATTED',act='WRITE')
-       !write(energydensity_fileid,'(A9)') 'x y z T00'
+       goto 667 ! jump over measurement
 
        fileid_pa = OpenFile(filename_pa, st='REPLACE',fm='FORMATTED',act='WRITE')
        write(fileid_pa,'(A50)') 'x y z ev1 ev1x ev1y ev1z ev2 ev2x ev2y ev2z ev3 ev3x ev3y ev3z'
@@ -694,6 +687,7 @@ contains ! Module procedures
 666    continue
 
        return
+667    continue
        ! Evolution of the gauge links
        do iequibstep=1,nequilibrium
           call GaugeConf%Update
@@ -709,6 +703,13 @@ contains ! Module procedures
              end if
           end if
        end if
+       if(present(ChargeDensity)) then
+          deviation = GetGdeviation(GaugeConf,ChargeDensity)
+       else
+          deviation = GetGdeviation(GaugeConf)
+       end if
+
+       if(ThisProc()==0) print*,'G[U,E]=',deviation
     end do
 
     if(present(MeasureEnergy)) then

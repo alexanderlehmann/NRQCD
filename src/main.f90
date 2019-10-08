@@ -1294,7 +1294,6 @@ contains
     integer(int64) :: RandomNumberSeed
 
     real(fp) :: Beta
-    real(fp) :: tstart
     real(fp) :: TimeRange
 
     logical :: MeasureEnergy
@@ -1302,7 +1301,7 @@ contains
     integer(int64) :: nefieldinit,nequilibriumtimesteps
     
     ! Physical fields
-    type(GaugeConfiguration) :: GaugeConf
+    type(GaugeConfiguration) :: GaugeConf_initial, GaugeConf_t
     
     ! Counting
     integer :: i
@@ -1312,10 +1311,12 @@ contains
     integer(intmpi) :: mpierr
     
     ! Wilson loop parameters
-    integer(int8), parameter :: messdir=nDim
+    integer(int8)  :: messdir
+    integer(int64) :: r
+    
     integer(int64) :: meanMaxLatticeIndex=20
     integer(int64) :: position_quark, position_antiquark
-    integer(int8) :: rmax, r, k
+    integer(int8) :: k
     ! Indices
     integer(int64) :: LatticeIndex_distance, shiftstep
     integer(int8) :: colour
@@ -1333,18 +1334,44 @@ contains
     real(fp) :: tolerance_Eprojection
     
     real(fp) :: localcharge,totalcharge
+
+    ! Observables
+    complex(fp), allocatable :: WilsonLoops(:)
+    
+    character(len=80) :: &
+         FileName_WilsonLoops
     
     call InitSimulation
-
+    
     TimePoints = nint(TimeRange/LatticeSpacings(0))
 
     ! Initialising the gauge configuration for the given charge density
-    call GaugeConf%EquilibriumInit(&
+    call GaugeConf_initial%EquilibriumInit(&
          Beta,nefieldinit,nequilibriumtimesteps,tolerance_Eprojection,&
          ChargeDensity,MeasureEnergy,EnergyFilename)
 
+    if(thisproc()==0) write(output_unit,*) 'Done: Equilibration'
+    
     ! Performing update steps while computing energy tensor
+    
+    allocate(WilsonLoops(0:TimePoints))
 
+    
+    nwork = TimePoints+1
+
+    iwork = 0
+    GaugeConf_t = GaugeConf_initial
+    ! Setting time of gauge conf to t1
+    do it=0,TimeSteps,+1
+       WilsonLoops(it) = GetWilsonLoop(GaugeConf_initial,GaugeConf_t,r,messdir)
+       
+       call GaugeConf_t%Update
+       iwork = iwork + 1
+       if(ThisProc()==0) write(output_unit,'(F7.3,A1)') real(iwork)/nwork*100,'%'
+    end do
+
+    call PrintObservables
+    
     call EndSimulation
 
   contains
@@ -1361,6 +1388,45 @@ contains
 
       character(len=3) :: adv
 
+      integer(int8) :: rmax, FileID_WilsonLoops
+
+      rmax = r
+      
+      ! Opening files and printing header
+      if(ThisProc()==0) then
+         ! Opening files
+         FileID_WilsonLoops = OpenFile(filename=FileName_WilsonLoops,&
+              st='REPLACE',fm='FORMATTED',act='WRITE')
+
+         write(FileID_WilsonLoops,'(A1,1X)',advance='no') 't'
+         
+         if(r<rmax) then
+            adv='no'
+         else
+            adv='yes'
+         end if
+
+         write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance='no') 'Re(r=',r,')'
+         write(FileID_WilsonLoops,'(A5,I0.2,A1,1X)',advance=trim(adv)) 'Im(r=',r,')'
+
+         do it=lbound(WilsonLoops,1),ubound(WilsonLoops,1)
+            time = it*LatticeSpacings(0)
+            
+            write(FileID_WilsonLoops,'(SP,E16.9,1X)',advance='no') time
+
+            if(r<rmax) then
+               adv='no'
+            else
+               adv='yes'
+            end if
+
+            write(FileID_WilsonLoops,'(2(SP,E16.9,1X))',advance=trim(adv)) &
+                 real(WilsonLoops(it)),aimag(WilsonLoops(it))
+         end do
+
+         call CloseFile(FileID_WilsonLoops)
+      end if
+      
     end subroutine PrintObservables
 
     !>@brief Initialisation of the simulation
@@ -1406,9 +1472,6 @@ contains
          read(arg,'(F10.13)') LatticeSpacings(i)
       end do
 
-      ! start time
-      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(F10.13)') tstart
       ! Center of mass time-range smax
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
       read(arg,'(F10.13)') TimeRange
@@ -1416,7 +1479,10 @@ contains
       TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
 
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I4)') rmax
+      read(arg,'(I1)') messdir
+      
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I1)') r
       
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
@@ -1443,7 +1509,9 @@ contains
          arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
       end if
 
-       arg_count = arg_count +1; call get_command_argument(arg_count,FileName_ChargeDensity);
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_ChargeDensity);
+
+      arg_count = arg_count +1; call get_command_argument(arg_count,FileName_WilsonLoops);
       
       !..--** Module initialisations **--..
       call InitModule_MPIinterface
