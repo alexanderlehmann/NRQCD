@@ -360,7 +360,7 @@ contains ! Module procedures
   end function GetWilsonLine
 
   impure function GetWilsonLoop(&
-       GaugeField_t1, GaugeField_t2,distance, proddir) result(res)
+       GaugeField_t1, GaugeField_t2,distance, proddir, origin_in) result(res)
     use matrixoperations, only: GetTrace
     use lattice, only: GetLatticeSize
     use mpiinterface, only: ThisProc
@@ -376,13 +376,13 @@ contains ! Module procedures
     complex(fp) :: res
     
     complex(fp), dimension(nColours,nColours) :: LinkProduct_t1, LinkProduct_t2, WholeProduct
-
+    
+    integer(int64), optional :: origin_in
     integer(int64) :: origin
 
-    res = 0
-    
-    do origin=1,GetLatticeSize()
-
+    if(present(origin_in)) then
+       origin = origin_in
+       
        ! Getting link product
        LinkProduct_t1 = GetWilsonLine(GaugeField_t1,origin,distance,proddir)
        LinkProduct_t2 = GetWilsonLine(GaugeField_t2,origin,distance,proddir)
@@ -390,9 +390,23 @@ contains ! Module procedures
        ! Final multiplication step
        WholeProduct = matmul(LinkProduct_t1,conjg(transpose(LinkProduct_t2)))
 
-       res = res + GetTrace(WholeProduct)/nColours
-    end do
-    res = res / GetLatticeSize()
+       res = GetTrace(WholeProduct)/nColours
+    else
+       res = 0
+
+       do origin=1,GetLatticeSize()
+
+          ! Getting link product
+          LinkProduct_t1 = GetWilsonLine(GaugeField_t1,origin,distance,proddir)
+          LinkProduct_t2 = GetWilsonLine(GaugeField_t2,origin,distance,proddir)
+
+          ! Final multiplication step
+          WholeProduct = matmul(LinkProduct_t1,conjg(transpose(LinkProduct_t2)))
+
+          res = res + GetTrace(WholeProduct)/nColours
+       end do
+       res = res / GetLatticeSize()
+    end if
   end function GetWilsonLoop
 
   impure function GetTimeDerivativeWilsonLoop(&

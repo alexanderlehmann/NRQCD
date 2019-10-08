@@ -1315,7 +1315,6 @@ contains
     integer(int64) :: r
     
     integer(int64) :: meanMaxLatticeIndex=20
-    integer(int64) :: position_quark, position_antiquark
     integer(int8) :: k
     ! Indices
     integer(int64) :: LatticeIndex_distance, shiftstep
@@ -1336,6 +1335,7 @@ contains
     real(fp) :: localcharge,totalcharge
 
     ! Observables
+    integer(int64) :: index_quark
     complex(fp), allocatable :: WilsonLoops(:)
     
     character(len=80) :: &
@@ -1356,14 +1356,13 @@ contains
     
     allocate(WilsonLoops(0:TimePoints))
 
-    
     nwork = TimePoints+1
 
     iwork = 0
     GaugeConf_t = GaugeConf_initial
     ! Setting time of gauge conf to t1
     do it=0,TimeSteps,+1
-       WilsonLoops(it) = GetWilsonLoop(GaugeConf_initial,GaugeConf_t,r,messdir)
+       WilsonLoops(it) = GetWilsonLoop(GaugeConf_initial,GaugeConf_t,r,messdir,index_quark)
        
        call GaugeConf_t%Update
        iwork = iwork + 1
@@ -1540,7 +1539,10 @@ contains
 
       integer(int8) :: FileID_ChargeDensity
       integer(int64) :: nLines, iLine
-    
+
+      index_quark = -1
+
+      
       allocate(ChargeDensity(nsun,GetMemorySize()))
       ChargeDensity = 0
 
@@ -1558,6 +1560,9 @@ contains
          READ(FileID_ChargeDensity,fmt=*) position, charges
 
          LatticeIndex = GetLatticeIndex(position)
+         if(index_quark==-1.and.all(Charges.ge.0)) then
+            index_quark = LatticeIndex
+         end if
 
          if(GetProc_G(LatticeIndex)==ThisProc()) then
             ChargeDensity(:,GetMemoryIndex(LatticeIndex)) = &
