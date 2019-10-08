@@ -82,6 +82,8 @@ echo $xPositionOfPositiveCharge,$yPositionOfPositiveCharge,$zPositionOfPositiveC
 echo $xPositionOfNegativeCharge,$yPositionOfNegativeCharge,$zPositionOfNegativeCharge,'+0.000000E+00,-1.000000E+00,+0.000000E+00' >> $FileName_ChargeDensity
 
 
+mpirun  ./$EXENAME \
+	$mode $Nx $Ny $Nz $TimeSpacing $ax $ay $az $TimeRange $MessDir $R $RandomSeed $Beta $tolerance_Eprojection $nefieldinit $nequilibriumtimesteps $MeasureEnergy $FileName_Energy $FileName_ChargeDensity $FileName_WilsonLoops
 
 #######################################################
 ## 2. Making sure output is copied back and taken care of
