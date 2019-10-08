@@ -450,8 +450,8 @@ contains ! Module procedures
        tolerance_Eprojection_ = 1E-3
     end if
 
-    !sigma = sqrt(4/beta)
-    sigma = sqrt(1/beta)
+    sigma = sqrt(4/beta)
+    !sigma = sqrt(1/beta)
 
     kappa_times_dt = kappa*GetLatticeSpacing(0_int8)
 
