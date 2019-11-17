@@ -1521,7 +1521,9 @@ contains
       call InitModule_tolerances
 
       ! Read charge density
+      print*,'start reading of chargedensity'
       call ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
+      print*,'finished reading of chargedensity'
 
       call SyncAll
     end subroutine InitSimulation
