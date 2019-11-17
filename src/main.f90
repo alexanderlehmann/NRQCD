@@ -1481,7 +1481,7 @@ contains
       read(arg,'(I1)') messdir
       
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
-      read(arg,'(I1)') r
+      read(arg,'(I2)') r
       
       ! Seed for random number generator
       arg_count = arg_count +1; call get_command_argument(arg_count,arg);
