@@ -1522,6 +1522,8 @@ contains
 
       ! Read charge density
       print*,'start reading of chargedensity'
+      call SyncAll
+      
       call ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
       print*,'finished reading of chargedensity'
 
