@@ -1503,6 +1503,7 @@ contains
       read(arg,'(I1)') j
       if(j==0) then
          MeasureEnergy=.false.
+         arg_count = arg_count +1;
       else
          MeasureEnergy=.true.
          arg_count = arg_count +1; call get_command_argument(arg_count,EnergyFilename);
@@ -1523,7 +1524,8 @@ contains
       ! Read charge density
       print*,'start reading of chargedensity'
       call SyncAll
-      
+
+      call MPISTOP('stop before reading charge density')
       call ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
       print*,'finished reading of chargedensity'
 
