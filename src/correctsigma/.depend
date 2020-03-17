@@ -1,0 +1,25 @@
+FOBJ=arrayoperations.o gaugeconfiguration_su3.o halocomm.o io.o lattice.o main.o mathconstants.o matrixoperations.o mpiinterface.o nrqcd.o precision.o random.o ranlxd_generator.o srt.o statistics.o su2.o su3.o tolerances.o wilsonline.o windowing.o 
+
+run.exe: $(FOBJ)
+	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
+
+arrayoperations.o : arrayoperations.f90 
+gaugeconfiguration_su3.o : gaugeconfiguration_su3.f90 io.o mpiinterface.o random.o halocomm.o matrixoperations.o lattice.o su3.o precision.o 
+halocomm.o : halocomm.f90 arrayoperations.o lattice.o mpiinterface.o precision.o 
+io.o : io.f90 mpiinterface.o 
+lattice.o : lattice.f90 tolerances.o mathconstants.o arrayoperations.o mpiinterface.o precision.o 
+main.o : main.f90 matrixoperations.o su3.o nrqcd.o tolerances.o statistics.o random.o wilsonline.o halocomm.o io.o gaugeconfiguration_su3.o lattice.o mpiinterface.o precision.o 
+mathconstants.o : mathconstants.f90 precision.o 
+matrixoperations.o : matrixoperations.f90 precision.o 
+mpiinterface.o : mpiinterface.f90 precision.o 
+nrqcd.o : nrqcd.f90 matrixoperations.o halocomm.o lattice.o mpiinterface.o su2.o su3.o gaugeconfiguration_su3.o precision.o 
+precision.o : precision.f90 
+random.o : random.f90 mpiinterface.o mathconstants.o ranlxd_generator.o 
+ranlxd_generator.o : ranlxd_generator.f90 
+srt.o : srt.f90 precision.o 
+statistics.o : statistics.f90 precision.o 
+su2.o : su2.f90 matrixoperations.o mathconstants.o precision.o 
+su3.o : su3.f90 matrixoperations.o mathconstants.o precision.o 
+tolerances.o : tolerances.f90 mpiinterface.o precision.o 
+wilsonline.o : wilsonline.f90 lattice.o mpiinterface.o matrixoperations.o nrqcd.o su2.o su3.o gaugeconfiguration_su3.o precision.o 
+windowing.o : windowing.f90 mathconstants.o precision.o 

@@ -1522,12 +1522,7 @@ contains
       call InitModule_tolerances
 
       ! Read charge density
-      print*,'start reading of chargedensity'
-      call SyncAll
-
-      call MPISTOP('stop before reading charge density')
       call ReadChargeDensity(ChargeDensity,FileName_ChargeDensity)
-      print*,'finished reading of chargedensity'
 
       call SyncAll
     end subroutine InitSimulation
