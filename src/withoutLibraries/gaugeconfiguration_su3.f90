@@ -426,7 +426,7 @@ contains ! Module procedures
        tolerance_Eprojection_ = 1E-3
     end if
 
-    sigma = sqrt(4/beta)
+    sigma = sqrt(1/(GetLatticeSpacing(1_int8)*GetLatticeSpacing(2_int8)*GetLatticeSpacing(3_int8)*beta))
     !sigma = sqrt(1/beta)
 
     kappa_times_dt = kappa*GetLatticeSpacing(0_int8)
@@ -710,8 +710,8 @@ contains ! Module procedures
              GaugeConf%Links(:,:,i,MemoryIndex) = GetGroupExp(r)
 
              ! E-field
-             r = GetRandomUniformReal(int(ngen,int64))*GetLatticeSpacing(i)*GetLatticeSpacing(0_int8)
-             GaugeConf%Efield(:,i,MemoryIndex) = r
+             !r = GetRandomUniformReal(int(ngen,int64))!*GetLatticeSpacing(i)*GetLatticeSpacing(0_int8)
+             GaugeConf%Efield(:,i,MemoryIndex) = 0
           end do
        end if
     end do
@@ -761,10 +761,10 @@ contains ! Module procedures
             conjg(transpose(Link_Neib)),&
             Mefield_neib),&
             Link_neib))&
-            /GetLatticeSpacing(i)**2/GetLatticeSpacing(0)
+            /GetLatticeSpacing(i)/GetLatticeSpacing(0)
        do concurrent(a=1_int8:ngen)
           local_contribution = local_contribution &
-               + 2*Abs(Aimag(GetTraceWithGenerator(a,derivative)))
+               + Abs(Aimag(GetTraceWithGenerator(a,derivative)))
        end do
     end do
 
@@ -1046,11 +1046,14 @@ contains ! Module procedures
        ! Magnetic energy
        do concurrent(j=i+1_int8:ndim)
           Plaquette = GaugeConf%GetPlaquette_M(i,j,MemoryIndex)
-          PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
-               /GetLatticeSpacing(i)/GetLatticeSpacing(j)
+          !PotentialTerm = (1-real(GetTrace(Plaquette),fp)/nSUN)&
+          !     /(GetLatticeSpacing(i)*GetLatticeSpacing(j))**2
 
-          Local_contribution = Local_Contribution &
-               + 2*nSUN*PotentialTerm
+          !Local_contribution = Local_Contribution &
+          !     + 2*nSUN*PotentialTerm
+          PotentialTerm = (NSUN-real(GetTrace(Plaquette)))&
+               /(GetLatticeSpacing(i)*GetLatticeSpacing(j))**2
+          Local_Contribution = Local_Contribution + PotentialTerm
        end do
     end do
 
@@ -1062,6 +1065,12 @@ contains ! Module procedures
          GetRealSendType(),&
          MPI_SUM,&
          MPI_COMM_WORLD,mpierr)
+
+    GetEnergy = GetEnergy&
+         *GetLatticeSpacing(1_int8)&
+         *GetLatticeSpacing(2_int8)&
+         *GetLatticeSpacing(3_int8)
+         
   end function GetEnergy
 
   !>@brief Returns algebra-component of the gauge field
@@ -1138,7 +1147,7 @@ contains ! Module procedures
     real(fp) :: GetElectricField_AlgebraCoordinate
 
     GetElectricField_AlgebraCoordinate &
-         = conf%GetEfield_G(a,i,latticeindex)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = conf%GetEfield_G(a,i,latticeindex)!/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraCoordinate
 
   !>@brief Returns electric field
@@ -1164,7 +1173,7 @@ contains ! Module procedures
     efield = conf%GetEfield_G([1_int8:ngen],i,LatticeIndex)
 
     GetElectricField_AlgebraMatrix &
-         = GetAlgebraMatrix(efield)/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
+         = GetAlgebraMatrix(efield)!/GetLatticeSpacing(i)/GetLatticeSpacing(0_int8)
   end function GetElectricField_AlgebraMatrix
 
   !>@brief Update routine using the Leapfrog algorithm
@@ -1209,7 +1218,7 @@ contains ! Module procedures
   !!@date 27.02.2019
   !!@version 1.0
   pure subroutine Update_Links_Leapfrog(GaugeConf,StepWidth)
-    use lattice, only: ndim, GetMemorySize, GetProc_M
+    use lattice, only: ndim, GetMemorySize, GetProc_M, GetLatticeSpacing
     use mpiinterface, only: ThisProc
     implicit none
     !> Gauge configuration
@@ -1224,7 +1233,7 @@ contains ! Module procedures
     real(fp)    :: efield_times_dt(nGen)
 
     do concurrent(MemoryIndex=1:GetMemorySize(),i=1:ndim,ThisProc()==GetProc_M(MemoryIndex))
-       efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth
+       efield_times_dt       = GaugeConf%Efield(:,i,MemoryIndex)*StepWidth*GetLatticeSpacing(0_int8)*GetLatticeSpacing(i)
        TimeEvolutionOperator = GetGroupExp(efield_times_dt)
 
        GaugeConf%Links(:,:,i,MemoryIndex) =&
@@ -1272,7 +1281,8 @@ contains ! Module procedures
       staplesum = 0
       do concurrent(k=1:ndim, k/=i)
          staplesum = staplesum + &
-              StepWidth*(GetLatticeSpacing(0)/GetLatticeSpacing(k))**2 &
+              !StepWidth*(GetLatticeSpacing(0)/GetLatticeSpacing(k))**2 &
+              StepWidth*GetLatticeSpacing(0)/GetLatticeSpacing(i)/GetLatticeSpacing(k)**2&
               *(&
               GetUStaple(GaugeConf,i,k,MemoryIndex) + &
               GetDStaple(GaugeConf,i,k,MemoryIndex) &

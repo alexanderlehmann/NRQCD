@@ -15,6 +15,140 @@ module programs
   PUBLIC
 
 contains
+  !>@brief Program for measuring the time-evolution of the energy and gauss law deviation
+  !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+  !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+  !!@date 23.04.2020
+  !!@version 1.1
+  impure subroutine MeasureEnergyAndGaussLawDeviation
+    use, intrinsic :: iso_fortran_env
+    use precision
+    use mpiinterface
+
+    use lattice
+    use gaugeconfiguration_su3
+    use mpi
+    use io
+
+    implicit none
+
+    ! Simulation parameters
+    integer(int64) :: LatticeExtensions(ndim)
+    real(fp)       :: LatticeSpacings(0:ndim)
+    integer(int64) :: TimeSteps
+    integer(int64) :: RandomNumberSeed
+
+    real(fp)   :: CoMTime
+    real(fp)   :: TimeRange
+
+    ! Physical fields
+    type(GaugeConfiguration) :: GaugeConf
+
+    ! Monitoring variables
+    integer(int64) :: it
+    real(fp) :: time
+    
+    ! Observable output (Gauss, Energy)
+    integer(int8) :: fileID_eg
+    real(fp) :: gauss, energy
+
+    call InitSimulation
+
+    call GaugeConf%HotInit()
+    
+    if(ThisProc()==0) &
+         fileID_eg = OpenFile(filename="energy_gauss.txt",st='REPLACE',fm='FORMATTED',act='WRITE')
+    do it=0,TimeSteps
+       time = it*GetLatticeSpacing(0_int8)
+       gauss = GaugeConf%GetDeviationFromGaussLaw()
+       energy= GaugeConf%GetEnergy()
+       if(ThisProc()==0) write(fileID_eg,'(3(SP,E13.6,1X))') time,energy,gauss
+       if(ThisProc()==0) write(output_unit,*) time
+       call GaugeConf%Update
+    end do
+    if(ThisProc()==0) call CloseFile(fileID_eg)
+
+    call EndSimulation
+  contains
+
+    !>@brief Initialisation of the simulation
+    !!@details
+    !! MPI\n
+    !! Lattice-module\n
+    !! Random number generator\n
+    !! etc.
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    impure subroutine InitSimulation
+      use precision, only: fp
+      use, intrinsic :: iso_fortran_env
+
+      use mpiinterface,       only: InitModule_MPIinterface       => InitModule, ThisProc, SyncAll
+      use lattice,            only: InitModule_Lattice            => InitModule, nDim
+      use halocomm,           only: InitModule_HaloComm           => InitModule
+      use random,             only: InitModule_Random             => InitModule
+      use tolerances,         only: InitModule_tolerances         => InitModule
+      implicit none
+
+      integer(int64) :: arg_count
+      character(len=80) :: arg
+      integer(int8) :: i
+
+      !..--** Reading simulation parameters **--..
+      arg_count = 1
+
+      ! Spatial lattice parameters (extensions, spacings)
+      do i=1,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(I4)') LatticeExtensions(i)
+      end do
+
+      do i=0,ndim
+         arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+         read(arg,'(F10.13)') LatticeSpacings(i)
+      end do
+
+      ! Center of mass time T
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') CoMTime
+      ! Center of mass time-range smax
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(F10.13)') TimeRange
+
+      TimeSteps=ceiling(TimeRange/LatticeSpacings(0))
+
+      ! Seed for random number generator
+      arg_count = arg_count +1; call get_command_argument(arg_count,arg);
+      read(arg,'(I4)') RandomNumberSeed
+
+      !..--** Module initialisations **--..
+      call InitModule_MPIinterface
+      call InitModule_Lattice(LatticeExtensions(1:ndim),LatticeSpacings(0:ndim))
+      call InitModule_HaloComm
+      call InitModule_Random(RandomNumberSeed + ThisProc())
+      call InitModule_tolerances
+
+      call SyncAll
+    end subroutine InitSimulation
+
+    !>@brief Ending of the simulation
+    !!@author Alexander Lehmann, UiS (<alexander.lehmann@uis.no>)
+    !! and ITP Heidelberg (<lehmann@thpys.uni-heidelberg.de>)
+    !!@date 15.02.2019
+    !!@version 1.0
+    subroutine EndSimulation
+      use mpiinterface, only: ThisProc, FinalizeModule_MPIinterface => FinalizeModule
+      implicit none
+
+      call FinalizeModule_MPIinterface
+
+      if(ThisProc()==0) write(output_unit,*) "Simulation completed"
+      STOP
+    end subroutine EndSimulation
+  end subroutine MeasureEnergyAndGaussLawDeviation
+  
   impure subroutine MeasureWilsonLines_Equilibrium_StaticMeson
     use, intrinsic :: iso_fortran_env
     use precision
@@ -351,6 +485,8 @@ program simulation
   read(arg,'(I3)') mode
 
   select case(mode)
+  case(2)
+     call MeasureEnergyAndGaussLawDeviation
   case (52)
      call MeasureWilsonLines_Equilibrium_StaticMeson
   case default
