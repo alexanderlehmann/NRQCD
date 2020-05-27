@@ -412,11 +412,22 @@ contains ! Module procedures
     character(len=80) :: energydensity_filename='energydensity.txt'
     integer(int8) :: energydensity_fileid
 
+    character(len=80) :: filename_force='force.txt'
+    integer(int8) :: fileid_force
+
     integer(intmpi) :: proc, mpierr,mpistatus(mpi_status_size)
+    real(fp) :: force(nDim)
 
     real(fp) :: tolerance_Eprojection_
 
+
+    ! Principal axes
+    real(fp) :: EigenValues(nDim), EigenVectors(nDim,nDim)
+    real(fp) :: EMTensor(nDim,nDim)
     type(GaugeConfiguration) :: GaugeConf_previous
+    character(len=80), parameter :: filename_pa = 'principalaxes.txt'
+    integer(int8) :: fileid_pa
+
 
 
     if(present(tolerance_Eprojection)) then
@@ -464,7 +475,8 @@ contains ! Module procedures
        else
           deviation = GetGdeviation(GaugeConf)
        end if
-       
+
+       !if(ThisProc()==0) print*,deviation
        ! Projection of the electric field
        iprojection = 0
        do while(deviation>tolerance_Eprojection_)
