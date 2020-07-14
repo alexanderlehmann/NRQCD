@@ -1,6 +1,0 @@
-FOBJ=main.o 
-
-run.exe: $(FOBJ)
-	$(FC) -o $@ $(FFLAGS) $(LDFLAGS) $(FOBJ) $(LIBS)
-
-main.o : main.f90 
